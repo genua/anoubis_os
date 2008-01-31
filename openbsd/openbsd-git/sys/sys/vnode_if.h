@@ -5,7 +5,7 @@
  * Created from the file:
  *	OpenBSD
  * by the script:
- *	OpenBSD: thib 
+ *	OpenBSD
  */
 
 /*
@@ -421,42 +421,6 @@ struct vop_setextattr_args {
 extern struct vnodeop_desc vop_setextattr_desc;
 int VOP_SETEXTATTR(struct vnode *, int, const char *, struct uio *, 
     struct ucred *, struct proc *);
-
-struct vop_getacl_args {
-	struct vnodeop_desc *a_desc;
-	struct vnode *a_vp;
-	acl_type_t a_type;
-	struct acl *a_aclp;
-	struct ucred *a_cred;
-	struct proc *a_p;
-};
-extern struct vnodeop_desc vop_getacl_desc;
-int VOP_GETACL(struct vnode *, acl_type_t, struct acl *, struct ucred *, 
-    struct proc *);
-
-struct vop_setacl_args {
-	struct vnodeop_desc *a_desc;
-	struct vnode *a_vp;
-	acl_type_t a_type;
-	struct acl *a_aclp;
-	struct ucred *a_cred;
-	struct proc *a_p;
-};
-extern struct vnodeop_desc vop_setacl_desc;
-int VOP_SETACL(struct vnode *, acl_type_t, struct acl *, struct ucred *, 
-    struct proc *);
-
-struct vop_aclcheck_args {
-	struct vnodeop_desc *a_desc;
-	struct vnode *a_vp;
-	acl_type_t a_type;
-	struct acl *a_aclp;
-	struct ucred *a_cred;
-	struct proc *a_p;
-};
-extern struct vnodeop_desc vop_aclcheck_desc;
-int VOP_ACLCHECK(struct vnode *, acl_type_t, struct acl *, struct ucred *, 
-    struct proc *);
 
 /* Special cases: */
 #include <sys/buf.h>

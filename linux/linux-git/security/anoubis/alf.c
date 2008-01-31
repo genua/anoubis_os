@@ -36,7 +36,6 @@
 #include <linux/in6.h>
 #include <linux/sched.h>
 #include <linux/anoubis.h>
-#include <linux/anoubis_alf.h>
 #include <linux/udp.h>
 
 #include <net/sock.h>
@@ -47,6 +46,35 @@
 
 static int allow_ports_min = -1;
 static int allow_ports_max = -1;
+
+enum alf_ops
+{
+	ALF_CONNECT = 1,
+	ALF_ACCEPT = 2,
+	ALF_SENDMSG = 3,
+	ALF_RECVMSG = 4
+};
+
+struct alf_event
+{
+	union
+	{
+		struct sockaddr_in	in_addr;
+		struct sockaddr_in6	in6_addr;
+	} local;
+	union
+	{
+		struct sockaddr_in	in_addr;
+		struct sockaddr_in6	in6_addr;
+	} peer;
+	unsigned short family;
+	unsigned short type;
+	unsigned short protocol;
+
+	unsigned short op;
+	pid_t	pid;
+	uid_t	uid;
+};
 
 /* Ask in userspace what to do for a given event */
 static inline int alf_ask(struct alf_event *event)

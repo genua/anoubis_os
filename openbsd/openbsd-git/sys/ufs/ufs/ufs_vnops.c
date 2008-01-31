@@ -64,7 +64,6 @@
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/dir.h>
-#include <ufs/ufs/acl.h>
 #include <ufs/ufs/ufsmount.h>
 #include <ufs/ufs/ufs_extern.h>
 #ifdef UFS_DIRHASH
@@ -220,10 +219,6 @@ ufs_access(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct inode *ip = VTOI(vp);
 	mode_t mode = ap->a_mode;
-#ifdef FFS2_ACL
-	struct acl *acl;
-#endif
-	int error;
 
 	/*
 	 * Disallow write attempts on read-only file systems;
@@ -257,37 +252,8 @@ ufs_access(void *v)
 	if ((mode & VWRITE) && (DIP(ip, flags) & IMMUTABLE))
 		return (EPERM);
 
-#ifdef FFS2_ACL
-	if (vp->v_mount->mnt_flag & MNT_ACLS) {
-		acl = pool_get(&aclpool, PR_WAITOK);
-		error = VOP_GETACL(vp, ACL_TYPE_ACCESS, acl, ap->a_cred,
-		    ap->a_p);
-		switch (error) {
-		case EOPNOTSUPP:
-			error = vaccess(DIP(ip, mode), DIP(ip, uid),
-			    DIP(ip, gid), mode, ap->a_cred);
-			break;
-		case 0:
-			error = vaccess_acl_posix1e(DIP(ip, uid), DIP(ip, gid),
-			    acl, mode, ap->a_cred, NULL);
-			break;
-		default:
-			printf("ufs_access(): error retrieving ACL on "
-			    "object (%d).\n", error);
-			/*
-			 * Fall back until debugged. Should eventually possibly
-			 * log an error, and return EPERM for safety.
-			 */
-			error = vaccess(DIP(ip, mode), DIP(ip, uid),
-			    DIP(ip, gid), mode, ap->a_cred);
-		}
-		pool_put(&aclpool, acl);
-	} else
-#endif /* FFS2_ACL */
-		error = vaccess(DIP(ip, mode), DIP(ip, uid), DIP(ip, gid),
-		    mode, ap->a_cred);
-
-	return (error);
+	return (vaccess(DIP(ip, mode), DIP(ip, uid), DIP(ip, gid), mode,
+	    ap->a_cred));
 }
 
 /* ARGSUSED */
@@ -1134,9 +1100,6 @@ ufs_mkdir(void *v)
 	struct direct newdir;
 	struct dirtemplate dirtemplate, *dtp;
 	int error, dmode, blkoff;
-#ifdef FFS2_ACL
-	struct acl *acl, *dacl;
-#endif
 
 #ifdef DIAGNOSTIC
 	if ((cnp->cn_flags & HASBUF) == 0)
@@ -1172,57 +1135,7 @@ ufs_mkdir(void *v)
 	}
 
 	ip->i_flag |= IN_ACCESS | IN_CHANGE | IN_UPDATE;
-
-#ifdef FFS2_ACL
-	acl = dacl = NULL;
-	if (dvp->v_mount->mnt_flag & MNT_ACLS) {
-		acl = pool_get(&aclpool, PR_WAITOK);
-		dacl = pool_get(&aclpool, PR_WAITOK);
-
-		/*
-		 * Retrieve default ACL from parent, if any.
-		 */
-		error = VOP_GETACL(dvp, ACL_TYPE_DEFAULT, acl, cnp->cn_cred,
-		    cnp->cn_proc);
-		switch (error) {
-		case 0:
-			/*
-			 * Retrieved a default ACL, so merge mode and ACL if
-			 * necessary.  If the ACL is empty, fall through to
-			 * the "not defined or available" case.
-			 */
-			if (acl->acl_cnt) {
-				dmode = acl_posix1e_newfilemode(dmode, acl);
-				DIP_ASSIGN(ip, mode, dmode);
-				*dacl = *acl;
-				ufs_sync_acl_from_inode(ip, acl);
-				break;
-			}
-			/* FALLTHROUGH */
-	
-		case EOPNOTSUPP:
-			/*
-			 * Just use the mode as-is.
-			 */
-			DIP_ASSIGN(ip, mode, dmode);
-			pool_put(&aclpool, acl);
-			pool_put(&aclpool, dacl);
-			dacl = acl = NULL;
-			break;
-		
-		default:
-			pool_put(&namei_pool, cnp->cn_pnbuf);
-			UFS_INODE_FREE(ip, ip->i_number, dmode);
-			vput(tvp);
-			vput(dvp);
-			pool_put(&aclpool, acl);
-			pool_put(&aclpool, dacl);
-			return (error);
-		}
-	} else
-#endif /* FFS2_ACL */
-		DIP_ASSIGN(ip, mode, dmode);
-
+	DIP_ASSIGN(ip, mode, dmode);
 	tvp->v_type = VDIR;	/* Rest init'd in getnewvnode(). */
 	ip->i_effnlink = 2;
 	DIP_ASSIGN(ip, nlink, 2);
@@ -1241,35 +1154,7 @@ ufs_mkdir(void *v)
 		softdep_change_linkcnt(dp, 0);
 	if ((error = UFS_UPDATE(dp, !DOINGSOFTDEP(dvp))) != 0)
 		goto bad;
-#ifdef FFS2_ACL
-	if (acl != NULL) {
-		/*
-		 * XXX: If we abort now, will Soft Updates notify the extattr
-		 * code that the EAs for the file need to be released?
-		 */
-		error = VOP_SETACL(tvp, ACL_TYPE_ACCESS, acl, cnp->cn_cred,
-		    cnp->cn_proc);
-		if (!error)
-			error = VOP_SETACL(tvp, ACL_TYPE_DEFAULT, dacl,
-			    cnp->cn_cred, cnp->cn_proc);
-		switch (error) {
-		case 0:
-			break;
 
-		case EOPNOTSUPP:
-			panic("ufs_mkdir(): VOP_GETACL() but no VOP_SETACL()");
-
-		default:
-			pool_put(&aclpool, acl);
-			pool_put(&aclpool, dacl);
-			dacl = acl = NULL;
-			goto bad;
-		}
-		pool_put(&aclpool, acl);
-		pool_put(&aclpool, dacl);
-		dacl = acl = NULL;
-	}
-#endif /* FFS2_ACL */
 	/* 
 	 * Initialize directory with "." and ".." from static template.
 	 */
@@ -1328,12 +1213,6 @@ bad:
 		VN_KNOTE(dvp, NOTE_WRITE | NOTE_LINK);
                 *ap->a_vpp = tvp;
         } else {
-#ifdef FFS2_ACL
-		if (acl != NULL)
-			pool_put(&aclpool, acl);
-		if (dacl != NULL)
-			pool_put(&aclpool, dacl);
-#endif /* FFS2_ACL */
                 dp->i_effnlink--;
                 DIP_ADD(dp, nlink, -1);
                 dp->i_flag |= IN_CHANGE;
@@ -1963,9 +1842,6 @@ ufs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 	struct inode *ip, *pdir;
 	struct direct newdir;
 	struct vnode *tvp;
-#ifdef FFS2_ACL
-	struct acl *acl;
-#endif
 	int error;
 
 	pdir = VTOI(dvp);
@@ -1998,59 +1874,7 @@ ufs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 	}
 
 	ip->i_flag |= IN_ACCESS | IN_CHANGE | IN_UPDATE;
-#ifdef FFS2_ACL
-	acl = NULL;
-	if (dvp->v_mount->mnt_flag & MNT_ACLS) {
-		acl = pool_get(&aclpool, PR_WAITOK);
-
-		/*
-		 * Retrieve default ACL for parent, if any.
-		 */
-		error = VOP_GETACL(dvp, ACL_TYPE_DEFAULT, acl, cnp->cn_cred,
-		    cnp->cn_proc);
-		switch (error) {
-		case 0:
-			/*
-			 * Retrieved a default ACL, so merge mode and ACL if
-			 * necessary.
-			 */
-			if (acl->acl_cnt) {
-				/*
-				 * Two possible ways for default ACL to not
-				 * be present.  First, the EA can be
-				 * undefined, or second, the default ACL can
-				 * be blank.  If it's blank, fall through to
-				 * the it's not defined case.
-				 */
-				mode = acl_posix1e_newfilemode(mode, acl);
-				DIP_ASSIGN(ip, mode, mode);
-				ufs_sync_acl_from_inode(ip, acl);
-				break;
-			}
-			/* FALLTHROUGH */
-	
-		case EOPNOTSUPP:
-			/*
-			 * Just use the mode as-is.
-			 */
-			DIP_ASSIGN(ip, mode, mode);
-			pool_put(&aclpool, acl);
-			acl = NULL;
-			break;
-	
-		default:
-			pool_put(&namei_pool, cnp->cn_pnbuf);
-			UFS_INODE_FREE(ip, ip->i_number, mode);
-			vput(tvp);
-			vput(dvp);
-			pool_put(&aclpool, acl);
-			acl = NULL;
-			return (error);
-		}
-	} else
-#endif /* FFS2_ACL */
-		DIP_ASSIGN(ip, mode, mode);
-
+	DIP_ASSIGN(ip, mode, mode);
 	tvp->v_type = IFTOVT(mode);	/* Rest init'd in getnewvnode(). */
 	ip->i_effnlink = 1;
 	DIP_ASSIGN(ip, nlink, 1);
@@ -2066,35 +1890,7 @@ ufs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 	 */
 	if ((error = UFS_UPDATE(ip, !DOINGSOFTDEP(tvp))) != 0)
 		goto bad;
-#ifdef FFS2_ACL
-	if (acl != NULL) {
-		/*
-		 * XXX: If we abort now, will Soft Updates notify the extattr
-		 * code that the EAs for the file need to be released?
-		 */
-		error = VOP_SETACL(tvp, ACL_TYPE_ACCESS, acl, cnp->cn_cred,
-		    cnp->cn_proc);
-		switch (error) {
-		case 0:
-			break;
 
-		case EOPNOTSUPP:
-			/*
-			 * XXX: This should not happen, as EOPNOTSUPP above was
-			 * supposed to free acl.
-			 */
-			panic("ufs_makeinode(): VOP_GETACL() but no "
-			    "VOP_SETACL()");
-
-		default:
-			pool_put(&aclpool, acl);
-			acl = NULL;
-			goto bad;
-		}
-		pool_put(&aclpool, acl);
-		acl = NULL;
-	}
-#endif /* FFS2_ACL */
 	ufs_makedirentry(ip, cnp, &newdir);
 	if ((error = ufs_direnter(dvp, tvp, &newdir, cnp, NULL)) != 0)
 		goto bad;
@@ -2117,10 +1913,6 @@ bad:
 	ip->i_flag |= IN_CHANGE;
 	if (DOINGSOFTDEP(tvp))
 		softdep_change_linkcnt(ip, 0);
-#ifdef FFS2_ACL
-	if (acl != NULL)
-		pool_put(&aclpool, acl);
-#endif
 	tvp->v_type = VNON;
 	vput(tvp);
 

@@ -34,11 +34,12 @@
  * an inode_t 32-bit in the Message.
  */
 
+#include <linux/anoubis.h>
+
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/namei.h>
 #include <linux/security.h>
 #include <linux/xattr.h>
 
@@ -52,11 +53,6 @@
 #define EVENT_NONE 0
 #define EVENT_NOTIFY 1
 #define EVENT_ASK 2
-
-struct eventdevtest_event {
-	struct anoubis_event_common common;
-	ino_t ino;
-};
 
 static int lookup_xattr(struct dentry * dentry)
 {
@@ -93,7 +89,7 @@ static int eventdevtest_inode_permission (struct inode * inode, int mask,
 				     struct nameidata * nd)
 {
 	int xattr, err;
-	struct eventdevtest_event * buf;
+	char * buf;
 
 	if (!nd || !nd->dentry || !nd->dentry->d_inode)
 		return 0;
@@ -101,17 +97,17 @@ static int eventdevtest_inode_permission (struct inode * inode, int mask,
 	xattr = lookup_xattr(nd->dentry);
 	if (xattr == EVENT_NONE)
 		return 0;
-	buf = kmalloc(sizeof(struct eventdevtest_event), GFP_KERNEL);
+	buf = kmalloc(sizeof(ino_t), GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
-	memcpy(&buf->ino, &inode->i_ino, sizeof(ino_t));
+	memcpy(buf, &inode->i_ino, sizeof(ino_t));
 	err = 0;
 	switch(xattr) {
 	case EVENT_ASK:
-		err =  anoubis_raise(buf, sizeof(*buf), ANOUBIS_SOURCE_TEST);
+		err =  anoubis_raise(buf, sizeof(ino_t), ANOUBIS_SOURCE_TEST);
 		break;
 	case EVENT_NOTIFY:
-		err = anoubis_notify(buf, sizeof(*buf), ANOUBIS_SOURCE_TEST);
+		err = anoubis_notify(buf, sizeof(ino_t), ANOUBIS_SOURCE_TEST);
 		break;
 	}
 	/* In tests suppress errors if no queue is present. */

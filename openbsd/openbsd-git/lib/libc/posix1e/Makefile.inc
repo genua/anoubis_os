@@ -1,60 +1,10 @@
-# $FreeBSD: Makefile.inc,v 1.19 2006/07/07 14:02:17 rwatson Exp $
+# $FreeBSD: src/lib/libc/posix1e/Makefile.inc,v 1.19 2006/07/07 14:02:17 rwatson Exp $
 
 .PATH: ${.CURDIR}/posix1e
 
-SRCS+=	acl_calc_mask.c			\
-	acl_copy.c			\
-	acl_delete.c			\
-	acl_delete_entry.c		\
-	acl_entry.c			\
-	acl_free.c			\
-	acl_from_text.c			\
-	acl_get.c			\
-	acl_init.c			\
-	acl_perm.c			\
-	acl_set.c			\
-	acl_support.c			\
-	acl_to_text.c			\
-	acl_valid.c			\
-	extattr.c
+SRCS+=	extattr.c
 
-MAN+=	acl.3				\
-	acl_add_perm.3			\
-	acl_calc_mask.3			\
-	acl_clear_perms.3		\
-	acl_copy_entry.3		\
-	acl_create_entry.3		\
-	acl_delete.3			\
-	acl_delete_entry.3		\
-	acl_delete_perm.3		\
-	acl_dup.3			\
-	acl_free.3			\
-	acl_from_text.3			\
-	acl_get.3			\
-	acl_get_entry.3			\
-	acl_get_permset.3		\
-	acl_get_perm_np.3		\
-	acl_get_qualifier.3		\
-	acl_get_tag_type.3		\
-	acl_init.3			\
-	acl_set.3			\
-	acl_set_permset.3		\
-	acl_set_qualifier.3		\
-	acl_set_tag_type.3		\
-	acl_to_text.3			\
-	acl_valid.3			\
-	extattr.3
+MAN+=	extattr.3
 
-MLINKS+=acl_delete.3 acl_delete_def_file.3	\
-	acl_delete.3 acl_delete_file_np.3	\
-	acl_delete.3 acl_delete_fd_np.3		\
-	acl_get.3 acl_get_file.3		\
-	acl_get.3 acl_get_fd.3			\
-	acl_get.3 acl_get_fd_np.3		\
-	acl_set.3 acl_set_file.3		\
-	acl_set.3 acl_set_fd.3			\
-	acl_set.3 acl_set_fd_np.3		\
-	acl_valid.3 acl_valid_file_np.3		\
-	acl_valid.3 acl_valid_fd_np.3		\
-	extattr.3 extattr_namespace_to_string.3	\
+MLINKS+=extattr.3 extattr_namespace_to_string.3	\
 	extattr.3 extattr_string_to_namespace.3

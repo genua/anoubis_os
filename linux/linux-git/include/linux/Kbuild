@@ -167,7 +167,6 @@ unifdef-y += adb.h
 unifdef-y += adfs_fs.h
 unifdef-y += agpgart.h
 unifdef-y += anoubis.h
-unifdef-y += anoubis_alf.h
 unifdef-y += anoubis_sfs.h
 unifdef-y += apm_bios.h
 unifdef-y += atalk.h

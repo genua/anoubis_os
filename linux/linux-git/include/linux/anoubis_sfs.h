@@ -27,8 +27,6 @@
 #ifndef ANOUBIS_SFS_H
 #define ANOUBIS_SFS_H
 
-#include <linux/anoubis.h>
-
 #define ANOUBIS_SFS_CS_LEN 32		 /* Length of Checksum */
 
 #define ANOUBIS_OPEN_FLAG_READ		0x0001UL
@@ -36,12 +34,11 @@
 
 #define ANOUBIS_OPEN_FLAG_STRICT	0x0010UL
 #define ANOUBIS_OPEN_FLAG_PATHHINT	0x0020UL
-#define ANOUBIS_OPEN_FLAG_STATDATA	0x0040UL
-#define ANOUBIS_OPEN_FLAG_CSUM		0x0080UL
+#define ANOUBIS_OPEN_FLAG_STATDATA	0x004UL
+#define ANOUBIS_OPEN_FLAG_CSUM		0x008UL
 
 struct sfs_open_message
 {
-	struct anoubis_event_common common;
 	u_int64_t ino;
 	u_int64_t dev;
 	unsigned long flags;

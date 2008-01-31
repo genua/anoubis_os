@@ -5,7 +5,7 @@
  * Created from the file:
  *	OpenBSD
  * by the script:
- *	OpenBSD: thib 
+ *	OpenBSD
  */
 
 /*
@@ -751,60 +751,6 @@ int VOP_SETEXTATTR(struct vnode *vp, int attrnamespace, const char *name,
 	a.a_p = p;
 	return (VCALL(vp, VOFFSET(vop_setextattr), &a));
 }
-struct vnodeop_desc vop_getacl_desc = {
-	0,
-	"vop_getacl",
-	0,
-};
-
-int VOP_GETACL(struct vnode *vp, acl_type_t type, struct acl *aclp, 
-    struct ucred *cred, struct proc *p)
-{
-	struct vop_getacl_args a;
-	a.a_desc = VDESC(vop_getacl);
-	a.a_vp = vp;
-	a.a_type = type;
-	a.a_aclp = aclp;
-	a.a_cred = cred;
-	a.a_p = p;
-	return (VCALL(vp, VOFFSET(vop_getacl), &a));
-}
-struct vnodeop_desc vop_setacl_desc = {
-	0,
-	"vop_setacl",
-	0,
-};
-
-int VOP_SETACL(struct vnode *vp, acl_type_t type, struct acl *aclp, 
-    struct ucred *cred, struct proc *p)
-{
-	struct vop_setacl_args a;
-	a.a_desc = VDESC(vop_setacl);
-	a.a_vp = vp;
-	a.a_type = type;
-	a.a_aclp = aclp;
-	a.a_cred = cred;
-	a.a_p = p;
-	return (VCALL(vp, VOFFSET(vop_setacl), &a));
-}
-struct vnodeop_desc vop_aclcheck_desc = {
-	0,
-	"vop_aclcheck",
-	0,
-};
-
-int VOP_ACLCHECK(struct vnode *vp, acl_type_t type, struct acl *aclp, 
-    struct ucred *cred, struct proc *p)
-{
-	struct vop_aclcheck_args a;
-	a.a_desc = VDESC(vop_aclcheck);
-	a.a_vp = vp;
-	a.a_type = type;
-	a.a_aclp = aclp;
-	a.a_cred = cred;
-	a.a_p = p;
-	return (VCALL(vp, VOFFSET(vop_aclcheck), &a));
-}
 
 /* Special cases: */
 struct vnodeop_desc vop_strategy_desc = {
@@ -879,9 +825,6 @@ struct vnodeop_desc *vfs_op_descs[] = {
 	&vop_listextattr_desc,
 	&vop_deleteextattr_desc,
 	&vop_setextattr_desc,
-	&vop_getacl_desc,
-	&vop_setacl_desc,
-	&vop_aclcheck_desc,
 	NULL
 };
 
