@@ -1,0 +1,31 @@
+#
+# Anoubis configuration
+#
+
+menu "Anoubis framework"
+
+config SECURITY_ANOUBIS
+	tristate "Anoubis framework"
+	depends on SECURITY && EVENTDEV
+	help
+	  This option provides support for the Anoubis framework.
+
+config SECURITY_ANOUBIS_ALF
+	tristate "Application Level Firewall module"
+	depends on SECURITY_ANOUBIS && SECURITY_NETWORK
+	help
+	  This option provides support for the Anoubis ALF module
+
+config SECURITY_ANOUBIS_SFS
+	tristate "Secure Filesystem Module"
+	depends on SECURITY_ANOUBIS
+	help
+	  This option provides initial support for the Anoubis SFS module.
+
+config SECURITY_EVENTDEVTEST
+	tristate "Test module for Eventdev devices"
+	depends on SECURITY_ANOUBIS && SECURITY
+	help
+	  This is a test module for the eventdev device.
+
+endmenu
