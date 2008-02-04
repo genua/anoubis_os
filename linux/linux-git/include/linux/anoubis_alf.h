@@ -24,44 +24,51 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef ANOUBIS_SFS_H
-#define ANOUBIS_SFS_H
-
-#include <linux/anoubis.h>
-
-#define ANOUBIS_SFS_CS_LEN 32		 /* Length of Checksum */
-
-#define ANOUBIS_OPEN_FLAG_READ		0x0001UL
-#define ANOUBIS_OPEN_FLAG_WRITE		0x0002UL
-
-#define ANOUBIS_OPEN_FLAG_STRICT	0x0010UL
-#define ANOUBIS_OPEN_FLAG_PATHHINT	0x0020UL
-#define ANOUBIS_OPEN_FLAG_STATDATA	0x004UL
-#define ANOUBIS_OPEN_FLAG_CSUM		0x008UL
-
-struct sfs_open_message
-{
-	struct anoubis_event_common common;
-	u_int64_t ino;
-	u_int64_t dev;
-	unsigned long flags;
-	u_int8_t csum[ANOUBIS_SFS_CS_LEN];
-	char pathhint[1];
-};
-
-/*
- * Used in eventdev replies: Access is ok provided that the Checksum
- * given in the open message remains intact. This should never be seen
- * as a system call error code in user space.
- */
-#define EOKWITHCHKSUM	0x2000UL
+#ifndef ANOUBIS_ALF_H
+#define ANOUBIS_ALF_H
 
 #ifdef __KERNEL__
 
-int anoubis_sfs_get_csum(struct file * file, u8 * csum);
-int anoubis_sfs_file_lock(struct file * file, u8 * csum);
-void anoubis_sfs_file_unlock(struct file * file);
+#include <linux/in.h>
+#include <linux/in6.h>
+
+#else
+
+#include <sys/socket.h>
+#include <netinet/in.h>
 
 #endif
 
-#endif /* ANOUBIS_SFS_H */
+#include <linux/anoubis.h>
+
+enum alf_ops
+{
+	ALF_CONNECT = 1,
+	ALF_ACCEPT = 2,
+	ALF_SENDMSG = 3,
+	ALF_RECVMSG = 4
+};
+
+struct alf_event
+{
+	struct anoubis_event_common common;
+	union
+	{
+		struct sockaddr_in	in_addr;
+		struct sockaddr_in6	in6_addr;
+	} local;
+	union
+	{
+		struct sockaddr_in	in_addr;
+		struct sockaddr_in6	in6_addr;
+	} peer;
+	unsigned short family;
+	unsigned short type;
+	unsigned short protocol;
+
+	unsigned short op;
+	pid_t	pid;
+	uid_t	uid;
+};
+
+#endif

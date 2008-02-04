@@ -43,7 +43,11 @@
 static struct eventdev_queue * anoubis_queue;
 static spinlock_t queuelock;
 
+static anoubis_cookie_t task_cookie;
+static spinlock_t task_cookie_lock;
+
 struct anoubis_task_label {
+	anoubis_cookie_t task_cookie;
 	int listener; /* Only accessed by the task itself. */
 };
 
@@ -55,7 +59,15 @@ static int __anoubis_event_common(void * buf, size_t len, int src, int wait)
 {
 	int put, err, ret = 0;
 	struct eventdev_queue * q;
+	struct anoubis_task_label * l = current->security;
+	struct anoubis_event_common * common = buf;
 
+	BUG_ON(len < sizeof(struct anoubis_event_common));
+	if (likely(l)) {
+		common->task_cookie = l->task_cookie;
+	} else {
+		common->task_cookie = 0;
+	}
 	rcu_read_lock();
 	q = rcu_dereference(anoubis_queue);
 	if (q)
@@ -456,6 +468,9 @@ static int ac_task_alloc_security(struct task_struct * p)
 	if (!l)
 		return -ENOMEM;
 	l->listener = 0;
+	spin_lock(&task_cookie_lock);
+	l->task_cookie = task_cookie++;
+	spin_unlock(&task_cookie_lock);
 	p->security = l;
 	return 0;
 }
@@ -521,6 +536,8 @@ static int __init anoubis_core_init(void)
 	int rc = 0;
 
 	spin_lock_init(&queuelock);
+	spin_lock_init(&task_cookie_lock);
+	task_cookie = 1;
 	rc = misc_register(&anoubis_device);
 	if (rc < 0) {
 		printk(KERN_CRIT "anoubis_core: Cannot register device\n");
