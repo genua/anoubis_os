@@ -1065,8 +1065,6 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 	}
 	if ((error = VOP_OPEN(vp, flags, cred, p)) != 0)
 		goto bad;
-	if (flags & FWRITE)
-		vp->v_writecount++;
 
 	/* done with modified vn_open, now finish what sys_open does. */
 
@@ -1074,6 +1072,14 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 	fp->f_type = DTYPE_VNODE;
 	fp->f_ops = &vnops;
 	fp->f_data = vp;
+	if (flags & FWRITE) {
+		error = vn_writecount(vp);
+		if (error) {
+			VOP_UNLOCK(vp, 0, p);
+			vp = NULL;
+			goto bad;
+		}
+	}
 	if (flags & (O_EXLOCK | O_SHLOCK)) {
 		lf.l_whence = SEEK_SET;
 		lf.l_start = 0;

@@ -181,8 +181,16 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		if ((error = VOP_SETATTR(vp, &va, cred, p)) != 0)
 			goto bad;
 	}
-	if ((error = VOP_OPEN(vp, fmode, cred, p)) != 0)
+	if (fmode & FWRITE) {
+		error = vn_writecount(vp);
+		if (error)
+			goto bad;
+	}
+	if ((error = VOP_OPEN(vp, fmode, cred, p)) != 0) {
+		if (fmode & FWRITE)
+			vp->v_writecount--;
 		goto bad;
+	}
 
 	if (vp->v_flag & VCLONED) {
 		struct cloneinfo *cip = (struct cloneinfo *) vp->v_data;
@@ -196,8 +204,6 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		free(cip, M_TEMP);
 	}
 
-	if (fmode & FWRITE)
-		vp->v_writecount++;
 	return (0);
 bad:
 	vput(vp);
@@ -249,6 +255,25 @@ void
 vn_marktext(struct vnode *vp)
 {
 	vp->v_flag |= VTEXT;
+}
+
+/*
+ * Increment the vnodes v_writecount if it is potentially zero.
+ * This can fail if u_denywrite is set in the uvm_vnode.
+ */
+int
+vn_writecount(struct vnode *vp)
+{
+	int error = 0;
+	simple_lock(&vp->v_uvm.uvm_obj.vmobjlock);
+        if ((vp->v_uvm.u_flags & UVM_VNODE_VALID) && vp->v_uvm.u_denywrite) {
+		assert(vp->v_writecount == 0);
+		error = EBUSY;
+	} else {
+		vp->v_writecount++;
+	}
+	simple_unlock(&vp->v_uvm.uvm_obj.vmobjlock);
+	return error;
 }
 
 /*

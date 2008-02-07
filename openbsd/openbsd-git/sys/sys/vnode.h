@@ -412,6 +412,7 @@ int	vn_extattr_set(struct vnode *, int, int, const char *, int, char *,
 	    struct proc *);
 int	vn_extattr_rm(struct vnode *, int, int, const char *, struct proc *);
 void	vn_marktext(struct vnode *);
+int	vn_writecount(struct vnode *);
 
 /* vfs_sync.c */
 void	sched_sync(struct proc *);
