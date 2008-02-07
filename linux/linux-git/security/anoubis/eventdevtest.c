@@ -34,12 +34,11 @@
  * an inode_t 32-bit in the Message.
  */
 
-#include <linux/anoubis.h>
-
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/namei.h>
 #include <linux/security.h>
 #include <linux/xattr.h>
 
