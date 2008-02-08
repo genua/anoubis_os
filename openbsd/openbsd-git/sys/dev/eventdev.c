@@ -1,3 +1,30 @@
+/*
+ * Copyright (c) 2008 GeNUA mbH <info@genua.de>
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED
+ * TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/errno.h>
@@ -12,6 +39,7 @@
 #include <sys/mutex.h>
 #include <sys/kernel.h>
 #include <sys/siginfo.h>
+#include <sys/event.h>
 
 #include <compat/common/compat_util.h>
 
@@ -74,6 +102,12 @@ struct eventdev_queue {
 
 #define die_wait (&eventdev_tokenmtx)
 static struct mutex eventdev_tokenmtx;     /* Protects next_token below */
+
+void filt_evdetach(struct knote *kn);
+int filt_event(struct knote *kn, long hint);
+
+struct filterops eventdev_filtops =
+	{ 1, NULL, filt_evdetach, filt_event };
 
 int
 eventdev_get_token(eventdev_token * tok)
@@ -180,6 +214,7 @@ __eventdev_enqueue(struct eventdev_queue * q, unsigned char src,
 	mtx_leave(&q->lock);
 	wakeup(q);
 	selwakeup(&q->sel);
+	KNOTE(&q->sel.si_note, 0);
 	if (retval)
 		(*retval) = eventdev_wait(q, m);
 	return 0;
@@ -242,6 +277,7 @@ fail:
 	mtx_leave(&q->lock);
 	wakeup(q);
 	selwakeup(&q->sel);
+	KNOTE(&q->sel.si_note, 0);
 	return err;
 }
 
@@ -399,9 +435,51 @@ eventdev_ioctl(struct file *file, u_long cmd, caddr_t data, struct proc *p)
 
 /* ARGSUSED */
 int
-eventdev_kqfilter(struct file *file, struct knote *knote)
+eventdev_kqfilter(struct file *file, struct knote *kn)
 {
-	return (EIO);
+	struct eventdev_queue *q = file->f_data;
+	struct klist *klist;
+
+	switch (kn->kn_filter) {
+	case EVFILT_READ:
+		klist = &q->sel.si_note;
+		kn->kn_fop = &eventdev_filtops;
+		break;
+	default:
+		return (1);
+	}
+	kn->kn_hook = (void *)q;
+
+	mtx_enter(&q->lock);
+	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
+	mtx_leave(&q->lock);
+
+	return (0);
+}
+
+/* ARGSUSED */
+void
+filt_evdetach(struct knote *kn)
+{
+	struct eventdev_queue *q = (struct eventdev_queue *)kn->kn_hook;
+
+	mtx_enter(&q->lock);
+	SLIST_REMOVE(&q->sel.si_note, kn, knote, kn_selnext);
+	mtx_leave(&q->lock);
+}
+
+/* ARGSUSED */
+int
+filt_event(struct knote *kn, long hint)
+{
+	struct eventdev_queue *q = (struct eventdev_queue *)kn->kn_hook;
+	int ret;
+
+	mtx_enter(&q->lock);
+	ret = !TAILQ_EMPTY(&q->messages);
+	mtx_leave(&q->lock);
+
+	return (ret);
 }
 
 /* ARGSUSED */
