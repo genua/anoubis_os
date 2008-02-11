@@ -374,6 +374,7 @@ extern struct uvmexp uvmexp;
 #include <sys/tree.h>
 #include <uvm/uvm_param.h>
 #include <sys/lock.h>
+#include <sys/mutex.h>
 #include <uvm/uvm_page.h>
 #include <uvm/uvm_pmap.h>
 #include <uvm/uvm_map.h>
