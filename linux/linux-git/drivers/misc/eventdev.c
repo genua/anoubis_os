@@ -51,9 +51,9 @@ static int eventdev_get_token(eventdev_token * tok)
 	static eventdev_token next_token = 0;
 	static spinlock_t tokenlock = SPIN_LOCK_UNLOCKED;
 
-	spin_lock(&tokenlock);
+	spin_lock_bh(&tokenlock);
 	*tok = ++next_token;
-	spin_unlock(&tokenlock);
+	spin_unlock_bh(&tokenlock);
 	return 0;
 }
 
@@ -69,13 +69,13 @@ static inline int consume_reply(struct eventdev_queue * q,
 				struct eventdev_msg * m)
 {
 	int ret = 0;
-	spin_lock(&q->lock);
+	spin_lock_bh(&q->lock);
 	if (m->msg_reply >= 0) {
 		list_del(&m->link);
 		ret = 1;
 		q->waiters--;
 	}
-	spin_unlock(&q->lock);
+	spin_unlock_bh(&q->lock);
 	return ret;
 }
 
@@ -136,16 +136,16 @@ static inline int __eventdev_enqueue(struct eventdev_queue * q,
 	err = eventdev_get_token(&m->hdr.msg_token);
 	if (err)
 		goto err_out;
-	spin_lock(&q->lock);
+	spin_lock_bh(&q->lock);
 	if (q->file == NULL) {
-		spin_unlock(&q->lock);
+		spin_unlock_bh(&q->lock);
 		err = -EPIPE;
 		goto err_out;
 	}
 	if (retval)
 		q->waiters++;
 	list_add_tail(&m->link, &q->messages);
-	spin_unlock(&q->lock);
+	spin_unlock_bh(&q->lock);
 	wake_up(&q->read_wait);
 	if (retval)
 		(*retval) = eventdev_wait(q, m);
@@ -173,12 +173,12 @@ static struct eventdev_msg * eventdev_dequeue_one(struct eventdev_queue * q)
 {
 	struct eventdev_msg * m = NULL;
 
-	spin_lock(&q->lock);
+	spin_lock_bh(&q->lock);
 	if (!list_empty(&q->messages)) {
 		m = list_entry(q->messages.next, struct eventdev_msg, link);
 		list_del(&m->link);
 	}
-	spin_unlock(&q->lock);
+	spin_unlock_bh(&q->lock);
 	return m;
 }
 
@@ -200,9 +200,9 @@ static int eventdev_copy_one(struct eventdev_queue * q,
 		goto fail;
 	return m->hdr.msg_size;
 fail:
-	spin_lock(&q->lock);
+	spin_lock_bh(&q->lock);
 	list_add(&m->link, &q->messages);
-	spin_unlock(&q->lock);
+	spin_unlock_bh(&q->lock);
 	wake_up(&q->read_wait);
 	return err;
 }
@@ -242,9 +242,9 @@ static int eventdev_read(struct file * file, char __user * buf, size_t len,
 	 */
 	if (m->msg_reply) {
 		BUG_ON(m->msg_reply >= 0);
-		spin_lock(&q->lock);
+		spin_lock_bh(&q->lock);
 		list_add_tail(&m->link, &q->waiting);
-		spin_unlock(&q->lock);
+		spin_unlock_bh(&q->lock);
 	} else {
 		free_eventdev_msg(m);
 	}
@@ -256,7 +256,7 @@ static int flush_condition(struct eventdev_queue * q)
 	struct eventdev_msg * m;
 	int ret = 1;
 
-	spin_lock(&q->lock);
+	spin_lock_bh(&q->lock);
 	if (q->waiters) {
 		ret = 0;
 		list_for_each_entry(m, &q->waiting, link) {
@@ -272,7 +272,7 @@ static int flush_condition(struct eventdev_queue * q)
 			}
 		}
 	}
-	spin_unlock(&q->lock);
+	spin_unlock_bh(&q->lock);
 	return ret;
 }
 
@@ -334,7 +334,7 @@ static int eventdev_write(struct file * file, const char __user * buf,
 		buf += sizeof(struct eventdev_reply);
 		len -= sizeof(struct eventdev_reply);
 		err = -EINVAL;
-		spin_lock(&q->lock);
+		spin_lock_bh(&q->lock);
 		list_for_each_entry(m, &q->waiting, link) {
 			if (m->hdr.msg_token == rep.msg_token) {
 				if (rep.reply >= 0) {
@@ -347,7 +347,7 @@ static int eventdev_write(struct file * file, const char __user * buf,
 				break;
 			}
 		}
-		spin_unlock(&q->lock);
+		spin_unlock_bh(&q->lock);
 		if (err)
 			break;
 		ret += sizeof(rep);
@@ -375,10 +375,10 @@ static int eventdev_release(struct inode * inodde, struct file * file)
 
 	BUG_ON(!q);
 
-	spin_lock(&q->lock);
+	spin_lock_bh(&q->lock);
 	q->file = NULL;
 	file->private_data = NULL;
-	spin_unlock(&q->lock);
+	spin_unlock_bh(&q->lock);
 	flush_queue(q);
 
 	/*
@@ -397,7 +397,7 @@ static int eventdev_open(struct inode * inode, struct file * file)
 	struct eventdev_queue * q = kmalloc(sizeof(*q), GFP_KERNEL);
 	if (!q)
 		return -ENOMEM;
-	spin_lock_init(&q->lock);
+	spin_lock_bh(&q->lock);
 	INIT_LIST_HEAD(&q->messages);
 	INIT_LIST_HEAD(&q->waiting);
 	init_waitqueue_head(&q->read_wait);

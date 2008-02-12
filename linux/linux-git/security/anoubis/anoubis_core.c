@@ -26,11 +26,14 @@
  */
 #include <linux/file.h>
 #include <linux/init.h>
+#include <linux/interrupt.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/rcupdate.h>
 #include <linux/eventdev.h>
+#include <linux/sched.h>
 #include <linux/security.h>
+#include <linux/types.h>
 #include <linux/anoubis.h>
 
 /*
@@ -55,7 +58,8 @@ struct anoubis_task_label {
  * Wrapper around eventdev_enqueue. Removes the queue if it turns out
  * to be dead.
  */
-static int __anoubis_event_common(void * buf, size_t len, int src, int wait)
+static int __anoubis_event_common(void * buf, size_t len, int src, int wait,
+    gfp_t gfp)
 {
 	int put, err, ret = 0;
 	struct eventdev_queue * q;
@@ -76,9 +80,9 @@ static int __anoubis_event_common(void * buf, size_t len, int src, int wait)
 	if (!q)
 		return -EPIPE;
 	if (wait) {
-		err = eventdev_enqueue_wait(q, src, buf, len, &ret, GFP_KERNEL);
+		err = eventdev_enqueue_wait(q, src, buf, len, &ret, gfp);
 	} else {
-		err = eventdev_enqueue_nowait(q, src, buf, len, GFP_KERNEL);
+		err = eventdev_enqueue_nowait(q, src, buf, len, gfp);
 	}
 	if (!err) {
 		/* EPIPE is reserved for "no queue" */
@@ -93,12 +97,12 @@ static int __anoubis_event_common(void * buf, size_t len, int src, int wait)
 	}
 	ret = -EPIPE;
 	put = 0;
-	spin_lock(&queuelock);
+	spin_lock_bh(&queuelock);
 	if (anoubis_queue == q) {
 		put = 1;
 		rcu_assign_pointer(anoubis_queue, NULL);
 	}
-	spin_unlock(&queuelock);
+	spin_unlock_bh(&queuelock);
 	synchronize_rcu();
 	if (put)
 		eventdev_put_queue(q);
@@ -109,7 +113,13 @@ out:
 
 int anoubis_notify(void * buf, size_t len, int src)
 {
-	return __anoubis_event_common(buf, len, src, 0);
+	might_sleep();
+	return __anoubis_event_common(buf, len, src, 0, GFP_KERNEL);
+}
+
+int anoubis_notify_atomic(void * buf, size_t len, int src)
+{
+	return __anoubis_event_common(buf, len, src, 0, GFP_ATOMIC);
 }
 
 int anoubis_raise(void * buf, size_t len, int src)
@@ -120,7 +130,7 @@ int anoubis_raise(void * buf, size_t len, int src)
 		if (unlikely(l->listener))
 			wait = 0;
 	}
-	return __anoubis_event_common(buf, len, src, wait);
+	return __anoubis_event_common(buf, len, src, wait, GFP_KERNEL);
 }
 
 static int anoubis_open(struct inode * inode, struct file * file)
@@ -153,11 +163,11 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 		fput(eventfile);
 		if (!q)
 			return -EINVAL;
-		spin_lock(&queuelock);
+		spin_lock_bh(&queuelock);
 		if (anoubis_queue)
 			q2 = anoubis_queue;
 		rcu_assign_pointer(anoubis_queue, q);
-		spin_unlock(&queuelock);
+		spin_unlock_bh(&queuelock);
 		synchronize_rcu();
 		if (q2)
 			eventdev_put_queue(q2);
@@ -517,12 +527,12 @@ static void __exit anoubis_core_exit(void)
 	schedule_timeout_interruptible(HZ);
 	if (misc_deregister(&anoubis_device) < 0)
 		printk(KERN_ERR "anoubis_core: Cannot unregister device\n");
-	spin_lock(&queuelock);
+	spin_lock_bh(&queuelock);
 	if (anoubis_queue) {
 		q = anoubis_queue;
 		rcu_assign_pointer(anoubis_queue, NULL);
 	}
-	spin_unlock(&queuelock);
+	spin_unlock_bh(&queuelock);
 	synchronize_rcu();
 	if (q)
 		eventdev_put_queue(q);
