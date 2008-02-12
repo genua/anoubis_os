@@ -358,6 +358,10 @@ struct vnode *checkalias(struct vnode *, dev_t, struct mount *);
 int	getnewvnode(enum vtagtype, struct mount *, int (**vops)(void *),
 	    struct vnode **);
 int	vaccess(mode_t, uid_t, gid_t, mode_t, struct ucred *);
+#ifdef FFS2_ACL
+int	vaccess_acl_posix1e(uid_t, gid_t, struct acl *, mode_t, struct ucred *,
+	    int *);
+#endif
 void	vattr_null(struct vattr *);
 void	vdevgone(int, int, int, enum vtype);
 int	vcount(struct vnode *);
@@ -412,6 +416,14 @@ int	vn_extattr_set(struct vnode *, int, int, const char *, int, char *,
 	    struct proc *);
 int	vn_extattr_rm(struct vnode *, int, int, const char *, struct proc *);
 void	vn_marktext(struct vnode *);
+int	vn_writecount(struct vnode *);
+
+/* vfs_extattr.c */
+int	vn_ea_get(struct vnode *, int, int, const char *, int *, char *,
+	    struct proc *);
+int	vn_ea_set(struct vnode *, int, int, const char *, int, char *,
+	    struct proc *);
+int	vn_ea_rm(struct vnode *, int, int, const char *, struct proc *);
 
 /* vfs_sync.c */
 void	sched_sync(struct proc *);

@@ -65,6 +65,12 @@ ASM=	accept.o access.o acct.o adjfreq.o adjtime.o bind.o chdir.o chflags.o \
 	__syscall.o __sysctl.o __getcwd.o sched_yield.o getthrid.o \
 	thrsleep.o thrwakeup.o threxit.o thrsigdivert.o
 
+# ACL system calls.
+ASM+=	__acl_get_file.o __acl_set_file.o __acl_get_fd.o __acl_set_fd.o \
+	__acl_delete_file.o __acl_delete_fd.o __acl_aclcheck_file.o \
+	__acl_aclcheck_fd.o __acl_get_link.o __acl_set_link.o \
+	__acl_delete_link.o __acl_aclcheck_link.o
+
 # Extended attributes system calls.
 ASM+=	extattr_set_fd.o extattr_get_fd.o extattr_delete_fd.o \
 	extattr_set_link.o extattr_get_link.o extattr_delete_link.o \
@@ -219,7 +225,7 @@ LintSysPseudoNoerr.c: ${LIBCSRCDIR}/sys/makelintstub.sh \
 MAN+=	accept.2 access.2 acct.2 adjfreq.2 adjtime.2 bind.2 brk.2 chdir.2 \
 	chflags.2 \
 	chmod.2 chown.2 chroot.2 clock_gettime.2 close.2 closefrom.2 connect.2 \
-	dup.2 execve.2 _exit.2 fcntl.2 fhopen.2 \
+	dup.2 execve.2 _exit.2 extattr_get_file.2 fcntl.2 fhopen.2 \
 	flock.2 fork.2 fsync.2 getdirentries.2 \
 	getfh.2 getfsstat.2 getgid.2 getgroups.2 getitimer.2 getlogin.2 \
 	getpeername.2 getpeereid.2 getpgrp.2 \
@@ -251,6 +257,18 @@ MLINKS+=chown.2 lchown.2
 MLINKS+=clock_gettime.2 clock_settime.2
 MLINKS+=clock_gettime.2 clock_getres.2
 MLINKS+=execve.2 exect.2
+MLINKS+=extattr_get_file.2 extattr.2 \
+	extattr_get_file.2 extattr_delete_fd.2 \
+	extattr_get_file.2 extattr_delete_file.2 \
+	extattr_get_file.2 extattr_delete_list.2 \
+	extattr_get_file.2 extattr_get_fd.2 \
+	extattr_get_file.2 extattr_get_list.2 \
+	extattr_get_file.2 extattr_list_fd.2 \
+	extattr_get_file.2 extattr_list_file.2 \
+	extattr_get_file.2 extattr_list_link.2 \
+	extattr_get_file.2 extattr_set_fd.2 \
+	extattr_get_file.2 extattr_set_file.2 \
+	extattr_get_file.2 extattr_set_link.2
 MLINKS+=fhopen.2 fhstat.2 fhopen.2 fhstatfs.2
 MLINKS+=getgid.2 getegid.2
 MLINKS+=getitimer.2 setitimer.2

@@ -1,4 +1,4 @@
-#	$OpenBSD: thib $
+#	$OpenBSD$
 #	$NetBSD: vnode_if.src,v 1.10 1996/05/11 18:26:27 mycroft Exp $
 #
 # Copyright (c) 1992, 1993
@@ -481,3 +481,33 @@ vop_setextattr {
 	IN struct ucred *cred;
 	IN struct proc *p;
 };
+
+#% getacl	vp	L L L
+
+vop_getacl {
+	IN struct vnode *vp;
+	IN acl_type_t type;
+	OUT struct acl *aclp;
+	IN struct ucred *cred;
+	IN struct proc *p;
+}
+
+#% setacl	vp	L L L
+
+vop_setacl {
+	IN struct vnode *vp;
+	IN acl_type_t type;
+	IN struct acl *aclp;
+	IN struct ucred *cred;
+	IN struct proc *p;
+}
+
+#% aclcheck	vp	= = =
+
+vop_aclcheck {
+	IN struct vnode *vp;
+	IN acl_type_t type;
+	IN struct acl *aclp;
+	IN struct ucred *cred;
+	IN struct proc *p;
+}

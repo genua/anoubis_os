@@ -38,6 +38,12 @@
 #define ANOUBIS_SOURCE_SANDBOX	20
 #define ANOUBIS_SOURCE_SFS	30
 
+typedef u_int64_t anoubis_cookie_t;
+
+struct anoubis_event_common {
+	anoubis_cookie_t task_cookie;
+};
+
 #ifdef __KERNEL__
 
 #include <linux/security.h>
@@ -48,6 +54,7 @@
  */
 extern int anoubis_raise(void * buf, size_t len, int src);
 extern int anoubis_notify(void * buf, size_t len, int src);
+extern int anoubis_notify_atomic(void * buf, size_t len, int src);
 
 /*
  * Module mulitplexor functions

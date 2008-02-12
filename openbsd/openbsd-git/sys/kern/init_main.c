@@ -258,6 +258,11 @@ main(void *framep)
 	mac_init();
 #endif
 
+#ifdef FFS2_ACL
+	/* Initialize ACL framework. */
+	acl_init();
+#endif
+
 	/*
 	 * Create process 0 (the swapper).
 	 */

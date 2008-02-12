@@ -587,3 +587,103 @@ sys_extattr_list_link(struct proc *p, void *v, register_t *retval)
 	vrele(nd.ni_vp);
 	return (error);
 }
+
+/*
+ * vn_ea_*(): Simplified in-kernel wrapper calls for extended attribute access.
+ * All calls pass in a NOCRED credential, authorizing as "kernel" access. The
+ * IO_NODELOCKED flag should be set in ioflg if the vnode is already locked.
+ */
+
+int
+vn_ea_get(struct vnode *vp, int ioflg, int nspace, const char *name,
+    int *buflen, char *buf, struct proc *p)
+{
+	struct uio auio;
+	struct iovec iov;
+	int error;
+
+	iov.iov_len = *buflen;
+	iov.iov_base = buf;
+
+	auio.uio_iov = &iov;
+	auio.uio_iovcnt = 1;
+	auio.uio_rw = UIO_READ;
+	auio.uio_segflg = UIO_SYSSPACE;
+	auio.uio_procp = p;
+	auio.uio_offset = 0;
+	auio.uio_resid = *buflen;
+
+	if ((ioflg & IO_NODELOCKED) == 0)
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
+
+	KASSERT(VOP_ISLOCKED(vp));
+
+	/* Authorize attribute retrieval as kernel. */
+	error = VOP_GETEXTATTR(vp, nspace, name, &auio, NULL, NOCRED, p);
+
+	if ((ioflg & IO_NODELOCKED) == 0)
+		VOP_UNLOCK(vp, 0, p);
+
+	if (error == 0)
+		*buflen = *buflen - auio.uio_resid;
+
+	return (error);
+}
+
+/*
+ * XXX failure mode if partially written?
+ */
+int
+vn_ea_set(struct vnode *vp, int ioflg, int nspace, const char *name,
+    int buflen, char *buf, struct proc *p)
+{
+	struct uio auio;
+	struct iovec iov;
+	int error;
+
+	iov.iov_len = buflen;
+	iov.iov_base = buf;
+
+	auio.uio_iov = &iov;
+	auio.uio_iovcnt = 1;
+	auio.uio_rw = UIO_WRITE;
+	auio.uio_segflg = UIO_SYSSPACE;
+	auio.uio_procp = p;
+	auio.uio_offset = 0;
+	auio.uio_resid = buflen;
+
+	if ((ioflg & IO_NODELOCKED) == 0)
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
+
+	KASSERT(VOP_ISLOCKED(vp));
+
+	/* Authorize attribute setting as kernel. */
+	error = VOP_SETEXTATTR(vp, nspace, name, &auio, NOCRED, p);
+
+	if ((ioflg & IO_NODELOCKED) == 0)
+		VOP_UNLOCK(vp, 0, p);
+
+	return (error);
+}
+
+int
+vn_ea_rm(struct vnode *vp, int ioflg, int nspace, const char *name,
+    struct proc *p)
+{
+	int error;
+
+	if ((ioflg & IO_NODELOCKED) == 0)
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
+
+	KASSERT(VOP_ISLOCKED(vp));
+
+	/* Authorize attribute removal as kernel. */
+	error = VOP_DELETEEXTATTR(vp, nspace, name, NOCRED, p);
+	if (error == EOPNOTSUPP)
+		error = VOP_SETEXTATTR(vp, nspace, name, NULL, NOCRED, p);
+
+	if ((ioflg & IO_NODELOCKED) == 0)
+		VOP_UNLOCK(vp, 0, p);
+
+	return (error);
+}

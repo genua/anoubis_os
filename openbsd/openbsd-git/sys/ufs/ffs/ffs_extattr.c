@@ -324,7 +324,7 @@ ffs_ea_find(struct inode *ip, int nspace, const char *name,
 			*eac = eaptr;
 		return (ealen);
 	}
-	return(-1);
+	return (-1);
 }
 
 /*
@@ -363,7 +363,7 @@ ffs_ea_iget(struct vnode *vp, struct ucred *cred, struct proc *p)
 	error = ffs_ea_read(vp, &luio, IO_EXT | IO_SYNC);
 	if (error) {
 		free(eae, M_TEMP);
-		return(error);
+		return (error);
 	}
 
 	ip->i_ea_area = eae;
@@ -394,6 +394,14 @@ ffs_ea_iput(struct vnode *vp, int write, struct ucred *cred, struct proc *p)
 	dp = ip->i_din2;
 
 	if (write) {
+		/*
+		 * The upper vn_ea_*() layer uses NOCRED to validate kernel ACL
+		 * operations. In this case we have to switch to the process
+		 * actual credentials, so ffs_balloc() and ffs_truncate() can
+		 * do the correct accounting of allocated file system blocks.
+		 */
+		if (cred == NOCRED)
+			cred = p->p_ucred;
 		liovec.iov_base = ip->i_ea_area;
 		liovec.iov_len = ip->i_ea_len;
 		luio.uio_iov = &liovec;
@@ -500,7 +508,7 @@ ffs_ea_del(void *v)
 	 * skipping the entry found.
 	 */
 
-	eae = malloc(ip->i_ea_len, M_TEMP, M_WAITOK | M_CANFAIL);
+	eae = malloc(ip->i_ea_len - esize, M_TEMP, M_WAITOK | M_CANFAIL);
 	if (eae == NULL) {
 		(void) ffs_ea_iput(ap->a_vp, 0, ap->a_cred, ap->a_p);
 		return (ENOMEM);
@@ -665,9 +673,10 @@ ffs_ea_set(void *v)
 	struct vop_setextattr_args *ap = v;
 	struct inode *ip;
 	struct fs *fs;
-	u_int32_t prefixlen, bodylen, entrysize, pad1, pad2;
+	u_int32_t prefixlen, bodylen, entrysize, pad1, pad2, pesize;
 	int error;
-	unsigned char *eae, *p;
+	unsigned int peoffset;
+	unsigned char *eae, *p, *peaddr;
 
 	ip = VTOI(ap->a_vp);
 	fs = ip->i_fs;
@@ -706,9 +715,32 @@ ffs_ea_set(void *v)
 	if (error)
 		return (error);
 
-	if (ffs_ea_find(ip, ap->a_attrnamespace, ap->a_name, NULL, NULL) != -1) {
-		ffs_ea_iput(ap->a_vp, 0, ap->a_cred, ap->a_p);
-		return (EEXIST);
+	/*
+	 * Check whether an entry for the given attribute already exists, and
+	 * get its parameters.
+	 */
+	peaddr = NULL;
+	pesize = peoffset = 0;
+	(void) ffs_ea_find(ip, ap->a_attrnamespace, ap->a_name, &peaddr, NULL);
+	if (peaddr != NULL) {
+		/*
+		 * Get absolute offset of entry. Make sure it is within the
+		 * extended attribute area.
+		 */
+		peoffset = peaddr - ip->i_ea_area;
+		if (peoffset >= ip->i_ea_len) {
+			(void) ffs_ea_iput(ap->a_vp, 0, ap->a_cred, ap->a_p);
+			return (EINVAL);
+		}
+
+		/*
+		 * Get size of entry. Make sure it is a sane value.
+		 */
+		bcopy(peaddr, &pesize, sizeof(pesize));
+		if (peoffset + pesize > ip->i_ea_len) {
+			(void) ffs_ea_iput(ap->a_vp, 0, ap->a_cred, ap->a_p);
+			return (EINVAL);
+		}
 	}
 
 	/*
@@ -746,20 +778,44 @@ ffs_ea_set(void *v)
 
 	entrysize = prefixlen + pad1 + bodylen + pad2;
 
-	/* Make sure we're not crossing the limit for extended attributes. */
-	if (ip->i_ea_len + entrysize > NXADDR * fs->fs_bsize) {
+	/*
+	 * Make sure we're not crossing the limit for extended attributes.
+	 * Account for the released space of previous entries (which will be
+	 * removed in favour of the new one).
+	 */
+	if (ip->i_ea_len + entrysize - pesize > NXADDR * fs->fs_bsize) {
 		ffs_ea_iput(ap->a_vp, 0, ap->a_cred, ap->a_p);
 		return (ENOSPC);
 	}
 
-	eae = malloc(ip->i_ea_len + entrysize, M_TEMP, M_WAITOK | M_CANFAIL);
+	eae = malloc(ip->i_ea_len + entrysize - pesize, M_TEMP,
+	    M_WAITOK | M_CANFAIL);
 	if (eae == NULL) {
 		ffs_ea_iput(ap->a_vp, 0, ap->a_cred, ap->a_p);
 		return (ENOMEM);
 	}
 
-	bcopy(ip->i_ea_area, eae, ip->i_ea_len);
-	p = eae + ip->i_ea_len;
+	/* Find out where to store the entry in the extended attribute area. */
+	if (peaddr != NULL) {
+		if (pesize == entrysize) {
+			/* Previous entry of same size. Just overwrite it. */
+			bcopy(ip->i_ea_area, eae, ip->i_ea_len);
+			p = eae + peoffset;
+		} else {
+			/*
+			 * Previous entry of different size. Skip it when
+			 * copying contents, and insert new entry at the end.
+			 */
+			bcopy(ip->i_ea_area, eae, peoffset);
+			bcopy(peaddr + pesize, eae + peoffset,
+			    ip->i_ea_len - peoffset - pesize);
+			p = eae + ip->i_ea_len - pesize;
+		}
+	} else {
+		/* New entry. Insert at the end. */
+		bcopy(ip->i_ea_area, eae, ip->i_ea_len);
+		p = eae + ip->i_ea_len;
+	}
 
 	/* Prefix (1st-5th fields). */
 	bcopy(&entrysize, p, sizeof(entrysize));
@@ -782,10 +838,13 @@ ffs_ea_set(void *v)
 	p += bodylen;
 	bzero(p, pad2);
 
-	/* Swap old extended attributes area with new one, and write it out. */
+	/*
+	 * Swap old extended attributes area with new one, and write it out.
+	 */
+
 	free(ip->i_ea_area, M_TEMP);
 	ip->i_ea_area = eae;
-	ip->i_ea_len += entrysize;
+	ip->i_ea_len += entrysize - pesize;
 
 	return (ffs_ea_iput(ap->a_vp, 1, ap->a_cred, ap->a_p));
 }
