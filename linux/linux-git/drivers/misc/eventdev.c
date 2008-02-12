@@ -397,7 +397,7 @@ static int eventdev_open(struct inode * inode, struct file * file)
 	struct eventdev_queue * q = kmalloc(sizeof(*q), GFP_KERNEL);
 	if (!q)
 		return -ENOMEM;
-	spin_lock_bh(&q->lock);
+	spin_lock_init(&q->lock);
 	INIT_LIST_HEAD(&q->messages);
 	INIT_LIST_HEAD(&q->waiting);
 	init_waitqueue_head(&q->read_wait);

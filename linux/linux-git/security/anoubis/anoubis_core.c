@@ -569,6 +569,7 @@ static int __init anoubis_core_init(void)
 
 EXPORT_SYMBOL(anoubis_raise);
 EXPORT_SYMBOL(anoubis_notify);
+EXPORT_SYMBOL(anoubis_notify_atomic);
 EXPORT_SYMBOL(anoubis_register);
 EXPORT_SYMBOL(anoubis_unregister);
 EXPORT_SYMBOL(anoubis_get_sublabel);
