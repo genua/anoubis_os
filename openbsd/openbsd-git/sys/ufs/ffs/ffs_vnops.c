@@ -56,6 +56,7 @@
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/dir.h>
+#include <ufs/ufs/acl.h>
 #include <ufs/ufs/ufs_extern.h>
 #include <ufs/ufs/ufsmount.h>
 
@@ -107,6 +108,11 @@ struct vnodeopv_entry_desc ffs_vnodeop_entries[] = {
 	{ &vop_getextattr_desc, ffs_ea_get },		/* getextattr */
 	{ &vop_listextattr_desc, ffs_ea_list },		/* listextattr */
 	{ &vop_setextattr_desc, ffs_ea_set },		/* setextattr */
+#endif
+#ifdef FFS2_ACL
+	{ &vop_getacl_desc, ufs_getacl },
+	{ &vop_setacl_desc, ufs_setacl },
+	{ &vop_aclcheck_desc, ufs_aclcheck },
 #endif
 	{ NULL, NULL }
 };

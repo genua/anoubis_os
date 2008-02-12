@@ -65,6 +65,12 @@ ASM=	accept.o access.o acct.o adjfreq.o adjtime.o bind.o chdir.o chflags.o \
 	__syscall.o __sysctl.o __getcwd.o sched_yield.o getthrid.o \
 	thrsleep.o thrwakeup.o threxit.o thrsigdivert.o
 
+# ACL system calls.
+ASM+=	__acl_get_file.o __acl_set_file.o __acl_get_fd.o __acl_set_fd.o \
+	__acl_delete_file.o __acl_delete_fd.o __acl_aclcheck_file.o \
+	__acl_aclcheck_fd.o __acl_get_link.o __acl_set_link.o \
+	__acl_delete_link.o __acl_aclcheck_link.o
+
 # Extended attributes system calls.
 ASM+=	extattr_set_fd.o extattr_get_fd.o extattr_delete_fd.o \
 	extattr_set_link.o extattr_get_link.o extattr_delete_link.o \
