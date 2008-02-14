@@ -22,6 +22,13 @@ config SECURITY_ANOUBIS_SFS
 	help
 	  This option provides initial support for the Anoubis SFS module.
 
+config SECURITY_ANOUBIS_DEBUG
+	bool "Anoubis debug messages"
+	depends on SECURITY_ANOUBIS
+	help
+	  This option enables debug messages in Anoubis modules to aid
+	  developers finding problems.
+
 config SECURITY_EVENTDEVTEST
 	tristate "Test module for Eventdev devices"
 	depends on SECURITY_ANOUBIS && SECURITY

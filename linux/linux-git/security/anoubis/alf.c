@@ -38,6 +38,7 @@
 #include <linux/anoubis.h>
 #include <linux/anoubis_alf.h>
 #include <linux/udp.h>
+#include <linux/debug_locks.h>
 
 #include <net/sock.h>
 #include <net/ip.h>
@@ -51,6 +52,25 @@ static int allow_ports_max = -1;
 /* Ask in userspace what to do for a given event */
 static inline int alf_ask(struct alf_event *event)
 {
+	if (unlikely(in_atomic() || irqs_disabled())) {
+#ifdef CONFIG_SECURITY_ANOUBIS_DEBUG
+		static int info_printed = 0;
+
+		if (printk_ratelimit())
+			printk(KERN_WARNING "ALF: only notifying while atomic!\n");
+
+		if (!info_printed) {
+			printk(KERN_WARNING "preempt_count: %d, pid: %u, op: %u\n",
+			    preempt_count(), event->pid, event->op);
+			debug_show_all_locks();
+			WARN_ON(1);
+			info_printed = 1;
+		}
+#endif
+		return anoubis_notify_atomic((char *)event, sizeof(*event),
+		    ANOUBIS_SOURCE_ALF);
+	}
+
 	return anoubis_raise((char *)event, sizeof(*event), ANOUBIS_SOURCE_ALF);
 }
 
@@ -85,7 +105,7 @@ static int alf_check_policy(int op, struct socket *sock,
 		address = (struct sockaddr *)&tmpaddr;
 	}
 
-	if ((event = kmalloc(sizeof(struct alf_event), GFP_KERNEL)) == 0)
+	if ((event = kmalloc(sizeof(struct alf_event), GFP_ATOMIC)) == 0)
 		return -ENOMEM;
 
 	event->family = sock->sk->sk_family;
