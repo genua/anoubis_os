@@ -29,12 +29,20 @@
 #define _ANOUBIS_H
 
 #include <sys/ioccom.h>
+#include <sys/types.h>
 
-#define ANOUBIS_DECLARE_FD	_IO('a',0x10)
+#define ANOUBIS_DECLARE_FD		_IO('a',0x10)
+#define ANOUBIS_DECLARE_LISTENER	_IO('a',0x11)
 
 #define ANOUBIS_SOURCE_TEST	0
 #define ANOUBIS_SOURCE_ALF	10
 #define ANOUBIS_SOURCE_SANDBOX	20
 #define ANOUBIS_SOURCE_SFS	30
+
+typedef u_int64_t anoubis_cookie_t;
+
+struct anoubis_event_common {
+	anoubis_cookie_t task_cookie;
+};
 
 #endif

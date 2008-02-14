@@ -85,6 +85,9 @@ struct file {
 	u_int64_t f_seek;	/* total independent seek operations */
 	u_int64_t f_rbytes;	/* total bytes read */
 	u_int64_t f_wbytes;	/* total bytes written */
+#ifdef ANOUBIS
+	int	denywrite;	/* Deny writes to the file */
+#endif
 };
 
 #define FIF_WANTCLOSE		0x01	/* a close is waiting for usecount */

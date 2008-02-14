@@ -66,6 +66,10 @@
 
 #include <miscfs/specfs/specdev.h>
 
+#ifdef MAC
+#include <security/mac/mac_framework.h>
+#endif
+
 enum vtype iftovt_tab[16] = {
 	VNON, VFIFO, VCHR, VNON, VDIR, VNON, VBLK, VNON,
 	VREG, VNON, VLNK, VNON, VSOCK, VNON, VNON, VBAD,
@@ -418,6 +422,9 @@ getnewvnode(enum vtagtype tag, struct mount *mp, int (**vops)(void *),
 	cache_purge(vp);
 	vp->v_tag = tag;
 	vp->v_op = vops;
+#ifdef MAC
+	mac_init_vnode(vp);
+#endif
 	insmntque(vp, mp);
 	*vpp = vp;
 	vp->v_usecount = 1;

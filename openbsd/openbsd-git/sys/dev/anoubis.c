@@ -91,7 +91,7 @@ anoubisioctl(dev_t dev, u_long cmd, caddr_t data, int fflag,
 	switch(cmd) {
 		case ANOUBIS_DECLARE_FD: {
 			struct eventdev_queue * nq, *oq;
-			int fd = (int)(*data);
+			int fd = (int)(*(int*)data);
 			struct file * fp = fd_getfile(p->p_fd, fd);
 			if (!fp)
 				return EBADF;
@@ -106,6 +106,13 @@ anoubisioctl(dev_t dev, u_long cmd, caddr_t data, int fflag,
 			mtx_leave(&anoubis_lock);
 			if (oq)
 				eventdev_put_queue(oq);
+			return 0;
+		}
+		case ANOUBIS_DECLARE_LISTENER: {
+			int arg = (int)(*(int*)data);
+			if (arg != 0)
+				return EINVAL;
+			curproc->listener = 1;
 			return 0;
 		}
 		default:

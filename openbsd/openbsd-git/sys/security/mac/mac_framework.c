@@ -132,6 +132,7 @@ struct mac_policy_conf * const mac_policies[] = {
 #endif
 #ifdef ANOUBIS
 	&mac_anoubis_alf_mac_policy_conf,
+	&mac_anoubis_sfs_mac_policy_conf,
 	&mac_anoubis_test_mac_policy_conf,
 #endif
 	0
@@ -726,6 +727,9 @@ security_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		case ANOUBIS_ALF_ALLOW_PORT_MAX:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
 			    &alf_allow_port_max));
+		case ANOUBIS_SFS_ENABLE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &sfs_enable));
 		default:
 			return (EOPNOTSUPP);
 		}

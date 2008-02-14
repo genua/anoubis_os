@@ -87,6 +87,7 @@ struct vnode {
 	u_int   v_usecount;			/* reference count of users */
 	/* reference count of writers */
 	u_int   v_writecount;
+	u_int	v_denywrite;
 	/* Flags that can be read/written in interrupts */
 	u_int   v_bioflag;
 	u_int   v_holdcnt;			/* buffer references */
@@ -417,6 +418,7 @@ int	vn_extattr_set(struct vnode *, int, int, const char *, int, char *,
 int	vn_extattr_rm(struct vnode *, int, int, const char *, struct proc *);
 void	vn_marktext(struct vnode *);
 int	vn_writecount(struct vnode *);
+int	vn_denywrite(struct vnode *);
 
 /* vfs_extattr.c */
 int	vn_ea_get(struct vnode *, int, int, const char *, int *, char *,

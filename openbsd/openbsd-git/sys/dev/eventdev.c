@@ -423,7 +423,7 @@ eventdev_write(struct file *file, off_t *poff, struct uio *uio,
 		}
 	}
 	mtx_leave(&q->lock);
-	return EINVAL;
+	return ESRCH;
 }
 
 /* ARGSUSED */

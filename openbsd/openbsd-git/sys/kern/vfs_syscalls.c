@@ -870,6 +870,16 @@ sys_open(struct proc *p, void *v, register_t *retval)
 	fp->f_type = DTYPE_VNODE;
 	fp->f_ops = &vnops;
 	fp->f_data = vp;
+#ifdef ANOUBIS
+	error = mac_check_file_open(p->p_ucred, fp, vp, SCARG(uap, path));
+	if (error) {
+		VOP_UNLOCK(vp, 0, p);
+		/* closef will close the file for us. */
+		fdremove(fdp, indx);
+		closef(fp, p);
+		goto out;
+	}
+#endif
 	if (flags & (O_EXLOCK | O_SHLOCK)) {
 		lf.l_whence = SEEK_SET;
 		lf.l_start = 0;
@@ -1063,23 +1073,30 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 		if ((error = VOP_SETATTR(vp, &va, cred, p)) != 0)
 			goto bad;
 	}
-	if ((error = VOP_OPEN(vp, flags, cred, p)) != 0)
+	if (flags & FWRITE) {
+		error = vn_writecount(vp);
+		if (error)
+			goto bad;
+	}
+	if ((error = VOP_OPEN(vp, flags, cred, p)) != 0) {
+		if (flags & FWRITE)
+			vp->v_writecount--;
 		goto bad;
-
+	}
 	/* done with modified vn_open, now finish what sys_open does. */
 
 	fp->f_flag = flags & FMASK;
 	fp->f_type = DTYPE_VNODE;
 	fp->f_ops = &vnops;
 	fp->f_data = vp;
-	if (flags & FWRITE) {
-		error = vn_writecount(vp);
-		if (error) {
-			VOP_UNLOCK(vp, 0, p);
-			vp = NULL;
-			goto bad;
-		}
+#ifdef ANOUBIS
+	error = mac_check_file_open(p->p_ucred, fp, vp, NULL);
+	if (error) {
+		VOP_UNLOCK(vp, 0, p);
+		vp = NULL;
+		goto bad;
 	}
+#endif
 	if (flags & (O_EXLOCK | O_SHLOCK)) {
 		lf.l_whence = SEEK_SET;
 		lf.l_start = 0;

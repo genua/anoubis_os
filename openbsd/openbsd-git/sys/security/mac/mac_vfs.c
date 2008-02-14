@@ -107,6 +107,9 @@ void
 mac_init_vnode(struct vnode *vp)
 {
 
+	if (vp->v_label)
+		mac_destroy_vnode(vp);
+	assert(vp->v_label == NULL);
 	vp->v_label = mac_vnode_label_alloc();
 }
 
@@ -511,6 +514,20 @@ mac_check_vnode_open(struct ucred *cred, struct vnode *vp, int acc_mode)
 	MAC_CHECK(check_vnode_open, cred, vp, vp->v_label, acc_mode);
 	return (error);
 }
+
+#ifdef ANOUBIS
+int
+mac_check_file_open(struct ucred *cred, struct file * fp, struct vnode *vp,
+    const char * pathhint)
+{
+	int error;
+
+	mac_assert_vnode_locked(vp);
+
+	MAC_CHECK(check_file_open, cred, fp, vp, vp->v_label, pathhint);
+	return (error);
+}
+#endif
 
 int
 mac_check_vnode_poll(struct ucred *active_cred, struct ucred *file_cred,

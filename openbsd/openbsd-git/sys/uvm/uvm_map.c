@@ -229,14 +229,12 @@ write_counts_inc(struct uvm_object * uobj, int flags)
 		uvn->u_denywrite++;
 	}
 	if (flags & UVM_MAP_WRITECOUNT) {
-		if (uvn->u_denywrite)
+		if (uvn->u_denywrite || vp->v_denywrite)
 			goto error;
 		uvn->u_writecount++;
 	}
 	assert(!(uvn->u_denywrite && uvn->u_writecount));
 	simple_unlock(&uvn->u_obj.vmobjlock);
-	printf("REF INC: %p %d %d\n", uvn, uvn->u_writecount,
-	    uvn->u_denywrite);
 	return 0;
 error:
 	simple_unlock(&uvn->u_obj.vmobjlock);
@@ -258,8 +256,6 @@ write_counts_dec(struct uvm_object * uobj, int flags)
 	assert(!(uvn->u_denywrite && uvn->u_writecount));
 	assert(uvn->u_denywrite >= 0 && uvn->u_writecount >= 0);
 	simple_unlock(&uvn->u_obj.vmobjlock);
-	printf("REF DEC: %p %d %d\n", uvn, uvn->u_writecount,
-	    uvn->u_denywrite);
 }
 
 /*

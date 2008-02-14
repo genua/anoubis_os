@@ -30,8 +30,10 @@
 #include <sys/types.h>
 #include <sys/malloc.h>
 #include <sys/mutex.h>
+#include <sys/proc.h>
 
 #include <dev/eventdev.h>
+#include <dev/anoubis.h>
 #include <security/mac_anoubis/mac_anoubis.h>
 
 struct eventdev_queue *anoubis_queue = NULL;
@@ -53,7 +55,10 @@ int __anoubis_event_common(void * buf, size_t len, int src, int wait)
 {
 	int put, err, ret = 0;
 	struct eventdev_queue * q;
+	struct anoubis_event_common * common = buf;
 
+	assert(len >= sizeof(struct anoubis_event_common));
+	common->task_cookie = curproc->task_cookie;
 	mtx_enter(&anoubis_lock);
 	q = anoubis_queue;
 	if (q)
@@ -99,5 +104,7 @@ int anoubis_notify(void * buf, size_t len, int src)
 
 int anoubis_raise(void * buf, size_t len, int src)
 {
+	if (curproc->listener)
+		return __anoubis_event_common(buf, len, src, 0);
 	return __anoubis_event_common(buf, len, src, 1);
 }

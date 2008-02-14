@@ -42,6 +42,7 @@
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
 #include <dev/anoubis.h>
+#include <sys/anoubis_alf.h>
 
 #include <security/mac/mac_policy.h>
 #include <security/mac_anoubis/mac_anoubis.h>
@@ -49,31 +50,6 @@
 #define MAX_SOCK_ADDR 128
 
 int mac_anoubis_alf_slot;
-
-enum alf_ops {
-	ALF_CONNECT = 1,
-	ALF_ACCEPT = 2,
-	ALF_SENDMSG = 3,
-	ALF_RECVMSG = 4
-};
-
-struct alf_event {
-	union {
-		struct sockaddr_in      in_addr;
-		struct sockaddr_in6     in6_addr;
-	} local;
-	union {
-		struct sockaddr_in      in_addr;
-		struct sockaddr_in6     in6_addr;
-	} peer;
-	unsigned short family;
-	unsigned short type;
-	unsigned short protocol;
-
-	unsigned short op;
-	pid_t   pid;
-	uid_t   uid;
-};
 
 struct alf_label {
 	union {

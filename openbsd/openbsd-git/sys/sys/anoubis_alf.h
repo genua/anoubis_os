@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007 GeNUA mbH <info@genua.de>
+ * Copyright (c) 2008 GeNUA mbH <info@genua.de>
  *
  * All rights reserved.
  *
@@ -24,24 +24,42 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef ANOUBIS_ALF_H
+#define ANOUBIS_ALF_H
 
-#ifndef _MAC_ANOUBIS_H_
-#define _MAC_ANOUBIS_H_
+#include <sys/socket.h>
+#include <netinet/in.h>
 
-extern struct mac_policy_conf mac_anoubis_alf_mac_policy_conf;
-extern struct mac_policy_conf mac_anoubis_sfs_mac_policy_conf;
-extern struct mac_policy_conf mac_anoubis_test_mac_policy_conf;
+#include <dev/anoubis.h>
 
-extern struct eventdev_queue *anoubis_queue;
-extern struct mutex anoubis_lock;
+enum alf_ops
+{
+	ALF_CONNECT = 1,
+	ALF_ACCEPT = 2,
+	ALF_SENDMSG = 3,
+	ALF_RECVMSG = 4
+};
 
-extern int alf_enable;
-extern int sfs_enable;
+struct alf_event
+{
+	struct anoubis_event_common common;
+	union
+	{
+		struct sockaddr_in	in_addr;
+		struct sockaddr_in6	in6_addr;
+	} local;
+	union
+	{
+		struct sockaddr_in	in_addr;
+		struct sockaddr_in6	in6_addr;
+	} peer;
+	unsigned short family;
+	unsigned short type;
+	unsigned short protocol;
 
-extern int alf_allow_port_min;
-extern int alf_allow_port_max;
+	unsigned short op;
+	pid_t	pid;
+	uid_t	uid;
+};
 
-int anoubis_raise(void * buf, size_t len, int src);
-int anoubis_notify(void * buf, size_t len, int src);
-
-#endif	/* _MAC_ANOUBIS_H_ */
+#endif

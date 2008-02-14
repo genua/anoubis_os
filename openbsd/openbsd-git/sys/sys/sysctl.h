@@ -687,13 +687,15 @@ struct kinfo_proc2 {
 #define ANOUBIS_ALF_ENABLE		1
 #define ANOUBIS_ALF_ALLOW_PORT_MIN	2
 #define ANOUBIS_ALF_ALLOW_PORT_MAX	3
-#define ANOUBIS_MAXID			4
+#define ANOUBIS_SFS_ENABLE		4
+#define ANOUBIS_MAXID			5
 
 #define ANOUBIS_NAMES { \
 	{ 0, 0 }, \
 	{ "alf_enable", ANOUBIS_ALF_ENABLE }, \
 	{ "alf_allow_port_min", ANOUBIS_ALF_ALLOW_PORT_MIN }, \
 	{ "alf_allow_port_max", ANOUBIS_ALF_ALLOW_PORT_MAX }, \
+	{ "sfs_enable", ANOUBIS_SFS_ENABLE }, \
 }
 
 #ifdef	_KERNEL

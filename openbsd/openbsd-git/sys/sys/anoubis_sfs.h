@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007 GeNUA mbH <info@genua.de>
+ * Copyright (c) 2008 GeNUA mbH <info@genua.de>
  *
  * All rights reserved.
  *
@@ -24,24 +24,44 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef ANOUBIS_SFS_H
+#define ANOUBIS_SFS_H
 
-#ifndef _MAC_ANOUBIS_H_
-#define _MAC_ANOUBIS_H_
+#include <dev/anoubis.h>
 
-extern struct mac_policy_conf mac_anoubis_alf_mac_policy_conf;
-extern struct mac_policy_conf mac_anoubis_sfs_mac_policy_conf;
-extern struct mac_policy_conf mac_anoubis_test_mac_policy_conf;
+#define ANOUBIS_SFS_CS_LEN 32		 /* Length of Checksum */
 
-extern struct eventdev_queue *anoubis_queue;
-extern struct mutex anoubis_lock;
+#define ANOUBIS_OPEN_FLAG_READ		0x0001UL
+#define ANOUBIS_OPEN_FLAG_WRITE		0x0002UL
 
-extern int alf_enable;
-extern int sfs_enable;
+#define ANOUBIS_OPEN_FLAG_STRICT	0x0010UL
+#define ANOUBIS_OPEN_FLAG_PATHHINT	0x0020UL
+#define ANOUBIS_OPEN_FLAG_STATDATA	0x0040UL
+#define ANOUBIS_OPEN_FLAG_CSUM		0x0080UL
 
-extern int alf_allow_port_min;
-extern int alf_allow_port_max;
+struct sfs_open_message
+{
+	struct anoubis_event_common common;
+	u_int64_t ino;
+	u_int64_t dev;
+	unsigned long flags;
+	u_int8_t csum[ANOUBIS_SFS_CS_LEN];
+	char pathhint[1];
+};
 
-int anoubis_raise(void * buf, size_t len, int src);
-int anoubis_notify(void * buf, size_t len, int src);
+/*
+ * Used in eventdev replies: Access is ok provided that the Checksum
+ * given in the open message remains intact. This should never be seen
+ * as a system call error code in user space.
+ */
+#define EOKWITHCHKSUM	0x2000UL
 
-#endif	/* _MAC_ANOUBIS_H_ */
+#ifdef _KERNEL
+
+int anoubis_sfs_get_csum(struct file * file, u_int8_t * csum);
+int anoubis_sfs_file_lock(struct file * file, u_int8_t * csum);
+void anoubis_sfs_file_unlock(struct file * file);
+
+#endif /* _KERNEL */
+
+#endif /* ANOUBIS_SFS_H */

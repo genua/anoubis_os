@@ -45,6 +45,11 @@ void	mac_anoubis_test_init(struct mac_policy_conf *conf);
 int	mac_anoubis_test_vnode_open(struct ucred *cred, struct vnode *vp,
 	    struct label *vplabel, int acc_mode);
 
+struct eventdevtest_event {
+	struct anoubis_event_common common;
+	long ino;
+};
+
 void
 mac_anoubis_test_init(struct mac_policy_conf *conf)
 {
@@ -56,7 +61,7 @@ mac_anoubis_test_vnode_open(struct ucred *cred, struct vnode *vp,
 {
 	struct vattr va;
 	int err;
-	char * buf;
+	struct eventdevtest_event * buf;
 
 	err = VOP_GETATTR(vp, &va, cred, curproc);
 	if (err)
@@ -69,16 +74,14 @@ mac_anoubis_test_vnode_open(struct ucred *cred, struct vnode *vp,
 		return 0;
 	if ((va.va_mode & S_ISVTX) == 0)
 		return 0;
-	buf = malloc(sizeof(va.va_fileid), M_DEVBUF, M_WAITOK);
+	buf = malloc(sizeof(*buf), M_DEVBUF, M_WAITOK);
 	if (!buf)
 		return ENOMEM;
-	memcpy(buf, &va.va_fileid, sizeof(va.va_fileid));
+	buf->ino = va.va_fileid;
 	if (va.va_mode & S_IXOTH) {
-		err = anoubis_raise(buf, sizeof(va.va_fileid),
-		    ANOUBIS_SOURCE_TEST);
+		err = anoubis_raise(buf, sizeof(*buf), ANOUBIS_SOURCE_TEST);
 	} else {
-		err = anoubis_notify(buf, sizeof(va.va_fileid),
-		    ANOUBIS_SOURCE_TEST);
+		err = anoubis_notify(buf, sizeof(*buf), ANOUBIS_SOURCE_TEST);
 	}
 	/* In tests suppress errors if no queue is present. */
 	if (err == EPIPE)

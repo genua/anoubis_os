@@ -265,14 +265,30 @@ int
 vn_writecount(struct vnode *vp)
 {
 	int error = 0;
-	simple_lock(&vp->v_uvm.uvm_obj.vmobjlock);
-        if ((vp->v_uvm.u_flags & UVM_VNODE_VALID) && vp->v_uvm.u_denywrite) {
+	simple_lock(&vp->v_uvm.u_obj.vmobjlock);
+	if (vp->v_denywrite ||
+	    ((vp->v_uvm.u_flags & UVM_VNODE_VALID) && vp->v_uvm.u_denywrite)) {
 		assert(vp->v_writecount == 0);
 		error = EBUSY;
 	} else {
 		vp->v_writecount++;
 	}
-	simple_unlock(&vp->v_uvm.uvm_obj.vmobjlock);
+	simple_unlock(&vp->v_uvm.u_obj.vmobjlock);
+	return error;
+}
+
+int vn_denywrite(struct vnode *vp)
+{
+	int error = 0;
+	simple_lock(&vp->v_uvm.u_obj.vmobjlock);
+	if (vp->v_writecount ||
+	    ((vp->v_uvm.u_flags & UVM_VNODE_VALID) && vp->v_uvm.u_writecount)) {
+		assert(vp->v_denywrite == 0);
+		error = EBUSY;
+	} else {
+		vp->v_denywrite++;
+	}
+	simple_unlock(&vp->v_uvm.u_obj.vmobjlock);
 	return error;
 }
 

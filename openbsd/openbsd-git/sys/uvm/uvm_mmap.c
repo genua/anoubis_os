@@ -529,6 +529,12 @@ sys_mmap(p, v, retval)
 			flags = (flags & ~MAP_PRIVATE) | MAP_SHARED;
 		}
 
+#ifdef ANOUBIS
+		/* Force DENYWRITE mappings if file->denywrite is set. */
+		if (fp->denywrite)
+			flags |= MAP_DENYWRITE;
+#endif
+
 		/*
 		 * now check protection
 		 */
