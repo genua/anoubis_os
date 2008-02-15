@@ -84,7 +84,7 @@ struct anoubis_hooks {
 };
 #undef DECLARE
 
-extern int anoubis_register(struct anoubis_hooks *);
+extern int anoubis_register(struct anoubis_hooks *, int *);
 extern void anoubis_unregister(int idx);
 extern void * anoubis_set_sublabel(void ** labelp, int idx, void * subl);
 extern void * anoubis_get_sublabel(void ** labelp, int idx);

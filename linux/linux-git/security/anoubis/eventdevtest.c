@@ -146,12 +146,12 @@ static int __init eventdevtest_init(void)
 	int rc = 0;
 
 	/* register ourselves with the security framework */
-	if ((rc = anoubis_register(&eventdevtest_ops)) < 0) {
+	if ((rc = anoubis_register(&eventdevtest_ops, &ac_index)) < 0) {
+		ac_index = -1;
 		printk(KERN_ERR "eventdevtest: Failure registering with the "
 			      "kernel.\n");
 		return rc;
 	}
-	ac_index = rc;
 	printk(KERN_INFO "eventdevtest: Successfully initialized.\n");
 	return 0;
 }

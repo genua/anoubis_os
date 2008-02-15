@@ -839,12 +839,12 @@ static int __init sfs_init(void)
 		    "(try modprobe sha256)\n");
 		return PTR_ERR(dummy_tfm);
 	}
-	if ((rc = anoubis_register(&sfs_ops)) < 0) {
+	if ((rc = anoubis_register(&sfs_ops, &ac_index)) < 0) {
+		ac_index = -1;
 		printk(KERN_ERR "anoubis_sfs: Failure registering\n");
 		crypto_free_hash(dummy_tfm);
 		return rc;
 	}
-	ac_index = rc;
 	printk(KERN_INFO "anoubis_sfs: Successfully initialized.\n");
 	return 0;
 }

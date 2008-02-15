@@ -283,9 +283,21 @@ void * anoubis_set_sublabel(void ** lp, int idx, void * subl)
 	return old;
 }
 
-int anoubis_register(struct anoubis_hooks * newhooks)
+/*
+ * Hooks registration. This is difficult because the hooks might be
+ * called immediately after we insert the hooks. This may be before
+ * the module knows its index. In this case the module has no access
+ * to its label form the hooks.
+ * To avoid this we first store the (predicted) index of the new module
+ * in (*idx_ptr). The synchronize_rcu() call ensures that all CPUs actually
+ * see the new index value. Only after we know that this is the case we
+ * actually enable the new hooks.
+ * As we drop the hooks_lock during synchronize_rcu() we must make sure
+ * that the new index is still availiable after we reacquire the spinlock.
+ */
+int anoubis_register(struct anoubis_hooks * newhooks, int * idx_ptr)
 {
-	int k, idx = -ESRCH;
+	int k, ret = -ESRCH;
 	struct anoubis_hooks * ourhooks;
 
 	ourhooks = kmalloc(sizeof(struct anoubis_hooks), GFP_KERNEL);
@@ -293,24 +305,33 @@ int anoubis_register(struct anoubis_hooks * newhooks)
 		return -ENOMEM;
 	*ourhooks = *newhooks;
 	atomic_set(&ourhooks->refcount, 0);
+retry:
 	spin_lock(&hooks_lock);
 	for (k=0; k<MAX_ANOUBIS_MODULES; ++k) {
 		if (hooks[k] == NULL) {
-			idx = k;
+			(*idx_ptr) = k;
+			spin_unlock(&hooks_lock);
+			synchronize_rcu();
+			spin_lock(&hooks_lock);
+			if (hooks[k]) {
+				spin_unlock(&hooks_lock);
+				goto retry;
+			}
 			ourhooks->magic = serial;
 			serial++;
 			if (unlikely(!serial))
 				printk(KERN_INFO "anoubis_core: "
 				    "Serial number overflow\n");
-			rcu_assign_pointer(hooks[idx], newhooks);
+			rcu_assign_pointer(hooks[k], newhooks);
+			ret = 0;
 			break;
 		}
 	}
 	spin_unlock(&hooks_lock);
-	if (idx < 0)
+	if (ret < 0)
 		kfree(ourhooks);
 	synchronize_rcu();
-	return idx;
+	return ret;
 };
 
 void anoubis_unregister(int idx)

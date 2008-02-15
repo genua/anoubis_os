@@ -271,12 +271,12 @@ static int __init alf_init(void)
 {
 	int ret;
 
-	ret = anoubis_register(&alf_ops);
+	ret = anoubis_register(&alf_ops, &ac_index);
 	if (ret < 0) {
+		ac_index = -1;
 		printk(KERN_INFO "Failed to register Anoubis ALF\n");
 		return ret;
 	}
-	ac_index = ret;
 	printk(KERN_INFO "Anoubis ALF module installed\n");
 	return 0;
 }
