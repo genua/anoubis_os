@@ -304,7 +304,15 @@ sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
 		msg->flags |= ANOUBIS_OPEN_FLAG_CSUM;
 	}
 	mtx_leave(&sec->lock);
+	/* 
+	 * Drop the vnode lock while we sleep. This avoids nasty deadlocks.
+	 * Note that this is only safe because at this point we no longer
+	 * access the security label and the vnode will we unlocked
+	 * immediately after the security hook returns.
+	 * */
+	VOP_UNLOCK(vp, 0, p);
 	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 	if (ret == EPIPE /* && openation_mode != strict XXX */)
 		return 0;
 	if (ret == EOKWITHCHKSUM) {

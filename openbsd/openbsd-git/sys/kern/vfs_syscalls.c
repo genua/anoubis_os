@@ -870,16 +870,6 @@ sys_open(struct proc *p, void *v, register_t *retval)
 	fp->f_type = DTYPE_VNODE;
 	fp->f_ops = &vnops;
 	fp->f_data = vp;
-#ifdef ANOUBIS
-	error = mac_check_file_open(p->p_ucred, fp, vp, SCARG(uap, path));
-	if (error) {
-		VOP_UNLOCK(vp, 0, p);
-		/* closef will close the file for us. */
-		fdremove(fdp, indx);
-		closef(fp, p);
-		goto out;
-	}
-#endif
 	if (flags & (O_EXLOCK | O_SHLOCK)) {
 		lf.l_whence = SEEK_SET;
 		lf.l_start = 0;
@@ -922,6 +912,17 @@ sys_open(struct proc *p, void *v, register_t *retval)
 			goto out;
 		}
 	}
+#ifdef ANOUBIS
+	assert(p == curproc);
+	error = mac_check_file_open(p->p_ucred, fp, vp, SCARG(uap, path));
+	if (error) {
+		VOP_UNLOCK(vp, 0, p);
+		/* closef will close the file for us. */
+		fdremove(fdp, indx);
+		closef(fp, p);
+		goto out;
+	}
+#endif
 	VOP_UNLOCK(vp, 0, p);
 	*retval = indx;
 	FILE_SET_MATURE(fp);
@@ -1089,14 +1090,6 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 	fp->f_type = DTYPE_VNODE;
 	fp->f_ops = &vnops;
 	fp->f_data = vp;
-#ifdef ANOUBIS
-	error = mac_check_file_open(p->p_ucred, fp, vp, NULL);
-	if (error) {
-		VOP_UNLOCK(vp, 0, p);
-		vp = NULL;
-		goto bad;
-	}
-#endif
 	if (flags & (O_EXLOCK | O_SHLOCK)) {
 		lf.l_whence = SEEK_SET;
 		lf.l_start = 0;
@@ -1117,6 +1110,15 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 		fp->f_flag |= FHASLOCK;
 	}
+#ifdef ANOUBIS
+	assert(p == curproc);
+	error = mac_check_file_open(p->p_ucred, fp, vp, NULL);
+	if (error) {
+		VOP_UNLOCK(vp, 0, p);
+		vp = NULL;
+		goto bad;
+	}
+#endif
 	VOP_UNLOCK(vp, 0, p);
 	*retval = indx;
 	FILE_SET_MATURE(fp);
