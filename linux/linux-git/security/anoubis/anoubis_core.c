@@ -119,7 +119,7 @@ int anoubis_notify(void * buf, size_t len, int src)
 
 int anoubis_notify_atomic(void * buf, size_t len, int src)
 {
-	return __anoubis_event_common(buf, len, src, 0, GFP_ATOMIC);
+	return __anoubis_event_common(buf, len, src, 0, GFP_NOWAIT);
 }
 
 int anoubis_raise(void * buf, size_t len, int src)

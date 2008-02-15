@@ -105,7 +105,7 @@ static int alf_check_policy(int op, struct socket *sock,
 		address = (struct sockaddr *)&tmpaddr;
 	}
 
-	if ((event = kmalloc(sizeof(struct alf_event), GFP_ATOMIC)) == 0)
+	if ((event = kmalloc(sizeof(struct alf_event), GFP_NOWAIT)) == 0)
 		return -ENOMEM;
 
 	event->family = sock->sk->sk_family;
