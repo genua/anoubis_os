@@ -91,8 +91,9 @@ procinit(void)
 	uihashtbl = hashinit(maxproc / 16, M_PROC, M_NOWAIT, &uihash);
 	if (!pidhashtbl || !pgrphashtbl || !uihashtbl)
 		panic("procinit: malloc");
-
+#ifdef ANOUBIS
 	mtx_init(&task_cookie_mutex, 0);
+#endif
 	pool_init(&proc_pool, sizeof(struct proc), 0, 0, 0, "procpl",
 	    &pool_allocator_nointr);
 	pool_init(&process_pool, sizeof(struct process), 0, 0, 0, "processpl",
