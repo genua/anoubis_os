@@ -97,17 +97,24 @@ struct eventdev_queue {
 	struct eventdev_list messages;
 	struct eventdev_list waiting;
 	struct file * file;
-	struct selinfo sel;
+	struct selinfo rsel;
+	struct selinfo wsel;
 };
 
 #define die_wait (&eventdev_tokenmtx)
 static struct mutex eventdev_tokenmtx;     /* Protects next_token below */
 
-void filt_evdetach(struct knote *kn);
-int filt_event(struct knote *kn, long hint);
+void filt_revdetach(struct knote *kn);
+int filt_revent(struct knote *kn, long hint);
 
-struct filterops eventdev_filtops =
-	{ 1, NULL, filt_evdetach, filt_event };
+void filt_wevdetach(struct knote *kn);
+int filt_wevent(struct knote *kn, long hint);
+
+struct filterops reventdev_filtops =
+	{ 1, NULL, filt_revdetach, filt_revent };
+
+struct filterops weventdev_filtops =
+	{ 1, NULL, filt_wevdetach, filt_wevent };
 
 int
 eventdev_get_token(eventdev_token * tok)
@@ -213,8 +220,8 @@ __eventdev_enqueue(struct eventdev_queue * q, unsigned char src,
 	TAILQ_INSERT_TAIL(m->list, m, link);
 	mtx_leave(&q->lock);
 	wakeup(q);
-	selwakeup(&q->sel);
-	KNOTE(&q->sel.si_note, 0);
+	selwakeup(&q->rsel);
+	KNOTE(&q->rsel.si_note, 0);
 	if (retval)
 		(*retval) = eventdev_wait(q, m);
 	return 0;
@@ -276,8 +283,8 @@ fail:
 	TAILQ_INSERT_HEAD(m->list, m, link);
 	mtx_leave(&q->lock);
 	wakeup(q);
-	selwakeup(&q->sel);
-	KNOTE(&q->sel.si_note, 0);
+	selwakeup(&q->rsel);
+	KNOTE(&q->rsel.si_note, 0);
 	return err;
 }
 
@@ -442,11 +449,15 @@ eventdev_kqfilter(struct file *file, struct knote *kn)
 
 	switch (kn->kn_filter) {
 	case EVFILT_READ:
-		klist = &q->sel.si_note;
-		kn->kn_fop = &eventdev_filtops;
+		klist = &q->rsel.si_note;
+		kn->kn_fop = &reventdev_filtops;
+		break;
+	case EVFILT_WRITE:
+		klist = &q->wsel.si_note;
+		kn->kn_fop = &weventdev_filtops;
 		break;
 	default:
-		return (1);
+		return (EINVAL);
 	}
 	kn->kn_hook = (void *)q;
 
@@ -459,18 +470,18 @@ eventdev_kqfilter(struct file *file, struct knote *kn)
 
 /* ARGSUSED */
 void
-filt_evdetach(struct knote *kn)
+filt_revdetach(struct knote *kn)
 {
 	struct eventdev_queue *q = (struct eventdev_queue *)kn->kn_hook;
 
 	mtx_enter(&q->lock);
-	SLIST_REMOVE(&q->sel.si_note, kn, knote, kn_selnext);
+	SLIST_REMOVE(&q->rsel.si_note, kn, knote, kn_selnext);
 	mtx_leave(&q->lock);
 }
 
 /* ARGSUSED */
 int
-filt_event(struct knote *kn, long hint)
+filt_revent(struct knote *kn, long hint)
 {
 	struct eventdev_queue *q = (struct eventdev_queue *)kn->kn_hook;
 	int ret;
@@ -480,6 +491,24 @@ filt_event(struct knote *kn, long hint)
 	mtx_leave(&q->lock);
 
 	return (ret);
+}
+
+/* ARGSUSED */
+void
+filt_wevdetach(struct knote *kn)
+{
+	struct eventdev_queue *q = (struct eventdev_queue *)kn->kn_hook;
+
+	mtx_enter(&q->lock);
+	SLIST_REMOVE(&q->wsel.si_note, kn, knote, kn_selnext);
+	mtx_leave(&q->lock);
+}
+
+/* ARGSUSED */
+int
+filt_wevent(struct knote *kn, long hint)
+{
+	return (1);
 }
 
 /* ARGSUSED */
@@ -502,7 +531,7 @@ eventdev_poll(struct file *file, int events, struct proc *p)
 	mtx_leave(&q->lock);
 	revents &= events;
 	if (revents == 0)
-		selrecord(p, &q->sel);
+		selrecord(p, &q->rsel);
 	return revents;
 }
 
@@ -576,7 +605,8 @@ eventdevopen(dev_t dev, int oflags, int mode, struct proc *p)
 		return error;
 	}
 	q->file = f;
-	memset(&q->sel, 0, sizeof(q->sel));
+	memset(&q->rsel, 0, sizeof(q->rsel));
+	memset(&q->wsel, 0, sizeof(q->wsel));
 	f->f_flag = oflags;
 	f->f_type = DTYPE_EVENTDEV;
 	f->f_ops = &eventdev_fops;
