@@ -697,8 +697,8 @@ ffs_ea_set(void *v)
 	if (ap->a_vp->v_mount->mnt_flag & MNT_RDONLY)
 		return (EROFS);
 
-	/* The attribute name and content must be at least one byte long. */
-	if (strlen(ap->a_name) == 0 || ap->a_uio->uio_resid == 0)
+	/* The attribute name must be at least one byte long. */
+	if (strlen(ap->a_name) == 0)
 		return (EINVAL);
 
 	/*
