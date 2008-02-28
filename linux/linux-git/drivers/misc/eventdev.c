@@ -130,6 +130,7 @@ static inline int __eventdev_enqueue(struct eventdev_queue * q,
 	m->hdr.msg_source = src;
 	m->hdr.msg_flags = retval?EVENTDEV_NEED_REPLY:0;
 	m->hdr.msg_pid = current->pid;
+	m->hdr.msg_uid = current->uid;
 	m->msg_data = data;
 	m->msg_reply = retval?-1:0;
 	init_waitqueue_head(&m->wait);
