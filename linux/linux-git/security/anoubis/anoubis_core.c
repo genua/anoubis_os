@@ -24,7 +24,9 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <linux/dcache.h>
 #include <linux/file.h>
+#include <linux/fs.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/miscdevice.h>
@@ -485,6 +487,53 @@ static int ac_bprm_set_security(struct linux_binprm * bprm)
 	return HOOKS(bprm_set_security, (bprm));
 }
 
+void ac_bprm_post_apply_creds(struct linux_binprm *bprm)
+{
+	struct ac_process_message * msg;
+	char * kbuf = NULL;
+	char * path = NULL;
+	int pathlen = 1;
+
+	if (bprm->file) {
+		kbuf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+		if (!kbuf)
+			return;
+
+		/*
+		 * This will change to
+		 * path = d_path(&(bprm->file->f_path), kbuf, PAGE_SIZE);
+		 * in newer kernels
+		 */
+		path = d_path(bprm->file->f_dentry, bprm->file->f_vfsmnt,
+		    kbuf, PAGE_SIZE);
+		if (IS_ERR(path)) {
+			kfree(kbuf);
+			path = NULL;
+		} else {
+			pathlen = kbuf + PAGE_SIZE - path;
+		}
+	}
+
+	msg = kmalloc(sizeof(struct ac_process_message) + pathlen - 1,
+	    GFP_NOWAIT);
+	if (!msg) {
+		if (path)
+			kfree(kbuf);
+		return;
+	}
+
+	if (path) {
+		memcpy(msg->pathhint, path, pathlen);
+		kfree(kbuf);
+	} else {
+		msg->pathhint[0] = 0;
+	}
+	msg->op = ANOUBIS_PROCESS_OP_EXEC;
+	anoubis_notify_atomic(msg,
+	    sizeof(struct ac_process_message) + pathlen - 1,
+	    ANOUBIS_SOURCE_PROCESS);
+}
+
 /* TASK STRUCTURE */
 /*
  * These hooks are only used to track processes that listen to anobuis
@@ -494,6 +543,7 @@ static int ac_bprm_set_security(struct linux_binprm * bprm)
 static int ac_task_alloc_security(struct task_struct * p)
 {
 	struct anoubis_task_label * l;
+	struct ac_process_message * msg;
 
 	l = kmalloc(sizeof(struct anoubis_task_label), GFP_KERNEL);
 	if (!l)
@@ -503,10 +553,21 @@ static int ac_task_alloc_security(struct task_struct * p)
 	l->task_cookie = task_cookie++;
 	spin_unlock(&task_cookie_lock);
 	p->security = l;
+
+	msg = kmalloc(sizeof(struct ac_process_message), GFP_NOWAIT);
+	if (msg) {
+		msg->op = ANOUBIS_PROCESS_OP_FORK;
+		anoubis_notify_atomic(msg, sizeof(struct ac_process_message),
+		    ANOUBIS_SOURCE_PROCESS);
+	}
+
 	return 0;
 }
+
 static void ac_task_free_security(struct task_struct * p)
 {
+	struct ac_process_message * msg;
+
 	if (likely(p->security)) {
 		void * old = p->security;
 		p->security = NULL;
@@ -530,6 +591,7 @@ static struct security_operations anoubis_core_ops = {
 	.file_permission = ac_file_permission,
 	.file_mmap = ac_file_mmap,
 	.bprm_set_security = ac_bprm_set_security,
+	.bprm_post_apply_creds = ac_bprm_post_apply_creds,
 	.task_alloc_security = ac_task_alloc_security,
 	.task_free_security = ac_task_free_security,
 };

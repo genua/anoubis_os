@@ -37,11 +37,22 @@
 #define ANOUBIS_SOURCE_ALF	10
 #define ANOUBIS_SOURCE_SANDBOX	20
 #define ANOUBIS_SOURCE_SFS	30
+#define ANOUBIS_SOURCE_PROCESS	40
 
 typedef u_int64_t anoubis_cookie_t;
 
 struct anoubis_event_common {
 	anoubis_cookie_t task_cookie;
+};
+
+#define ANOUBIS_PROCESS_OP_FORK	0x0001UL
+#define ANOUBIS_PROCESS_OP_EXIT	0x0002UL
+#define ANOUBIS_PROCESS_OP_EXEC	0x0003UL
+
+struct ac_process_message {
+	struct anoubis_event_common common;
+	unsigned long op;
+	char pathhint[1];
 };
 
 #ifdef __KERNEL__
