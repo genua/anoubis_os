@@ -539,12 +539,27 @@ sys_mmap(p, v, retval)
 		 * now check protection
 		 */
 
+		/*
+		 * Don't allow the file to be mapped into executable memory if
+		 * the underlying file system is marked as 'noexec'.
+		 */
+		if (prot & PROT_EXEC && vp->v_mount->mnt_flag & MNT_NOEXEC) {
+			error = EACCES;
+			goto out;
+		}
+
 		maxprot = VM_PROT_EXECUTE;
 
 		/* check read access */
 		if (fp->f_flag & FREAD)
 			maxprot |= VM_PROT_READ;
 		else if (prot & PROT_READ) {
+			error = EACCES;
+			goto out;
+		}
+
+		/* PROT_EXEC only makes sense if the descriptor is readable. */
+		if (!(fp->f_flag & FREAD) && prot & PROT_EXEC) {
 			error = EACCES;
 			goto out;
 		}
