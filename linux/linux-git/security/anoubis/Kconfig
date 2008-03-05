@@ -18,7 +18,7 @@ config SECURITY_ANOUBIS_ALF
 
 config SECURITY_ANOUBIS_SFS
 	tristate "Secure Filesystem Module"
-	depends on SECURITY_ANOUBIS
+	depends on SECURITY_ANOUBIS && CRYPTO && CRYPTO_SHA256
 	help
 	  This option provides initial support for the Anoubis SFS module.
 
