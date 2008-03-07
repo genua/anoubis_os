@@ -203,6 +203,7 @@ __eventdev_enqueue(struct eventdev_queue * q, unsigned char src,
 	m->hdr.msg_source = src;
 	m->hdr.msg_flags = retval?EVENTDEV_NEED_REPLY:0;
 	m->hdr.msg_pid = curproc->p_pid;
+	m->hdr.msg_uid = curproc->p_cred->p_ruid;
 	m->msg_data = data;
 	m->msg_reply = retval?-1:0;
 	err = eventdev_get_token(&m->hdr.msg_token);

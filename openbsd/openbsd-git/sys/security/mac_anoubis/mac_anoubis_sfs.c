@@ -240,9 +240,7 @@ mac_anoubis_sfs_vnode_open(struct ucred * cred, struct vnode * vp,
 		sec->sfsmask &= ~SFS_CS_UPTODATE;
 		mtx_leave(&sec->lock);
 	} else {
-		int err = sfs_csum(vp, sec);
-		if (err)
-			printf("DEBUG: CSUM error: %d\n", err);
+		sfs_csum(vp, sec);
 	}
 	return 0;
 }

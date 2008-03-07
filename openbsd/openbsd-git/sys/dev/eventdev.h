@@ -10,7 +10,8 @@ struct eventdev_hdr {
 	unsigned char msg_source;
 	unsigned char msg_flags;
 	eventdev_token msg_token;
-	pid_t msg_pid;
+	u_int32_t msg_pid;
+	u_int32_t msg_uid;
 };
 
 struct eventdev_reply {
