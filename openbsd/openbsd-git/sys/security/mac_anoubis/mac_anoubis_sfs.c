@@ -59,10 +59,31 @@ struct sfs_label {
 	u_int8_t hash[ANOUBIS_SFS_CS_LEN];
 };
 
-#define SFS_LABEL(x) ((struct sfs_label *)mac_label_get((x), mac_anoubis_sfs_slot))
+#define SFS_LABEL(x)	\
+    ((struct sfs_label *)mac_label_get((x), mac_anoubis_sfs_slot))
 
 #define deny_write_access(VP) vn_denywrite(VP)
 #define allow_write_access(VP) (((VP)->v_denywrite)--)
+
+static u_int64_t sfs_stat_loadtime;
+static u_int64_t sfs_stat_csum_recalc;
+static u_int64_t sfs_stat_csum_recalc_fail;
+static u_int64_t sfs_stat_ev_strict;
+static u_int64_t sfs_stat_ev_strict_deny;
+static u_int64_t sfs_stat_disabled;
+
+struct anoubis_internal_stat_value sfs_stats[] = {
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_LOADTIME, &sfs_stat_loadtime },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_CSUM_RECALC, &sfs_stat_csum_recalc },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_CSUM_RECALC_FAIL,
+	    &sfs_stat_csum_recalc_fail },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_STRICT, &sfs_stat_ev_strict },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_STRICT_DENY,
+	    &sfs_stat_ev_strict_deny },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_DISABLED, &sfs_stat_disabled },
+};
+
+
 
 void mac_anoubis_sfs_init(struct mac_policy_conf *);
 void mac_anoubis_sfs_init_vnode_label(struct label *);
@@ -118,6 +139,7 @@ sfs_do_csum(struct vnode * vp, struct sfs_label * sec)
 		goto out;
 	}
 	mtx_leave(&sec->lock);
+	sfs_stat_csum_recalc++;
 	err = VOP_GETATTR(vp, &va, p->p_ucred, p);
 	if (err)
 		goto out;
@@ -208,13 +230,17 @@ int
 sfs_csum(struct vnode * vp, struct sfs_label * sec)
 {
 	int required;
+	int ret;
 
 	mtx_enter(&sec->lock);
 	required = sec->sfsmask & SFS_CS_REQUIRED;
 	mtx_leave(&sec->lock);
 	if (!required)
 		return EINVAL;
-	return sfs_do_csum(vp, sec);
+	ret = sfs_do_csum(vp, sec);
+	if (ret)
+		sfs_stat_csum_recalc_fail++;
+	return ret;
 }
 
 int
@@ -302,13 +328,14 @@ sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
 		msg->flags |= ANOUBIS_OPEN_FLAG_CSUM;
 	}
 	mtx_leave(&sec->lock);
-	/* 
+	/*
 	 * Drop the vnode lock while we sleep. This avoids nasty deadlocks.
 	 * Note that this is only safe because at this point we no longer
 	 * access the security label and the vnode will we unlocked
 	 * immediately after the security hook returns.
 	 * */
 	VOP_UNLOCK(vp, 0, p);
+	sfs_stat_ev_strict++;
 	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 	if (ret == EPIPE /* && openation_mode != strict XXX */)
@@ -319,6 +346,8 @@ sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
 		assert(file);
 		ret = anoubis_sfs_file_lock(file, reported_csum);
 	}
+	if (ret)
+		sfs_stat_ev_strict_deny++;
 	return ret;
 }
 
@@ -335,7 +364,7 @@ mac_anoubis_sfs_file_open(struct ucred * active_cred, struct file * file,
 		return 0;
 	if (!FPVNODE(file) || !CHECKSUM_OK(vp))
 		return 0;
- 	sec = SFS_LABEL(l);
+	sec = SFS_LABEL(l);
 	assert(sec);
 	if (file->f_flag & FWRITE) {
 		assert((sec->sfsmask & SFS_CS_UPTODATE) == 0);
@@ -348,6 +377,20 @@ mac_anoubis_sfs_file_open(struct ucred * active_cred, struct file * file,
 
 void mac_anoubis_sfs_init(struct mac_policy_conf * conf)
 {
+}
+
+void
+anoubis_sfs_getstats(struct anoubis_internal_stat_value ** val, int * cnt)
+{
+	/* Do this late because getmicrotime does not work during .mpo_init */
+	if (!sfs_stat_loadtime) {
+		struct timeval tv;
+		getmicrotime(&tv);
+		sfs_stat_loadtime = tv.tv_sec;
+	}
+	sfs_stat_disabled = !sfs_enable;
+	(*val) = sfs_stats;
+	(*cnt) = sizeof(sfs_stats)/sizeof(struct anoubis_internal_stat_value);
 }
 
 struct mac_policy_ops mac_anoubis_sfs_ops =

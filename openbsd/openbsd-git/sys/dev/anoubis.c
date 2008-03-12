@@ -32,6 +32,7 @@
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/mutex.h>
+#include <sys/malloc.h>
 #include <sys/kernel.h>
 
 #include <compat/common/compat_util.h>
@@ -46,6 +47,9 @@ extern int anoubisclose(dev_t, int, int, struct proc *);
 extern int anoubisread(dev_t, struct uio *, int);
 extern int anoubiswrite(dev_t, struct uio *, int);
 extern int anoubisioctl(dev_t, u_long, caddr_t, int, struct proc *);
+extern int ac_stats(void);
+extern void ac_stats_copyone(struct anoubis_stat_value * dst,
+    struct anoubis_internal_stat_value * src, int cnt);
 
 /* ARGSUSED */
 void
@@ -115,8 +119,58 @@ anoubisioctl(dev_t dev, u_long cmd, caddr_t data, int fflag,
 			curproc->listener = 1;
 			return 0;
 		}
+		case ANOUBIS_REQUEST_STATS:
+			return ac_stats();
 		default:
 			return EIO;
 	}
 	return 0;
+}
+
+#define ANOUBIS_STAT_FUNCS_MAX 2
+
+typedef
+void (*anoubis_stat_funct_t)(struct anoubis_internal_stat_value **, int*);
+
+anoubis_stat_funct_t anoubis_stat_funcs[ANOUBIS_STAT_FUNCS_MAX] = {
+	anoubis_sfs_getstats,
+	anoubis_alf_getstats,
+};
+
+void
+ac_stats_copyone(struct anoubis_stat_value * dst,
+    struct anoubis_internal_stat_value * src, int cnt)
+{
+	int i;
+	for(i=0; i<cnt; ++i) {
+		dst[i].subsystem = src[i].subsystem;
+		dst[i].key = src[i].key;
+		dst[i].value = *(src[i].valuep);
+	}
+}
+
+int
+ac_stats(void)
+{
+	int sz, total;
+	struct anoubis_internal_stat_value * stat;
+	struct anoubis_stat_message * data = NULL;
+	int cnt, i;
+repeat:
+	total = 0;
+	for (i=0; i<ANOUBIS_STAT_FUNCS_MAX; ++i) {
+		(*anoubis_stat_funcs[i])(&stat, &cnt);
+		if (data)
+			ac_stats_copyone(data->vals+total, stat, cnt);
+		total += cnt;
+	}
+	sz = sizeof(struct anoubis_stat_message)
+	    + total * sizeof(struct anoubis_stat_value);
+	if (data == NULL) {
+		data = malloc(sz, M_DEVBUF, M_WAITOK);
+		if (!data)
+			return ENOMEM;
+		goto repeat;
+	}
+	return anoubis_notify(data, sz, ANOUBIS_SOURCE_STAT);
 }

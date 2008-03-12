@@ -49,6 +49,15 @@ struct sfs_open_message
 	char pathhint[1];
 };
 
+/* Statistic Keys for ANOUBIS_SOURCE_SFS */
+#define SFS_STAT_LOADTIME		10
+#define SFS_STAT_CSUM_RECALC		11
+#define SFS_STAT_CSUM_RECALC_FAIL	12
+#define SFS_STAT_EV_STRICT		14
+#define SFS_STAT_EV_STRICT_DENY		16
+#define SFS_STAT_LATE_ALLOC		17
+#define SFS_STAT_DISABLED		18
+
 /*
  * Used in eventdev replies: Access is ok provided that the Checksum
  * given in the open message remains intact. This should never be seen

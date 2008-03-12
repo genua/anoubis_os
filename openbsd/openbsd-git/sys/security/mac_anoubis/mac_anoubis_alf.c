@@ -63,6 +63,36 @@ struct alf_label {
 	int set;
 };
 
+static u_int64_t alf_stat_loadtime;
+static u_int64_t alf_stat_ask;
+static u_int64_t alf_stat_ask_deny;
+static u_int64_t alf_stat_allowport;
+static u_int64_t alf_stat_forced_notify;
+static u_int64_t alf_stat_processed;
+static u_int64_t alf_stat_forced_disconnect;
+static u_int64_t alf_stat_connect;
+static u_int64_t alf_stat_accept;
+static u_int64_t alf_stat_sendmsg;
+static u_int64_t alf_stat_receivemsg;
+static u_int64_t alf_stat_disabled;
+
+static struct anoubis_internal_stat_value alf_stats[] = {
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_LOADTIME, &alf_stat_loadtime },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_DISABLED, &alf_stat_disabled },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_ASK, &alf_stat_ask },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_ASK_DENY, &alf_stat_ask_deny },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_ALLOWPORT, &alf_stat_allowport },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_FORCED_NOTIFY, &alf_stat_forced_notify },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_PROCESSED, &alf_stat_processed },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_FORCED_DISCONNECT,
+	    &alf_stat_forced_disconnect },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_CONNECT, &alf_stat_connect },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_ACCEPT, &alf_stat_accept },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_SENDMSG, &alf_stat_sendmsg },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_RECEIVEMSG, &alf_stat_receivemsg },
+};
+
+
 #define ALF_LABEL(x) ((struct alf_label*)mac_label_get(x, mac_anoubis_alf_slot))
 
 int	alf_ask(struct alf_event *);
@@ -91,7 +121,12 @@ static void	alf_copy_inetaddr(struct socket *, struct alf_event *,
 int
 alf_ask(struct alf_event *event)
 {
-	return anoubis_raise((char *)event, sizeof(*event), ANOUBIS_SOURCE_ALF);
+	int ret;
+	alf_stat_ask++;
+	ret = anoubis_raise((char *)event, sizeof(*event), ANOUBIS_SOURCE_ALF);
+	if (ret)
+		alf_stat_ask_deny++;
+	return ret;
 }
 
 /*
@@ -111,6 +146,7 @@ alf_check_policy(int op, struct socket *sock, const struct sockaddr *address,
 	if (!alf_enable)
 		return 0;
 
+	alf_stat_processed++;
 	if (sock == NULL)
 		return EBADF;
 
@@ -185,6 +221,7 @@ alf_check_policy(int op, struct socket *sock, const struct sockaddr *address,
 	    && localport <= alf_allow_port_max) {
 		splx(s);
 		free(event, M_DEVBUF);
+		alf_stat_allowport++;
 		return 0;
 	}
 
@@ -277,6 +314,7 @@ int
 mac_anoubis_alf_check_socket_connect(struct ucred *cred, struct socket *so,
 		struct label *solabel, const struct sockaddr *sa)
 {
+	alf_stat_connect++;
 	return alf_check_policy(ALF_CONNECT, so, sa, solabel);
 }
 
@@ -288,6 +326,7 @@ int
 mac_anoubis_alf_check_socket_accepted(struct ucred *cred, struct socket *so,
     struct label *solabel, struct mbuf *name)
 {
+	alf_stat_accept++;
 	return alf_check_policy(ALF_ACCEPT, so, mtod(name, struct sockaddr*),
 	    solabel);
 }
@@ -302,14 +341,17 @@ mac_anoubis_alf_check_socket_send(struct ucred *cred, struct socket *so,
 {
 	int ret;
 
+	alf_stat_sendmsg++;
 	ret = alf_check_policy(ALF_SENDMSG, so, NULL, solabel);
 
 	/* Close open TCP connections */
 	if ((ret != 0) &&
 	    (sotopf(so) == PF_INET ||
 	     sotopf(so) == PF_INET6) &&
-	     so->so_proto->pr_protocol == IPPROTO_TCP)
+	     so->so_proto->pr_protocol == IPPROTO_TCP) {
+		alf_stat_forced_disconnect++;
 		sodisconnect(so);
+	}
 
 	return ret;
 }
@@ -324,6 +366,7 @@ mac_anoubis_alf_check_socket_receive(struct ucred *cred, struct socket *so,
 {
 	int ret;
 
+	alf_stat_receivemsg++;
 	if (sotopf(so) != PF_INET && sotopf(so) != PF_INET6)
 		return 0;
 
@@ -333,8 +376,10 @@ mac_anoubis_alf_check_socket_receive(struct ucred *cred, struct socket *so,
 	ret = alf_check_policy(ALF_RECVMSG, so, NULL, solabel);
 
 	/* Close open TCP connections */
-	if (ret != 0)
+	if (ret != 0) {
+		alf_stat_forced_disconnect++;
 		sodisconnect(so);
+	}
 
 	return ret;
 }
@@ -358,6 +403,7 @@ mac_anoubis_alf_check_socket_soreceive(struct socket *so,
 	    so->so_proto->pr_protocol == IPPROTO_TCP)
 		return 0;
 
+	alf_stat_receivemsg++;
 	memset(myaddress, 0, sizeof(myaddress));
 
 	return alf_check_policy(ALF_RECVMSG, so,
@@ -393,6 +439,20 @@ mac_anoubis_alf_destroy_socket_label(struct label *label)
 void
 mac_anoubis_alf_init(struct mac_policy_conf *conf)
 {
+}
+
+void
+anoubis_alf_getstats(struct anoubis_internal_stat_value ** val, int * cnt)
+{
+	/* Do this late because getmicrotime does not work during .mpo_init */
+	if (!alf_stat_loadtime) {
+		struct timeval tv;
+		getmicrotime(&tv);
+		alf_stat_loadtime = tv.tv_sec;
+	}
+	alf_stat_disabled = !alf_enable;
+	(*val) = alf_stats;
+	(*cnt) = sizeof(alf_stats)/sizeof(struct anoubis_internal_stat_value);
 }
 
 struct mac_policy_ops mac_anoubis_alf_ops =

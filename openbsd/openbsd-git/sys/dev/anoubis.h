@@ -33,11 +33,15 @@
 
 #define ANOUBIS_DECLARE_FD		_IO('a',0x10)
 #define ANOUBIS_DECLARE_LISTENER	_IO('a',0x11)
+#define ANOUBIS_REQUEST_STATS		_IO('a',0x12)
+
 
 #define ANOUBIS_SOURCE_TEST	0
 #define ANOUBIS_SOURCE_ALF	10
 #define ANOUBIS_SOURCE_SANDBOX	20
 #define ANOUBIS_SOURCE_SFS	30
+#define ANOUBIS_SOURCE_PROCESS	40
+#define ANOUBIS_SOURCE_STAT	50
 
 typedef u_int64_t anoubis_cookie_t;
 
@@ -45,4 +49,24 @@ struct anoubis_event_common {
 	anoubis_cookie_t task_cookie;
 };
 
+struct anoubis_stat_value {
+	u_int32_t subsystem;
+	u_int32_t key;
+	u_int64_t value;
+};
+
+struct anoubis_stat_message {
+	struct anoubis_event_common common;
+	struct anoubis_stat_value vals[0];
+};
+
+#ifdef _KERNEL
+
+struct anoubis_internal_stat_value {
+	u_int32_t subsystem;
+	u_int32_t key;
+	u_int64_t * valuep;
+};
+
+#endif
 #endif

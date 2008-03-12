@@ -28,9 +28,14 @@
 #ifndef _MAC_ANOUBIS_H_
 #define _MAC_ANOUBIS_H_
 
+#include <dev/anoubis.h>
+
 extern struct mac_policy_conf mac_anoubis_alf_mac_policy_conf;
 extern struct mac_policy_conf mac_anoubis_sfs_mac_policy_conf;
 extern struct mac_policy_conf mac_anoubis_test_mac_policy_conf;
+
+extern void anoubis_sfs_getstats(struct anoubis_internal_stat_value **, int *);
+extern void anoubis_alf_getstats(struct anoubis_internal_stat_value **, int *);
 
 extern struct eventdev_queue *anoubis_queue;
 extern struct mutex anoubis_lock;
