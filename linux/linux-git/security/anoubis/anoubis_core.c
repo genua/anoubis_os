@@ -51,6 +51,12 @@ static spinlock_t queuelock;
 static anoubis_cookie_t task_cookie;
 static spinlock_t task_cookie_lock;
 
+#define MAX_ANOUBIS_MODULES 10
+
+static unsigned int serial = 1;
+static struct anoubis_hooks * hooks[MAX_ANOUBIS_MODULES];
+static spinlock_t hooks_lock = SPIN_LOCK_UNLOCKED;
+
 struct anoubis_task_label {
 	anoubis_cookie_t task_cookie;
 	int listener; /* Only accessed by the task itself. */
@@ -141,6 +147,62 @@ static int anoubis_open(struct inode * inode, struct file * file)
 	return 0;
 }
 
+/*
+ * Phase 1: Just count the number of entries.
+ * Phase 2: Allocate memory and retry
+ * Phase 3: Recount elements and fill them in as long as they fit.
+ *          If this fails free memory and retry. Otherwise raise event.
+ */
+static int ac_stats(void)
+{
+	int total, alloctotal, sz, pos, i,j;
+	struct anoubis_internal_stat_value * stat;
+	struct anoubis_stat_message * data = NULL;
+
+	alloctotal = 0;
+retry:
+	total = 0;
+	pos = 0;
+	spin_lock(&hooks_lock);
+	for(i=0; i<MAX_ANOUBIS_MODULES; ++i) {
+		int cnt;
+		if (hooks[i] && hooks[i]->anoubis_stats) {
+			hooks[i]->anoubis_stats(&stat, &cnt);
+			total += cnt;
+			if (!data)
+				continue;
+			if (total > alloctotal)
+				break;
+			for(j=0; j<cnt; j++,pos++) {
+				data->vals[pos].subsystem = stat[j].subsystem;
+				data->vals[pos].key = stat[j].key;
+				data->vals[pos].value = *(stat[j].valuep);
+			}
+		}
+	}
+	/* Previous run returned different number of elements. */
+	spin_unlock(&hooks_lock);
+	if (data && (total > alloctotal)) {
+		kfree(data);
+		data = NULL;
+		alloctotal = 0;
+		goto retry;
+	}
+	/* Calculate size of message */
+	sz = sizeof(struct anoubis_stat_message)
+	    + total * sizeof(struct anoubis_stat_value);
+	/* If memory is not yet allocated, do it now and retry. */
+	if (data == NULL) {
+		alloctotal = total;
+		data = kmalloc(sz, GFP_KERNEL);
+		if (!data)
+			return -ENOMEM;
+		goto retry;
+	}
+	/* Message is complete. Send it. */
+	return anoubis_notify(data, sz, ANOUBIS_SOURCE_STAT);
+}
+
 static long anoubis_ioctl(struct file * file, unsigned int cmd,
 			       unsigned long arg)
 {
@@ -148,8 +210,11 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 	struct file * eventfile;
 	struct anoubis_task_label * l;
 
+	/* For now only root is allowed to do declare a queue or a listener. */
 	switch(cmd) {
 	case ANOUBIS_DECLARE_LISTENER:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
 		l = current->security;
 		if (unlikely(arg))
 			return -EINVAL;
@@ -158,6 +223,8 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 		l->listener = 1;
 		break;
 	case ANOUBIS_DECLARE_FD:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
 		eventfile = fget(arg);
 		if (!eventfile)
 			return -EBADF;
@@ -174,6 +241,8 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 		if (q2)
 			eventdev_put_queue(q2);
 		break;
+	case ANOUBIS_REQUEST_STATS:
+		return ac_stats();
 	default:
 		return -EINVAL;
 	}
@@ -192,17 +261,11 @@ static struct miscdevice anoubis_device = {
 	.fops	= &anoubis_fops,
 };
 
-#define MAX_ANOUBIS_MODULES 10
-
 struct anoubis_label {
 	spinlock_t label_lock; /* XXX Use RCU? */
 	void * labels[MAX_ANOUBIS_MODULES];
 	unsigned int magic[MAX_ANOUBIS_MODULES];
 };
-
-static unsigned int serial = 1;
-static struct anoubis_hooks * hooks[MAX_ANOUBIS_MODULES];
-static spinlock_t hooks_lock = SPIN_LOCK_UNLOCKED;
 
 static spinlock_t late_alloc_lock = SPIN_LOCK_UNLOCKED;
 
@@ -566,8 +629,6 @@ static int ac_task_alloc_security(struct task_struct * p)
 
 static void ac_task_free_security(struct task_struct * p)
 {
-	struct ac_process_message * msg;
-
 	if (likely(p->security)) {
 		void * old = p->security;
 		p->security = NULL;

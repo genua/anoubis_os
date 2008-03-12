@@ -71,4 +71,17 @@ struct alf_event
 	uid_t	uid;
 };
 
+/* Stat keys for ANOUBIS_SOURCE_ALF */
+#define ALF_STAT_LOADTIME		10
+#define ALF_STAT_ASK			11
+#define ALF_STAT_ASK_DENY		12
+#define ALF_STAT_ALLOWPORT		13
+#define ALF_STAT_FORCED_NOTIFY		14
+#define ALF_STAT_PROCESSED		15
+#define ALF_STAT_FORCED_DISCONNECT	16
+#define ALF_STAT_CONNECT		17
+#define ALF_STAT_ACCEPT			18
+#define ALF_STAT_SENDMSG		19
+#define ALF_STAT_RECEIVEMSG		20
+
 #endif

@@ -39,6 +39,16 @@
 #define ANOUBIS_OPEN_FLAG_STATDATA	0x0040UL
 #define ANOUBIS_OPEN_FLAG_CSUM		0x0080UL
 
+/* Statistic Keys for ANOUBIS_SOURCE_SFS */
+#define SFS_STAT_LOADTIME		10
+#define SFS_STAT_CSUM_RECALC		11
+#define SFS_STAT_CSUM_RECALC_FAIL	12
+#define SFS_STAT_EV_NONSTRICT		13
+#define SFS_STAT_EV_STRICT		14
+#define SFS_STAT_EV_NONSTRICT_DENY	15
+#define SFS_STAT_EV_STRICT_DENY		16
+#define SFS_STAT_LATE_ALLOC		17
+
 struct sfs_open_message
 {
 	struct anoubis_event_common common;

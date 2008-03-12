@@ -55,6 +55,39 @@
 
 static int ac_index = -1;
 
+/* Statistics */
+
+static u_int64_t sfs_stat_loadtime;
+static u_int64_t sfs_stat_csum_recalc;
+static u_int64_t sfs_stat_csum_recalc_fail;
+static u_int64_t sfs_stat_ev_nonstrict;
+static u_int64_t sfs_stat_ev_strict;
+static u_int64_t sfs_stat_ev_nonstrict_deny;
+static u_int64_t sfs_stat_ev_strict_deny;
+static u_int64_t sfs_stat_late_alloc;
+
+struct anoubis_internal_stat_value sfs_stats[] = {
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_LOADTIME, &sfs_stat_loadtime },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_CSUM_RECALC, &sfs_stat_csum_recalc },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_CSUM_RECALC_FAIL,
+	    &sfs_stat_csum_recalc_fail },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_NONSTRICT,
+	    &sfs_stat_ev_nonstrict },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_STRICT, &sfs_stat_ev_strict },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_NONSTRICT_DENY,
+	    &sfs_stat_ev_nonstrict_deny },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_STRICT_DENY,
+	    &sfs_stat_ev_strict_deny },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_LATE_ALLOC, &sfs_stat_late_alloc },
+};
+
+static void sfs_getstats(struct anoubis_internal_stat_value **ptr, int * count)
+{
+	(*ptr) = sfs_stats;
+	(*count) = sizeof(sfs_stats)/sizeof(struct anoubis_internal_stat_value);
+}
+
+
 /* Veratim copy from fs/namei.c because of a missing EXPORT_SYMBOL */
 static inline int anoubis_deny_write_access(struct inode * inode)
 {
@@ -150,6 +183,7 @@ sfs_late_inode_alloc_security(struct inode * inode)
 	struct sfs_inode_sec * sec = ISEC(inode);
 	if (likely(sec))
 		return sec;
+	sfs_stat_late_alloc++;
 	spin_lock(&late_alloc_lock);
 	sec = ISEC(inode);
 	if (likely(!sec)) {
@@ -266,6 +300,7 @@ static int sfs_do_csum(struct file * file, struct inode * inode)
 		anoubis_allow_write_access(inode);
 		return 0;
 	}
+	sfs_stat_csum_recalc++;
 	size = i_size_read(inode);
 	rdesc.written = 0;
 	rdesc.arg.data = &cdesc;
@@ -394,8 +429,10 @@ static int sfs_verify_syssig(struct file * file)
 		return err;
 	/* System signature present */
 	err = sfs_do_csum(file, inode);
-	if (err)
+	if (err) {
+		sfs_stat_csum_recalc_fail++;
 		return err;
+	}
 	spin_lock(&sec->lock);
 	mask = sec->sfsmask & (SFS_HAS_SYSSIG|SFS_CS_UPTODATE);
 	err = 0;
@@ -412,7 +449,7 @@ static int sfs_verify_syssig(struct file * file)
  */
 static inline int sfs_csum(struct file * file, struct inode * inode)
 {
-	int required;
+	int required, ret;
 	struct sfs_inode_sec * sec = ISEC(inode);
 
 	spin_lock(&sec->lock);
@@ -420,7 +457,10 @@ static inline int sfs_csum(struct file * file, struct inode * inode)
 	spin_unlock(&sec->lock);
 	if (!required)
 		return -EINVAL;
-	return sfs_do_csum(file, inode);
+	ret = sfs_do_csum(file, inode);
+	if (ret)
+		sfs_stat_csum_recalc_fail++;
+	return ret;
 }
 
 /* Must be called with the dcache_lock held. */
@@ -540,6 +580,10 @@ static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
 		}
 		spin_unlock(&sec->lock);
 	}
+	if (strict)
+		sfs_stat_ev_strict++;
+	else
+		sfs_stat_ev_nonstrict++;
 	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
 	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
 		return 0;
@@ -554,6 +598,12 @@ static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
 		fsec->flags |= SFS_OPENCHECKS_DONE;
 		fsec->errno = ret;
 		spin_unlock(&fsec->lock);
+	}
+	if (ret) {
+		if(strict)
+			sfs_stat_ev_strict_deny++;
+		else
+			sfs_stat_ev_nonstrict_deny++;
 	}
 	return ret;
 }
@@ -607,8 +657,10 @@ int anoubis_sfs_get_csum(struct file * file, u8 * csum)
 	if (!sec)
 		return -ENOMEM;
 	err = sfs_do_csum(file, inode);
-	if (err < 0)
+	if (err < 0) {
+		sfs_stat_csum_recalc_fail++;
 		return err;
+	}
 	err = -EBUSY;
 	sec = ISEC(inode);
 	spin_lock(&sec->lock);
@@ -806,6 +858,7 @@ static struct anoubis_hooks sfs_ops = {
 	.inode_permission = sfs_inode_permission,
 	.inode_setxattr = sfs_inode_setxattr,
 	.inode_removexattr = sfs_inode_removexattr,
+	.anoubis_stats = sfs_getstats,
 };
 
 /*
@@ -832,7 +885,10 @@ static void __exit sfs_exit(void)
 static int __init sfs_init(void)
 {
 	int rc = 0;
+	struct timeval tv;
 	/* register ourselves with the security framework */
+	do_gettimeofday(&tv);
+	sfs_stat_loadtime = tv.tv_sec;
 	dummy_tfm = crypto_alloc_hash("sha256", 0, CRYPTO_ALG_ASYNC);
 	if (IS_ERR(dummy_tfm)) {
 		printk(KERN_ERR "Cannot allocate sha256 hash "

@@ -49,29 +49,70 @@
 static int allow_ports_min = -1;
 static int allow_ports_max = -1;
 
+static u_int64_t alf_stat_loadtime;
+static u_int64_t alf_stat_ask;
+static u_int64_t alf_stat_ask_deny;
+static u_int64_t alf_stat_allowport;
+static u_int64_t alf_stat_forced_notify;
+static u_int64_t alf_stat_processed;
+static u_int64_t alf_stat_forced_disconnect;
+static u_int64_t alf_stat_connect;
+static u_int64_t alf_stat_accept;
+static u_int64_t alf_stat_sendmsg;
+static u_int64_t alf_stat_receivemsg;
+
+static struct anoubis_internal_stat_value alf_stats[] = {
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_LOADTIME, &alf_stat_loadtime },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_ASK, &alf_stat_ask },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_ASK_DENY, &alf_stat_ask_deny },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_ALLOWPORT, &alf_stat_allowport },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_FORCED_NOTIFY, &alf_stat_forced_notify },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_PROCESSED, &alf_stat_processed },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_FORCED_DISCONNECT,
+	    &alf_stat_forced_disconnect },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_CONNECT, &alf_stat_connect },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_ACCEPT, &alf_stat_accept },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_SENDMSG, &alf_stat_sendmsg },
+	{ ANOUBIS_SOURCE_ALF, ALF_STAT_RECEIVEMSG, &alf_stat_receivemsg },
+};
+
+static void alf_get_stats(struct anoubis_internal_stat_value **ptr, int *cnt)
+{
+	(*ptr) = alf_stats;
+	(*cnt) = sizeof(alf_stats)/sizeof(struct anoubis_internal_stat_value);
+}
+
 /* Ask in userspace what to do for a given event */
 static inline int alf_ask(struct alf_event *event)
 {
+	int ret;
+
 	if (unlikely(in_atomic() || irqs_disabled())) {
 #ifdef CONFIG_SECURITY_ANOUBIS_DEBUG
 		static int info_printed = 0;
 
 		if (printk_ratelimit())
-			printk(KERN_WARNING "ALF: only notifying while atomic!\n");
+			printk(KERN_WARNING
+			    "ALF: only notifying while atomic!\n");
 
 		if (!info_printed) {
-			printk(KERN_WARNING "preempt_count: %d, pid: %u, op: %u\n",
+			printk(KERN_WARNING
+			    "preempt_count: %d, pid: %u, op: %u\n",
 			    preempt_count(), event->pid, event->op);
 			debug_show_all_locks();
 			WARN_ON(1);
 			info_printed = 1;
 		}
 #endif
+		alf_stat_forced_notify++;
 		return anoubis_notify_atomic((char *)event, sizeof(*event),
 		    ANOUBIS_SOURCE_ALF);
 	}
-
-	return anoubis_raise((char *)event, sizeof(*event), ANOUBIS_SOURCE_ALF);
+	alf_stat_ask++;
+	ret =  anoubis_raise((char *)event, sizeof(*event), ANOUBIS_SOURCE_ALF);
+	if (ret != 0)
+		alf_stat_ask_deny++;
+	return ret;
 }
 
 /* Check a connection against the policy database. As there is
@@ -88,6 +129,7 @@ static int alf_check_policy(int op, struct socket *sock,
 	if (!sock || !sock->sk)
 		return -EBADF;
 
+	alf_stat_processed++;
 	if (sock->sk->sk_family == AF_UNIX || sock->sk->sk_family == AF_NETLINK)
 		return 0;
 
@@ -128,6 +170,7 @@ static int alf_check_policy(int op, struct socket *sock,
 	}
 	if (localport && allow_ports_min <= localport
 	    && localport <= allow_ports_max) {
+		alf_stat_allowport++;
 		kfree(event);
 		return 0;
 	}
@@ -140,6 +183,7 @@ static int alf_check_policy(int op, struct socket *sock,
 static int alf_socket_connect(struct socket * sock, struct sockaddr * address,
     int addrlen)
 {
+	alf_stat_connect++;
 	return alf_check_policy(ALF_CONNECT, sock, address);
 }
 
@@ -148,6 +192,7 @@ static int alf_socket_connect(struct socket * sock, struct sockaddr * address,
 static int alf_socket_accepted(struct socket * sock,
     struct socket * newsock)
 {
+	alf_stat_accept++;
 	return alf_check_policy(ALF_ACCEPT, newsock, NULL);
 }
 
@@ -158,6 +203,7 @@ static int alf_socket_sendmsg(struct socket * sock, struct msghdr * msg,
 {
 	int ret;
 
+	alf_stat_sendmsg++;
 	ret = alf_check_policy(ALF_SENDMSG, sock,
 	    (struct sockaddr *)msg->msg_name);
 
@@ -166,8 +212,10 @@ static int alf_socket_sendmsg(struct socket * sock, struct msghdr * msg,
 	    (sock->sk->sk_family == AF_INET ||
 	    sock->sk->sk_family == AF_INET6) &&
 	    (sock->sk->sk_protocol == IPPROTO_TCP ||
-	    sock->sk->sk_protocol == IPPROTO_IP))
+	    sock->sk->sk_protocol == IPPROTO_IP)) {
+		alf_stat_forced_disconnect++;
 		sock->sk->sk_prot->disconnect(sock->sk, 0);
+	}
 
 	return ret;
 }
@@ -179,6 +227,7 @@ static int alf_socket_recvmsg(struct socket * sock, struct msghdr * msg,
 {
 	int ret;
 
+	alf_stat_receivemsg++;
 	if (sock->sk->sk_family != AF_INET && sock->sk->sk_family != AF_INET6)
 		return 0;
 
@@ -189,8 +238,10 @@ static int alf_socket_recvmsg(struct socket * sock, struct msghdr * msg,
 	ret = alf_check_policy(ALF_RECVMSG, sock, NULL);
 
 	/* Close open TCP connections */
-	if (ret != 0)
+	if (ret != 0) {
+		alf_stat_forced_disconnect++;
 		sock->sk->sk_prot->disconnect(sock->sk, 0);
+	}
 
 	return ret;
 }
@@ -250,7 +301,7 @@ static int alf_socket_skb_recv_datagram(struct sock * sk, struct sk_buff * skb)
 			addr->sin6_port = 0;
 #endif
 	}
-
+	alf_stat_receivemsg++;
 	return alf_check_policy(ALF_RECVMSG, sk->sk_socket,
 	    (struct sockaddr *)myaddress);
 }
@@ -262,6 +313,7 @@ static struct anoubis_hooks alf_ops = {
 	.socket_sendmsg = alf_socket_sendmsg,
 	.socket_recvmsg = alf_socket_recvmsg,
 	.socket_skb_recv_datagram = alf_socket_skb_recv_datagram,
+	.anoubis_stats = alf_get_stats,
 };
 
 static int ac_index = -1;
@@ -270,7 +322,10 @@ static int ac_index = -1;
 static int __init alf_init(void)
 {
 	int ret;
+	struct timeval tv;
 
+	do_gettimeofday(&tv);
+	alf_stat_loadtime = tv.tv_sec;
 	ret = anoubis_register(&alf_ops, &ac_index);
 	if (ret < 0) {
 		ac_index = -1;
