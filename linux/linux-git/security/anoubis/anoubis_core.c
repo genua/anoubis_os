@@ -387,7 +387,7 @@ retry:
 			if (unlikely(!serial))
 				printk(KERN_INFO "anoubis_core: "
 				    "Serial number overflow\n");
-			rcu_assign_pointer(hooks[k], newhooks);
+			rcu_assign_pointer(hooks[k], ourhooks);
 			ret = 0;
 			break;
 		}
