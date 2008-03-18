@@ -658,31 +658,6 @@ static struct security_operations anoubis_core_ops = {
 };
 
 /*
- * Remove the module.
- */
-
-static void __exit anoubis_core_exit(void)
-{
-	struct eventdev_queue * q = NULL;
-
-	if (unregister_security(&anoubis_core_ops) < 0)
-		printk(KERN_ERR "anoubis_core: Failed to unregister "
-		    "security hooks\n");
-	schedule_timeout_interruptible(HZ);
-	if (misc_deregister(&anoubis_device) < 0)
-		printk(KERN_ERR "anoubis_core: Cannot unregister device\n");
-	spin_lock_bh(&queuelock);
-	if (anoubis_queue) {
-		q = anoubis_queue;
-		rcu_assign_pointer(anoubis_queue, NULL);
-	}
-	spin_unlock_bh(&queuelock);
-	synchronize_rcu();
-	if (q)
-		eventdev_put_queue(q);
-}
-
-/*
  * Initialize the anoubis_core module.
  */
 static int __init anoubis_core_init(void)
@@ -720,7 +695,6 @@ EXPORT_SYMBOL(anoubis_get_sublabel);
 EXPORT_SYMBOL(anoubis_set_sublabel);
 
 module_init(anoubis_core_init);
-module_exit(anoubis_core_exit);
 
 MODULE_AUTHOR("Christian Ehrhardt <ehrhardt@genua.de>");
 MODULE_DESCRIPTION("ANOUBIS core module");

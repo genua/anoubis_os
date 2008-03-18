@@ -254,9 +254,7 @@ static int chksum_actor(read_descriptor_t * rdesc, struct page * page,
 		rdesc->error = -EIO;
 		return 0;
 	}
-	sg[0].page = page;
-	sg[0].offset = off;
-	sg[0].length = count;
+	sg_set_page(sg, page, count, off);
 	err = crypto_hash_update(cdesc, sg, count);
 	if (err) {
 		rdesc->error = err;
