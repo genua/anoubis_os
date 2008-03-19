@@ -388,7 +388,7 @@ static int eventdev_release(struct inode * inodde, struct file * file)
 	 * structure holds a reference of its own. The following BUG_ON
 	 * checks this.
 	 */
-	BUG_ON(module_refcount(THIS_MODULE) < 2);
+	BUG_ON(THIS_MODULE && module_refcount(THIS_MODULE) < 2);
 	eventdev_put_queue(q);
 	return 0;
 }

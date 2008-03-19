@@ -265,10 +265,9 @@ static int chksum_actor(read_descriptor_t * rdesc, struct page * page,
 	return count;
 }
 
-static inline int csum_uptodate(struct inode * inode)
+static inline int csum_uptodate(struct sfs_inode_sec * sec)
 {
 	int uptodate;
-	struct sfs_inode_sec * sec= ISEC(inode);
 	spin_lock(&sec->lock);
 	uptodate = sec->sfsmask & SFS_CS_UPTODATE;
 	spin_unlock(&sec->lock);
@@ -282,19 +281,20 @@ static inline int csum_uptodate(struct inode * inode)
  * accesses during the calculation using deny_write_access and if
  * SFS_CS_UPTODATE is not already set.
  */
-static int sfs_do_csum(struct file * file, struct inode * inode)
+static int sfs_do_csum(struct file * file, struct inode * inode,
+    struct sfs_inode_sec * sec)
 {
 	struct hash_desc cdesc;
 	loff_t size, pos = 0;
 	read_descriptor_t rdesc;
 	u8 csum[ANOUBIS_SFS_CS_LEN];
 	int err;
-	struct sfs_inode_sec * sec;
 
+	BUG_ON(!sec);
 	err = anoubis_deny_write_access(inode);
 	if (err)
 		return err;
-	if (csum_uptodate(inode)) {
+	if (csum_uptodate(sec)) {
 		anoubis_allow_write_access(inode);
 		return 0;
 	}
@@ -324,7 +324,6 @@ static int sfs_do_csum(struct file * file, struct inode * inode)
 	if (err)
 		goto out;
 
-	sec = ISEC(inode);
 	spin_lock(&sec->lock);
 	memcpy(&sec->hash, csum, ANOUBIS_SFS_CS_LEN);
 	sec->sfsmask |= SFS_CS_UPTODATE;
@@ -426,7 +425,7 @@ static int sfs_verify_syssig(struct file * file)
 	if (err <= 0)
 		return err;
 	/* System signature present */
-	err = sfs_do_csum(file, inode);
+	err = sfs_do_csum(file, inode, sec);
 	if (err) {
 		sfs_stat_csum_recalc_fail++;
 		return err;
@@ -445,20 +444,21 @@ static int sfs_verify_syssig(struct file * file)
  * Update checksum of file using @sfs_do_csum if the inode is marked
  * with the SFS_CS_REQUIRED flag.
  */
-static inline int sfs_csum(struct file * file, struct inode * inode)
+static inline void sfs_csum(struct file * file, struct inode * inode)
 {
 	int required, ret;
 	struct sfs_inode_sec * sec = ISEC(inode);
 
+	if (!sec)
+		return;
 	spin_lock(&sec->lock);
 	required = (sec->sfsmask & SFS_CS_REQUIRED);
 	spin_unlock(&sec->lock);
 	if (!required)
-		return -EINVAL;
-	ret = sfs_do_csum(file, inode);
+		return;
+	ret = sfs_do_csum(file, inode, sec);
 	if (ret)
 		sfs_stat_csum_recalc_fail++;
-	return ret;
 }
 
 /* Must be called with the dcache_lock held. */
@@ -514,6 +514,7 @@ static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
 	char reported_csum[ANOUBIS_SFS_CS_LEN];
 	struct sfs_inode_sec * sec;
 	struct sfs_file_sec * fsec = NULL;
+	int have_reported_csum = 0;
 
 	if (file && (fsec = FSEC(file))) {
 		int ret;
@@ -575,6 +576,7 @@ static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
 			    ANOUBIS_SFS_CS_LEN);
 			memcpy(msg->csum, reported_csum, ANOUBIS_SFS_CS_LEN);
 			msg->flags |= ANOUBIS_OPEN_FLAG_CSUM;
+			have_reported_csum = 1;
 		}
 		spin_unlock(&sec->lock);
 	}
@@ -588,6 +590,13 @@ static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
 	if (ret == -EOKWITHCHKSUM) {
 		if (!strict)
 			return 0;
+		/*
+		 * The following is an error in the userland application.
+		 * It should not return EOKWITHCHKSUM if no checksum was
+		 * reported.
+		 */
+		if (!have_reported_csum)
+			return -EIO;
 		BUG_ON(!file);
 		ret = anoubis_sfs_file_lock(file, reported_csum);
 	}
@@ -654,13 +663,12 @@ int anoubis_sfs_get_csum(struct file * file, u8 * csum)
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
-	err = sfs_do_csum(file, inode);
+	err = sfs_do_csum(file, inode, sec);
 	if (err < 0) {
 		sfs_stat_csum_recalc_fail++;
 		return err;
 	}
 	err = -EBUSY;
-	sec = ISEC(inode);
 	spin_lock(&sec->lock);
 	if (sec->sfsmask & SFS_CS_UPTODATE) {
 		err = 0;

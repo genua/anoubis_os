@@ -54,6 +54,7 @@ static spinlock_t task_cookie_lock;
 #define MAX_ANOUBIS_MODULES 10
 
 static unsigned int serial = 1;
+static char blocked[MAX_ANOUBIS_MODULES];
 static struct anoubis_hooks * hooks[MAX_ANOUBIS_MODULES];
 static spinlock_t hooks_lock = SPIN_LOCK_UNLOCKED;
 
@@ -209,6 +210,7 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 	struct eventdev_queue * q, * q2 = NULL;
 	struct file * eventfile;
 	struct anoubis_task_label * l;
+	int ret;
 
 	/* For now only root is allowed to do declare a queue or a listener. */
 	switch(cmd) {
@@ -241,6 +243,27 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 		if (q2)
 			eventdev_put_queue(q2);
 		break;
+	case ANOUBIS_UNDECLARE_FD:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		eventfile = fget(arg);
+		if (!eventfile)
+			return -EBADF;
+		q = eventdev_get_queue(eventfile);
+		fput(eventfile);
+		if (!q)
+			return -EINVAL;
+		ret = -EBADF;
+		spin_lock_bh(&queuelock);
+		if (anoubis_queue == q) {
+			rcu_assign_pointer(anoubis_queue, NULL);
+			eventdev_put_queue(q);
+			ret = 0;
+		}
+		spin_unlock_bh(&queuelock);
+		synchronize_rcu();
+		eventdev_put_queue(q);
+		return ret;
 	case ANOUBIS_REQUEST_STATS:
 		return ac_stats();
 	default:
@@ -289,6 +312,8 @@ void * anoubis_get_sublabel(void ** lp, int idx)
 {
 	void * ret = NULL;
 	struct anoubis_label * l = (*lp);
+	struct anoubis_hooks * h;
+
 	if (unlikely(!l)) {
 		l = ac_alloc_label(GFP_ATOMIC);
 		if (unlikely(!l))
@@ -305,8 +330,10 @@ void * anoubis_get_sublabel(void ** lp, int idx)
 	spin_lock(&l->label_lock);
 	if (l->labels[idx] == NULL)
 		goto out;
+
 	rcu_read_lock();
-	if (l->magic[idx] != rcu_dereference(hooks[idx])->magic) {
+	h = rcu_dereference(hooks[idx]);
+	if (!h || (l->magic[idx] != h->magic)) {
 		rcu_read_unlock();
 		goto out;
 	}
@@ -336,7 +363,15 @@ void * anoubis_set_sublabel(void ** lp, int idx, void * subl)
 	}
 	rcu_read_lock();
 	h = rcu_dereference(hooks[idx]);
-	BUG_ON(h == NULL);
+	/*
+	 * This case is very rare. Not much we can do actually. However,
+	 * it is in theory possible that hooks are unregistered while a
+	 * hook is running and this hook can legally see h == NULL
+	 */
+	if (!h) {
+		rcu_read_unlock();
+		return NULL;
+	}
 	spin_lock(&l->label_lock);
 	if (l->magic[idx] == h->magic)
 		old = l->labels[idx];
@@ -373,7 +408,7 @@ int anoubis_register(struct anoubis_hooks * newhooks, int * idx_ptr)
 retry:
 	spin_lock(&hooks_lock);
 	for (k=0; k<MAX_ANOUBIS_MODULES; ++k) {
-		if (hooks[k] == NULL) {
+		if (hooks[k] == NULL && blocked[k] == 0) {
 			(*idx_ptr) = k;
 			spin_unlock(&hooks_lock);
 			synchronize_rcu();
@@ -405,14 +440,20 @@ void anoubis_unregister(int idx)
 	BUG_ON(idx < 0 || idx >= MAX_ANOUBIS_MODULES);
 	spin_lock(&hooks_lock);
 	BUG_ON(!hooks[idx]);
+	blocked[idx] = 1;
 	old = rcu_assign_pointer(hooks[idx], NULL);
 	spin_unlock(&hooks_lock);
 	synchronize_rcu();
 	if (old) {
-		while(atomic_read(&old->refcount))
+		while(atomic_read(&old->refcount)) {
 			schedule_timeout_interruptible(HZ);
+			synchronize_rcu();
+		}
 		kfree(old);
 	}
+	spin_lock(&hooks_lock);
+	blocked[idx] = 0;
+	spin_unlock(&hooks_lock);
 }
 
 #define HOOKS(FUNC, ARGS) ({					\
