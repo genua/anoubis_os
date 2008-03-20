@@ -441,7 +441,8 @@ void anoubis_unregister(int idx)
 	spin_lock(&hooks_lock);
 	BUG_ON(!hooks[idx]);
 	blocked[idx] = 1;
-	old = rcu_assign_pointer(hooks[idx], NULL);
+	old = rcu_dereference(hooks[idx]);
+	rcu_assign_pointer(hooks[idx], NULL);
 	spin_unlock(&hooks_lock);
 	synchronize_rcu();
 	if (old) {
