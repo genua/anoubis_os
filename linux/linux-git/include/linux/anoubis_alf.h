@@ -43,6 +43,7 @@
 
 enum alf_ops
 {
+	ALF_ANY = 0,
 	ALF_CONNECT = 1,
 	ALF_ACCEPT = 2,
 	ALF_SENDMSG = 3,
@@ -83,5 +84,25 @@ struct alf_event
 #define ALF_STAT_ACCEPT			18
 #define ALF_STAT_SENDMSG		19
 #define ALF_STAT_RECEIVEMSG		20
+
+struct alf_address_rule {
+	union
+	{
+		struct in_addr	in_addr;
+		struct in6_addr	in6_addr;
+	} addr;
+	unsigned short port_min;
+	unsigned short port_max;
+	unsigned short prefixlen;
+};
+
+struct alf_rule {
+	unsigned short family;
+	unsigned short protocol;
+	unsigned short op;
+
+	struct alf_address_rule local;
+	struct alf_address_rule peer;
+};
 
 #endif

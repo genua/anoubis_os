@@ -34,6 +34,7 @@
 #define ANOUBIS_DECLARE_LISTENER	_IO(ANOUBIS_TYPE,0x11)
 #define ANOUBIS_REQUEST_STATS		_IO(ANOUBIS_TYPE,0x12)
 #define ANOUBIS_UNDECLARE_FD		_IO(ANOUBIS_TYPE,0x13)
+#define ANOUBIS_REPLACE_POLICY		_IO(ANOUBIS_TYPE,0x14)
 
 #define ANOUBIS_SOURCE_TEST	0
 #define ANOUBIS_SOURCE_ALF	10
@@ -69,9 +70,30 @@ struct anoubis_stat_message {
 	struct anoubis_stat_value vals[0];
 };
 
+#define POLICY_ALLOW	0
+#define POLICY_DENY	-EPERM
+#define POLICY_ASK	2
+
+struct anoubis_kernel_policy {
+	int anoubis_source;
+	int decision;
+	unsigned int rule_len;
+	struct anoubis_kernel_policy *next;
+	/* Module specific rule, no type known at this time */
+	unsigned char rule[0];
+};
+
+struct anoubis_kernel_policy_header {
+	pid_t pid;
+	unsigned int size;
+};
+
 #ifdef __KERNEL__
 
 #include <linux/security.h>
+
+#define POLICY_NOMATCH	0
+#define POLICY_MATCH	1
 
 struct anoubis_internal_stat_value {
 	u_int32_t subsystem;
@@ -118,6 +140,9 @@ struct anoubis_hooks {
 
 extern int anoubis_register(struct anoubis_hooks *, int *);
 extern void anoubis_unregister(int idx);
+extern struct anoubis_kernel_policy * anoubis_match_policy(void *data,
+    int datalen, int source, int (*anoubis_policy_matcher)
+    (struct anoubis_kernel_policy * policy, void * data, int datalen));
 extern void * anoubis_set_sublabel(void ** labelp, int idx, void * subl);
 extern void * anoubis_get_sublabel(void ** labelp, int idx);
 

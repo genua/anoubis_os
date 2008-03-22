@@ -34,6 +34,7 @@
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/inetdevice.h>
 #include <linux/sched.h>
 #include <linux/anoubis.h>
 #include <linux/anoubis_alf.h>
@@ -48,6 +49,7 @@
 
 static int allow_ports_min = -1;
 static int allow_ports_max = -1;
+static int ac_index = -1;
 
 static u_int64_t alf_stat_loadtime;
 static u_int64_t alf_stat_ask;
@@ -75,6 +77,9 @@ static struct anoubis_internal_stat_value alf_stats[] = {
 	{ ANOUBIS_SOURCE_ALF, ALF_STAT_SENDMSG, &alf_stat_sendmsg },
 	{ ANOUBIS_SOURCE_ALF, ALF_STAT_RECEIVEMSG, &alf_stat_receivemsg },
 };
+
+static int alf_policy_matcher(struct anoubis_kernel_policy * policy,
+    void * data, int datalen);
 
 static void alf_get_stats(struct anoubis_internal_stat_value **ptr, int *cnt)
 {
@@ -115,9 +120,7 @@ static inline int alf_ask(struct alf_event *event)
 	return ret;
 }
 
-/* Check a connection against the policy database. As there is
- * currently no policy database in-kernel, we ask in userspace
- * for every event */
+/* Check a connection against the policy database. */
 static int alf_check_policy(int op, struct socket *sock,
     struct sockaddr *address)
 {
@@ -125,6 +128,8 @@ static int alf_check_policy(int op, struct socket *sock,
 	int mylen;
 	int localport = 0;
 	struct alf_event *event;
+	int event_size;
+	struct anoubis_kernel_policy *p;
 
 	if (!sock || !sock->sk)
 		return -EBADF;
@@ -147,7 +152,8 @@ static int alf_check_policy(int op, struct socket *sock,
 		address = (struct sockaddr *)&tmpaddr;
 	}
 
-	if ((event = kmalloc(sizeof(struct alf_event), GFP_NOWAIT)) == 0)
+	event_size = sizeof(struct alf_event);
+	if ((event = kmalloc(event_size, GFP_NOWAIT)) == 0)
 		return -ENOMEM;
 
 	event->family = sock->sk->sk_family;
@@ -173,6 +179,13 @@ static int alf_check_policy(int op, struct socket *sock,
 		alf_stat_allowport++;
 		kfree(event);
 		return 0;
+	}
+
+	if ((p = anoubis_match_policy(event, event_size, ANOUBIS_SOURCE_ALF,
+	    alf_policy_matcher))
+	    != NULL) {
+		if (p->decision != POLICY_ASK)
+			return p->decision;
 	}
 
 	return alf_ask(event);
@@ -306,6 +319,61 @@ static int alf_socket_skb_recv_datagram(struct sock * sk, struct sk_buff * skb)
 	    (struct sockaddr *)myaddress);
 }
 
+static int alf_policy_matcher(struct anoubis_kernel_policy * policy,
+    void * data, int datalen)
+{
+	struct alf_event *event = (struct alf_event*)data;
+	struct alf_rule *rule = (struct alf_rule*)(policy->rule);
+
+	if (datalen < sizeof(struct alf_event))
+		return POLICY_NOMATCH;
+
+	if (policy->rule_len < sizeof(struct alf_rule))
+		return POLICY_NOMATCH;
+
+	if ((rule->op != event->op) && (rule->op != ALF_ANY))
+		return POLICY_NOMATCH;
+
+	if ((rule->family != event->family) && (rule->family != AF_UNSPEC))
+		return POLICY_NOMATCH;
+
+	if ((rule->protocol != event->protocol) &&
+	    (rule->protocol != IPPROTO_IP))
+		return POLICY_NOMATCH;
+
+	if (rule->family == AF_INET) {
+		if ((event->local.in_addr.sin_port < rule->local.port_min) ||
+		    (event->local.in_addr.sin_port > rule->local.port_max))
+			return POLICY_NOMATCH;
+
+		if ((event->local.in_addr.sin_addr.s_addr &
+		     inet_make_mask(rule->local.prefixlen)) !=
+		    (rule->local.addr.in_addr.s_addr &
+		     inet_make_mask(rule->local.prefixlen)))
+			return POLICY_NOMATCH;
+
+		if ((event->peer.in_addr.sin_addr.s_addr &
+		     inet_make_mask(rule->peer.prefixlen)) !=
+		    (rule->peer.addr.in_addr.s_addr &
+		     inet_make_mask(rule->peer.prefixlen)))
+			return POLICY_NOMATCH;
+	} else if (rule->family == AF_INET6) {
+		if ((event->local.in6_addr.sin6_port < rule->local.port_min) ||
+		    (event->local.in6_addr.sin6_port > rule->local.port_max))
+			return POLICY_NOMATCH;
+
+		if (!ipv6_prefix_equal(&(event->local.in6_addr.sin6_addr),
+		    &(rule->local.addr.in6_addr), rule->local.prefixlen))
+			return POLICY_NOMATCH;
+
+		if (!ipv6_prefix_equal(&(event->peer.in6_addr.sin6_addr),
+		    &(rule->peer.addr.in6_addr), rule->peer.prefixlen))
+			return POLICY_NOMATCH;
+	}
+
+	return POLICY_MATCH;
+}
+
 /* Security operations. */
 static struct anoubis_hooks alf_ops = {
 	.socket_connect = alf_socket_connect,
@@ -315,8 +383,6 @@ static struct anoubis_hooks alf_ops = {
 	.socket_skb_recv_datagram = alf_socket_skb_recv_datagram,
 	.anoubis_stats = alf_get_stats,
 };
-
-static int ac_index = -1;
 
 /* Initialise event device and register with the LSM framework */
 static int __init alf_init(void)
