@@ -71,7 +71,7 @@ struct anoubis_stat_message {
 };
 
 #define POLICY_ALLOW	0
-#define POLICY_DENY	-EPERM
+#define POLICY_DENY	1
 #define POLICY_ASK	2
 
 struct anoubis_kernel_policy {

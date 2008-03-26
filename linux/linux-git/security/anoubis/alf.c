@@ -184,8 +184,10 @@ static int alf_check_policy(int op, struct socket *sock,
 	if ((p = anoubis_match_policy(event, event_size, ANOUBIS_SOURCE_ALF,
 	    alf_policy_matcher))
 	    != NULL) {
+		if (p->decision == POLICY_ALLOW)
+			return 0;
 		if (p->decision != POLICY_ASK)
-			return p->decision;
+			return -EPERM;
 	}
 
 	return alf_ask(event);
