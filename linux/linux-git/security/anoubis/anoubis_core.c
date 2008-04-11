@@ -770,6 +770,7 @@ static int ac_task_alloc_security(struct task_struct * p)
 
 	msg = kmalloc(sizeof(struct ac_process_message), GFP_NOWAIT);
 	if (msg) {
+		msg->task_cookie = l->task_cookie;
 		msg->op = ANOUBIS_PROCESS_OP_FORK;
 		anoubis_notify_atomic(msg, sizeof(struct ac_process_message),
 		    ANOUBIS_SOURCE_PROCESS);

@@ -55,6 +55,8 @@ struct anoubis_event_common {
 
 struct ac_process_message {
 	struct anoubis_event_common common;
+	anoubis_cookie_t task_cookie;
+	pid_t pid;
 	unsigned long op;
 	char pathhint[1];
 };
