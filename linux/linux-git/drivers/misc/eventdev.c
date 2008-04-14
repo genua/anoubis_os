@@ -8,6 +8,7 @@
 #include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/wait.h>
+#include <linux/rcupdate.h>
 
 #include <linux/eventdev.h>
 
@@ -42,9 +43,22 @@ struct eventdev_queue {
 	struct list_head messages;
 	struct list_head waiting;
 	struct file * file;
+	struct rcu_head rcu;
 };
 
 static wait_queue_head_t die_wait;
+
+struct rcu_head * eventdev_rcu_head(struct eventdev_queue * q)
+{
+	return &q->rcu;
+}
+
+void eventdev_rcu_put(struct rcu_head * head)
+{
+	struct eventdev_queue * q;
+	q = container_of(head, struct eventdev_queue, rcu);
+	eventdev_put_queue(q);
+}
 
 static int eventdev_get_token(eventdev_token * tok)
 {
@@ -208,7 +222,7 @@ fail:
 	return err;
 }
 
-static int eventdev_read(struct file * file, char __user * buf, size_t len,
+static ssize_t eventdev_read(struct file * file, char __user * buf, size_t len,
 			 loff_t * off)
 {
 	struct eventdev_queue * q = file->private_data;
@@ -291,6 +305,11 @@ void __eventdev_get_queue(struct eventdev_queue * q)
 /*
  * This function returns our module iff the queue was freed. The caller
  * must drop a reference to the module if the return value is not NULL.
+ *
+ * As eventdev_put_queue can be called from an rcu callback handler
+ * it must not block. This assumption is true even for the call to flush_queue
+ * as long as there are no buggy callers that do not hold a reference to the
+ * queue while sleeping on the queue.
  */
 struct module * __eventdev_put_queue(struct eventdev_queue * q)
 {
@@ -316,7 +335,7 @@ struct module * __eventdev_put_queue(struct eventdev_queue * q)
 	return THIS_MODULE;
 }
 
-static int eventdev_write(struct file * file, const char __user * buf,
+static ssize_t eventdev_write(struct file * file, const char __user * buf,
 			  size_t len, loff_t * off)
 {
 	struct eventdev_reply rep;
@@ -360,7 +379,8 @@ static int eventdev_write(struct file * file, const char __user * buf,
 	return -EINVAL;
 }
 
-static unsigned int eventdev_poll(struct file * file, poll_table * wait)
+static unsigned int
+eventdev_poll(struct file * file, struct poll_table_struct * wait)
 {
 	unsigned int ret = POLLOUT | POLLWRNORM;
 	struct eventdev_queue * q = file->private_data;

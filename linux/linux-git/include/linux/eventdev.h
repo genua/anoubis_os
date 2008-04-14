@@ -6,6 +6,7 @@
 #include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/types.h>
+#include <linux/rcupdate.h>
 
 #endif /* __KERNEL__ */
 
@@ -37,6 +38,10 @@ extern int eventdev_enqueue_nowait(struct eventdev_queue * q, unsigned char src,
 	char * data, int len, gfp_t flags);
 extern struct eventdev_queue * eventdev_get_queue(struct file * file);
 extern void __eventdev_get_queue(struct eventdev_queue * q);
+
+/* Return a pointer to an RCU head embedded in the eventdev structure. */
+extern struct rcu_head * eventdev_rcu_head(struct eventdev_queue * q);
+extern void eventdev_rcu_put(struct rcu_head *);
 
 /* Do NOT call this function directly. Use eventdev_put_queue instead. */
 extern struct module * __eventdev_put_queue(struct eventdev_queue * q);

@@ -115,9 +115,10 @@ static int __anoubis_event_common(void * buf, size_t len, int src, int wait,
 		rcu_assign_pointer(anoubis_queue, NULL);
 	}
 	spin_unlock_bh(&queuelock);
-	synchronize_rcu();
 	if (put)
 		eventdev_put_queue(q);
+	call_rcu(eventdev_rcu_head(q), eventdev_rcu_put);
+	return ret;
 out:
 	eventdev_put_queue(q);
 	return ret;
@@ -783,10 +784,20 @@ static void ac_task_free_security(struct task_struct * p)
 {
 	if (likely(p->security)) {
 		struct anoubis_task_label * old = p->security;
+		struct ac_process_message * msg;
 		p->security = NULL;
 		if (likely(old->policy))
 			kfree(old->policy);
-
+		msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
+		if (msg) {
+			msg->task_cookie = old->task_cookie;
+			msg->pid = 0;
+			msg->op = ANOUBIS_PROCESS_OP_EXIT;
+			msg->pathhint[0] = 0;
+			anoubis_notify_atomic(msg,
+			    sizeof(struct ac_process_message),
+			    ANOUBIS_SOURCE_PROCESS);
+		}
 		kfree(old);
 	}
 }
