@@ -34,6 +34,7 @@
 #include <sys/mutex.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
+#include <sys/rwlock.h>
 
 #include <compat/common/compat_util.h>
 
@@ -50,6 +51,7 @@ extern int anoubisioctl(dev_t, u_long, caddr_t, int, struct proc *);
 extern int ac_stats(void);
 extern void ac_stats_copyone(struct anoubis_stat_value * dst,
     struct anoubis_internal_stat_value * src, int cnt);
+static int ac_replace_policy(caddr_t data);
 
 /* ARGSUSED */
 void
@@ -121,6 +123,8 @@ anoubisioctl(dev_t dev, u_long cmd, caddr_t data, int fflag,
 		}
 		case ANOUBIS_REQUEST_STATS:
 			return ac_stats();
+		case ANOUBIS_REPLACE_POLICY:
+			return ac_replace_policy(data);
 		default:
 			return EIO;
 	}
@@ -173,4 +177,73 @@ repeat:
 		goto repeat;
 	}
 	return anoubis_notify(data, sz, ANOUBIS_SOURCE_STAT);
+}
+
+static int
+ac_replace_policy(caddr_t data)
+{
+	struct proc *tsk;
+	struct anoubis_kernel_policy_header policy_header;
+	struct anoubis_kernel_policy *policies, *p;
+	int err = 0;
+
+	if (!data || !(*((caddr_t*)data)))
+		return EINVAL;
+
+	err = copyin(*((caddr_t*)data), &policy_header,
+	    sizeof(struct anoubis_kernel_policy_header));
+	if (err)
+		return err;
+
+	if (policy_header.size == 0) {
+		policies = NULL;
+	} else {
+		if (policy_header.size > PAGE_SIZE * 8)
+			return EINVAL;
+
+		policies = malloc(policy_header.size, M_DEVBUF, M_WAITOK);
+		if (!policies)
+			return ENOMEM;
+
+		err = copyin((void*)(*((caddr_t*)data)+ sizeof(policy_header)),
+		    policies, policy_header.size);
+		if (err) {
+			free(policies, M_DEVBUF);
+			return err;
+		}
+		p = policies;
+		while (p) {
+			if (p->rule_len > policy_header.size -
+			    ((unsigned char *)p - (unsigned char *)policies)) {
+				free(policies, M_DEVBUF);
+				return EINVAL;
+			}
+			p->next = (struct anoubis_kernel_policy *)
+			    (((char*)p) + p->rule_len +
+			    sizeof(struct anoubis_kernel_policy));
+
+			if ((char*)p->next >= ((char*)policies) +
+			    policy_header.size)
+				p->next = NULL;
+
+			p = p->next;
+		}
+	}
+
+	tsk = pfind(policy_header.pid);
+	if (!tsk) {
+		if (policies)
+			free(policies, M_DEVBUF);
+		return EINVAL;
+	}
+	rw_enter_write(&(tsk->policy_lock));
+	if (tsk->policy)
+		free(tsk->policy, M_DEVBUF);
+	/*
+	 * XXX: MG: Memory leak when process exits, this can be fixed when
+	 * task labels can be used
+	 */
+	tsk->policy = policies;
+	rw_exit_write(&(tsk->policy_lock));
+	return 0;
 }

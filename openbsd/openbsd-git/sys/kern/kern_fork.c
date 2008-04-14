@@ -365,6 +365,8 @@ fork1(struct proc *p1, int exitsig, int flags, void *stack, size_t stacksize,
 	mtx_enter(&task_cookie_mutex);
 	p2->task_cookie = ++next_task_cookie;
 	mtx_leave(&task_cookie_mutex);
+	p2->policy = NULL;
+	rw_init(&(p2->policy_lock), "policylock");
 #endif
 	/*
 	 * Finish creating the child process.  It will return through a

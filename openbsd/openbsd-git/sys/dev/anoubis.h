@@ -34,6 +34,7 @@
 #define ANOUBIS_DECLARE_FD		_IO('a',0x10)
 #define ANOUBIS_DECLARE_LISTENER	_IO('a',0x11)
 #define ANOUBIS_REQUEST_STATS		_IO('a',0x12)
+#define ANOUBIS_REPLACE_POLICY		_IO('a',0x14)
 
 
 #define ANOUBIS_SOURCE_TEST	0
@@ -60,7 +61,28 @@ struct anoubis_stat_message {
 	struct anoubis_stat_value vals[0];
 };
 
+#define POLICY_ALLOW	0
+#define POLICY_DENY	1
+#define POLICY_ASK	2
+
+struct anoubis_kernel_policy {
+	int anoubis_source;
+	int decision;
+	unsigned int rule_len;
+	struct anoubis_kernel_policy *next;
+	/* Module specific rule, no type known at this time */
+	unsigned char rule[0];
+};
+
+struct anoubis_kernel_policy_header {
+	pid_t pid;
+	unsigned int size;
+};
+
 #ifdef _KERNEL
+
+#define POLICY_NOMATCH	0
+#define POLICY_MATCH	1
 
 struct anoubis_internal_stat_value {
 	u_int32_t subsystem;

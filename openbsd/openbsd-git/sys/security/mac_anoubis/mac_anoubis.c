@@ -31,6 +31,7 @@
 #include <sys/malloc.h>
 #include <sys/mutex.h>
 #include <sys/proc.h>
+#include <sys/rwlock.h>
 
 #include <dev/eventdev.h>
 #include <dev/anoubis.h>
@@ -107,4 +108,28 @@ int anoubis_raise(void * buf, size_t len, int src)
 	if (curproc->listener)
 		return __anoubis_event_common(buf, len, src, 0);
 	return __anoubis_event_common(buf, len, src, 1);
+}
+
+struct anoubis_kernel_policy * anoubis_match_policy(void *data, int datalen,
+    int source, int (*anoubis_policy_matcher)
+    (struct anoubis_kernel_policy * policy, void * data, int datalen))
+{
+	struct anoubis_kernel_policy * p;
+
+	if (curproc->policy == NULL)
+		return NULL;
+
+	rw_enter_read(&(curproc->policy_lock));
+	p = curproc->policy;
+	while(p) {
+		if (p->anoubis_source == source) {
+			if (anoubis_policy_matcher(p, data, datalen) ==
+			    POLICY_MATCH)
+				break;
+		}
+		p = p->next;
+	}
+	rw_exit_read(&(curproc->policy_lock));
+
+	return p;
 }
