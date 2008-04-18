@@ -702,7 +702,7 @@ static int ac_bprm_set_security(struct linux_binprm * bprm)
 
 void ac_bprm_post_apply_creds(struct linux_binprm *bprm)
 {
-	VOIDHOOKS(bprm_set_security, (bprm));
+	VOIDHOOKS(bprm_post_apply_creds, (bprm));
 }
 
 /* TASK STRUCTURE */
