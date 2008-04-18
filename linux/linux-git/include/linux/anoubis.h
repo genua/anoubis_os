@@ -40,6 +40,7 @@
 #define ANOUBIS_SOURCE_ALF	10
 #define ANOUBIS_SOURCE_SANDBOX	20
 #define ANOUBIS_SOURCE_SFS	30
+#define ANOUBIS_SOURCE_SFSEXEC	31
 #define ANOUBIS_SOURCE_PROCESS	40
 #define ANOUBIS_SOURCE_STAT	50
 
@@ -51,14 +52,11 @@ struct anoubis_event_common {
 
 #define ANOUBIS_PROCESS_OP_FORK	0x0001UL
 #define ANOUBIS_PROCESS_OP_EXIT	0x0002UL
-#define ANOUBIS_PROCESS_OP_EXEC	0x0003UL
 
 struct ac_process_message {
 	struct anoubis_event_common common;
 	anoubis_cookie_t task_cookie;
-	pid_t pid;
 	unsigned long op;
-	char pathhint[1];
 };
 
 struct anoubis_stat_value {
@@ -137,6 +135,7 @@ struct anoubis_hooks {
 	DECLARE(file_permission);
 	DECLARE(file_mmap);
 	DECLARE(bprm_set_security);
+	DECLARE(bprm_post_apply_creds);
 };
 #undef DECLARE
 

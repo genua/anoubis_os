@@ -702,49 +702,7 @@ static int ac_bprm_set_security(struct linux_binprm * bprm)
 
 void ac_bprm_post_apply_creds(struct linux_binprm *bprm)
 {
-	struct ac_process_message * msg;
-	char * kbuf = NULL;
-	char * path = NULL;
-	int pathlen = 1;
-
-	if (bprm->file) {
-		kbuf = kmalloc(PAGE_SIZE, GFP_KERNEL);
-		if (!kbuf)
-			return;
-
-		/*
-		 * This will change to
-		 * path = d_path(&(bprm->file->f_path), kbuf, PAGE_SIZE);
-		 * in newer kernels
-		 */
-		path = d_path(bprm->file->f_dentry, bprm->file->f_vfsmnt,
-		    kbuf, PAGE_SIZE);
-		if (IS_ERR(path)) {
-			kfree(kbuf);
-			path = NULL;
-		} else {
-			pathlen = kbuf + PAGE_SIZE - path;
-		}
-	}
-
-	msg = kmalloc(sizeof(struct ac_process_message) + pathlen - 1,
-	    GFP_NOWAIT);
-	if (!msg) {
-		if (path)
-			kfree(kbuf);
-		return;
-	}
-
-	if (path) {
-		memcpy(msg->pathhint, path, pathlen);
-		kfree(kbuf);
-	} else {
-		msg->pathhint[0] = 0;
-	}
-	msg->op = ANOUBIS_PROCESS_OP_EXEC;
-	anoubis_notify_atomic(msg,
-	    sizeof(struct ac_process_message) + pathlen - 1,
-	    ANOUBIS_SOURCE_PROCESS);
+	VOIDHOOKS(bprm_set_security, (bprm));
 }
 
 /* TASK STRUCTURE */
@@ -791,9 +749,7 @@ static void ac_task_free_security(struct task_struct * p)
 		msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
 		if (msg) {
 			msg->task_cookie = old->task_cookie;
-			msg->pid = 0;
 			msg->op = ANOUBIS_PROCESS_OP_EXIT;
-			msg->pathhint[0] = 0;
 			anoubis_notify_atomic(msg,
 			    sizeof(struct ac_process_message),
 			    ANOUBIS_SOURCE_PROCESS);

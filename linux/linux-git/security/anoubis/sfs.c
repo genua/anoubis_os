@@ -503,31 +503,20 @@ static inline char * device_dpath(struct dentry * dentry, char * buf, int len)
 	return ret;
 }
 
-static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
-    struct dentry * dentry, struct inode * inode, int mask, int strict)
+/* We rely on the fact that GFP_KERNEL allocations cannot fail. */
+static struct sfs_open_message * sfs_fill_msg(struct file * file,
+    struct vfsmount * mnt, struct dentry * dentry, struct inode * inode,
+    int mask, int strict, int * lenp)
 {
-	char * buf = NULL;
-	char * path = NULL;
-	int ret, pathlen, alloclen;
 	struct sfs_open_message * msg;
+	char * path = NULL;
+	char * buf = NULL;
 	struct kstat kstat;
-	char reported_csum[ANOUBIS_SFS_CS_LEN];
 	struct sfs_inode_sec * sec;
-	struct sfs_file_sec * fsec = NULL;
-	int have_reported_csum = 0;
+	int pathlen, alloclen;
 
-	if (file && (fsec = FSEC(file))) {
-		int ret;
-		spin_lock(&fsec->lock);
-		ret = fsec->flags & SFS_OPENCHECKS_DONE;
-		spin_unlock(&fsec->lock);
-		if (ret)
-			return fsec->errno;
-	}
 	if (dentry) {
 		buf = (char *)__get_free_page(GFP_KERNEL);
-		if (!buf)
-			return -ENOMEM;
 		path = device_dpath(dentry, buf, PAGE_SIZE);
 	}
 	pathlen = 1;
@@ -535,11 +524,6 @@ static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
 		pathlen = PAGE_SIZE - (path-buf);
 	alloclen = sizeof(struct sfs_open_message) - 1 + pathlen;
 	msg = kmalloc(alloclen, GFP_KERNEL);
-	if (!msg) {
-		if (buf)
-			free_page((unsigned long)buf);
-		return -ENOMEM;
-	}
 	msg->flags = 0;
 	if (mask & (MAY_READ|MAY_EXEC))
 		msg->flags |= ANOUBIS_OPEN_FLAG_READ;
@@ -555,36 +539,59 @@ static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
 		free_page((unsigned long)buf);
 	if (strict)
 		msg->flags |= ANOUBIS_OPEN_FLAG_STRICT;
+	msg->ino = 0;
+	msg->dev = 0;
 	if (mnt && dentry) {
 		int err = vfs_getattr(mnt, dentry, &kstat);
-		if (err) {
-			kfree(msg);
-			return -EPERM;
+		if (err == 0) {
+			msg->ino = kstat.ino;
+			msg->dev = kstat.dev;
+			msg->flags |= ANOUBIS_OPEN_FLAG_STATDATA;
 		}
-		msg->ino = kstat.ino;
-		msg->dev = kstat.dev;
-		msg->flags |= ANOUBIS_OPEN_FLAG_STATDATA;
-	} else {
-		msg->ino = 0;
-		msg->dev = 0;
 	}
 	sec = ISEC(inode);
 	if (sec) {
 		spin_lock(&sec->lock);
 		if (sec->sfsmask & SFS_CS_UPTODATE) {
-			memcpy(reported_csum, sec->hash,
-			    ANOUBIS_SFS_CS_LEN);
-			memcpy(msg->csum, reported_csum, ANOUBIS_SFS_CS_LEN);
+			memcpy(msg->csum, sec->hash, ANOUBIS_SFS_CS_LEN);
 			msg->flags |= ANOUBIS_OPEN_FLAG_CSUM;
-			have_reported_csum = 1;
 		}
 		spin_unlock(&sec->lock);
+	}
+	(*lenp) = alloclen;
+	return msg;
+}
+
+static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
+    struct dentry * dentry, struct inode * inode, int mask, int strict)
+{
+	int ret;
+	struct sfs_open_message * msg;
+	char reported_csum[ANOUBIS_SFS_CS_LEN];
+	struct sfs_file_sec * fsec = NULL;
+	int have_reported_csum = 0;
+	int len = 0;
+
+	if (file && (fsec = FSEC(file))) {
+		int ret;
+		spin_lock(&fsec->lock);
+		ret = fsec->flags & SFS_OPENCHECKS_DONE;
+		spin_unlock(&fsec->lock);
+		if (ret)
+			return fsec->errno;
+	}
+	msg = sfs_fill_msg(file, mnt, dentry, inode, mask, strict, &len);
+	if (!msg)
+		return -ENOMEM;
+	if (msg->flags & ANOUBIS_OPEN_FLAG_CSUM) {
+		memcpy(reported_csum, msg->csum, ANOUBIS_SFS_CS_LEN);
+		have_reported_csum = 1;
 	}
 	if (strict)
 		sfs_stat_ev_strict++;
 	else
 		sfs_stat_ev_nonstrict++;
-	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
+	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFS);
 	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
 		return 0;
 	if (ret == -EOKWITHCHKSUM) {
@@ -852,6 +859,17 @@ static int sfs_inode_removexattr(struct dentry *dentry, char *name)
 	return 0;
 }
 
+static void sfs_bprm_post_apply_creds(struct linux_binprm * bprm)
+{
+	struct file * file = bprm->file;
+	struct sfs_open_message * msg;
+	int len;
+
+	msg = sfs_fill_msg(file, file->f_vfsmnt, file->f_dentry,
+	    file->f_dentry->d_inode, MAY_READ|MAY_EXEC, 0, &len);
+	anoubis_notify(msg, len, ANOUBIS_SOURCE_SFSEXEC);
+}
+
 /* Security operations. */
 static struct anoubis_hooks sfs_ops = {
 	.inode_alloc_security = sfs_inode_alloc_security,
@@ -861,6 +879,7 @@ static struct anoubis_hooks sfs_ops = {
 	.file_permission = sfs_file_permission,
 	.file_mmap = sfs_file_mmap,
 	.bprm_set_security = sfs_bprm_set_security,
+	.bprm_post_apply_creds = sfs_bprm_post_apply_creds,
 	.inode_permission = sfs_inode_permission,
 	.inode_setxattr = sfs_inode_setxattr,
 	.inode_removexattr = sfs_inode_removexattr,
