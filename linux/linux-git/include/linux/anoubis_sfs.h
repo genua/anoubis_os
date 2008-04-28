@@ -56,6 +56,8 @@ struct sfs_open_message
 	u_int64_t dev;
 	unsigned long flags;
 	u_int8_t csum[ANOUBIS_SFS_CS_LEN];
+	u_int8_t anoubisd_csum[ANOUBIS_SFS_CS_LEN];
+	u_int8_t anoubisd_csum_set;
 	char pathhint[1];
 };
 
