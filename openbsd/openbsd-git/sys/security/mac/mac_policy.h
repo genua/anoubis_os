@@ -575,6 +575,8 @@ typedef int	(*mpo_check_vnode_mprotect_t)(struct ucred *cred,
 typedef int	(*mpo_check_vnode_open_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel, int acc_mode);
 #ifdef ANOUBIS
+typedef void	(*mpo_vnode_exec_t)(struct vnode * vnode,
+		    struct label *vplabel);
 typedef int	(*mpo_check_file_open_t)(struct ucred *cred, struct file * fp,
 		    struct vnode *vp, struct label *vplabel,
 		    const char * pathhint);
@@ -908,6 +910,7 @@ struct mac_policy_ops {
 	mpo_check_vnode_mprotect_t		mpo_check_vnode_mprotect;
 	mpo_check_vnode_open_t			mpo_check_vnode_open;
 #ifdef ANOUBIS
+	mpo_vnode_exec_t			mpo_vnode_exec;
 	mpo_check_file_open_t			mpo_check_file_open;
 #endif
 	mpo_check_vnode_poll_t			mpo_check_vnode_poll;

@@ -65,6 +65,11 @@
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_map.h>
 
+#ifdef ANOUBIS
+#include <dev/anoubis.h>
+#include <security/mac_anoubis/mac_anoubis.h>
+#endif
+
 int	nprocs = 1;		/* process 0 */
 int	randompid;		/* when set to 1, pid's go random */
 pid_t	lastpid;
@@ -367,6 +372,14 @@ fork1(struct proc *p1, int exitsig, int flags, void *stack, size_t stacksize,
 	mtx_leave(&task_cookie_mutex);
 	p2->policy = NULL;
 	rw_init(&(p2->policy_lock), "policylock");
+	{
+		struct ac_process_message * msg;
+		msg = malloc(sizeof(*msg), M_DEVBUF, M_WAITOK);
+		msg->op = ANOUBIS_PROCESS_OP_FORK;
+		msg->task_cookie = p2->task_cookie;
+		anoubis_notify(msg, sizeof(struct ac_process_message),
+		    ANOUBIS_SOURCE_PROCESS);
+	}
 #endif
 	/*
 	 * Finish creating the child process.  It will return through a

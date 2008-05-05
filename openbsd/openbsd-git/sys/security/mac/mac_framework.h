@@ -390,6 +390,7 @@ int	mac_check_vnode_mprotect(struct ucred *cred, struct vnode *vp,
 int	mac_check_vnode_open(struct ucred *cred, struct vnode *vp,
 	    int acc_mode);
 #ifdef ANOUBIS
+void	mac_vnode_exec(struct vnode *vp);
 int	mac_check_file_open(struct ucred *cred, struct file * fp,
 	    struct vnode *vp, const char * pathhint);
 #endif

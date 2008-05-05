@@ -80,6 +80,15 @@ struct anoubis_kernel_policy_header {
 	unsigned int size;
 };
 
+#define ANOUBIS_PROCESS_OP_FORK 0x0001UL
+#define ANOUBIS_PROCESS_OP_EXIT 0x0002UL
+
+struct ac_process_message {
+	struct anoubis_event_common common;
+	anoubis_cookie_t task_cookie;
+	unsigned long op;
+};
+
 #ifdef _KERNEL
 
 #define POLICY_NOMATCH	0

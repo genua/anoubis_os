@@ -92,6 +92,7 @@ int  mac_anoubis_sfs_vnode_open(struct ucred *, struct vnode *,
     struct label *, int);
 int mac_anoubis_sfs_file_open(struct ucred * active_cred, struct file *,
     struct vnode * vp, struct label * l, const char * pathhint);
+void mac_anoubis_sfs_vnode_exec(struct vnode * vp, struct label * l);
 int sfs_do_csum(struct vnode *, struct sfs_label *);
 int sfs_csum(struct vnode *, struct sfs_label *);
 int sfs_open_checks(struct file *, struct vnode *, struct sfs_label * sec,
@@ -293,7 +294,7 @@ sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
 		}
 	}
 	alloclen = sizeof(struct sfs_open_message) - 1 + pathlen;
-	msg = malloc(alloclen, M_MACTEMP, M_WAITOK);
+	msg = malloc(alloclen, M_DEVBUF, M_WAITOK);
 	if (!msg) {
 		if (pathhint)
 			free(buf, M_MACTEMP);
@@ -314,7 +315,7 @@ sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
 	if (strict)
 		msg->flags |= ANOUBIS_OPEN_FLAG_STRICT;
 	if (VOP_GETATTR(vp, &va, p->p_ucred, p)) {
-		free(msg, M_MACTEMP);
+		free(msg, M_DEVBUF);
 		return EPERM;
 	}
 	msg->ino = va.va_fileid;
@@ -375,6 +376,34 @@ mac_anoubis_sfs_file_open(struct ucred * active_cred, struct file * file,
 	    pathhint);
 }
 
+void mac_anoubis_sfs_vnode_exec(struct vnode * vp, struct label * l)
+{
+	struct sfs_open_message * msg;
+	struct vattr va;
+	struct sfs_label * sec = SFS_LABEL(l);
+
+	msg = malloc(sizeof(*msg), M_DEVBUF, M_WAITOK);
+	vn_lock(vp, LK_EXCLUSIVE, curproc);
+	if (CHECKSUM_OK(vp))
+		sfs_csum(vp, sec);
+	msg->flags = ANOUBIS_OPEN_FLAG_READ;
+	msg->pathhint[0] = 0;
+	if (VOP_GETATTR(vp, &va, curproc->p_ucred, curproc) == 0) {
+		msg->ino = va.va_fileid;
+		msg->dev = va.va_fsid;
+		msg->flags |= ANOUBIS_OPEN_FLAG_STATDATA;
+	}
+	assert(sec);
+	mtx_enter(&sec->lock);
+	if (sec->sfsmask & SFS_CS_UPTODATE) {
+		memcpy(msg->csum, sec->hash, ANOUBIS_SFS_CS_LEN);
+		msg->flags |= ANOUBIS_OPEN_FLAG_CSUM;
+	}
+	mtx_leave(&sec->lock);
+	VOP_UNLOCK(vp, 0, curproc);
+	anoubis_notify(msg, sizeof(*msg), ANOUBIS_SOURCE_SFSEXEC);
+}
+
 void mac_anoubis_sfs_init(struct mac_policy_conf * conf)
 {
 }
@@ -400,6 +429,7 @@ struct mac_policy_ops mac_anoubis_sfs_ops =
 	.mpo_destroy_vnode_label = mac_anoubis_sfs_destroy_vnode_label,
 	.mpo_check_vnode_open = mac_anoubis_sfs_vnode_open,
 	.mpo_check_file_open = mac_anoubis_sfs_file_open,
+	.mpo_vnode_exec = mac_anoubis_sfs_vnode_exec,
 };
 
 MAC_POLICY_SET(&mac_anoubis_sfs_ops, mac_anoubis_sfs, "Anoubis SFS",
