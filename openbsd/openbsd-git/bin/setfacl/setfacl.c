@@ -246,10 +246,13 @@ main(int argc, char *argv[])
 			continue;
 		}
 
-		if (acl_type == ACL_TYPE_ACCESS)
+		if (acl_type == ACL_TYPE_ACCESS) {
 			final_acl = acl[ACCESS_ACL];
-		else
+			acl_free(acl[DEFAULT_ACL]);
+		} else {
 			final_acl = acl[DEFAULT_ACL];
+			acl_free(acl[ACCESS_ACL]);
+		}
 
 		if (need_mask && (set_acl_mask(&final_acl) == -1)) {
 			warnx("failed to set ACL mask on %s", file->filename);
@@ -270,8 +273,7 @@ main(int argc, char *argv[])
 			}
 		}
 
-		acl_free(acl[ACCESS_ACL]);
-		acl_free(acl[DEFAULT_ACL]);
+		acl_free(final_acl);
 		free(acl);
 	}
 
