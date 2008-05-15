@@ -65,8 +65,10 @@ int __anoubis_event_common(void * buf, size_t len, int src, int wait)
 	if (q)
 		__eventdev_get_queue(q);
 	mtx_leave(&anoubis_lock);
-	if (!q)
+	if (!q) {
+		free(buf, M_DEVBUF);
 		return EPIPE;
+	}
 	if (wait) {
 		err = eventdev_enqueue_wait(q, src, buf, len, &ret, M_WAITOK);
 	} else {
