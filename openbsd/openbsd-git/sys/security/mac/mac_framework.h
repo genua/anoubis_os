@@ -86,8 +86,8 @@ struct vattr;
 struct vnode;
 struct vop_setlabel_args;
 
-#if 0
-#include <sys/acl.h>		/* XXX HSH: no ACLs/acl_type_t, yet */
+#ifdef ACL
+#include <sys/acl.h>
 #endif
 
 void	mac_init(void);
@@ -145,7 +145,6 @@ void		 mac_vnode_label_free(struct label *);
  */
 void	mac_associate_vnode_devfs(struct mount *mp, struct devfs_dirent *de,
 	    struct vnode *vp);
-int	mac_associate_vnode_extattr(struct mount *mp, struct vnode *vp);
 void	mac_associate_vnode_singlelabel(struct mount *mp, struct vnode *vp);
 void	mac_create_devfs_device(struct ucred *cred, struct mount *mp,
 	    struct cdev *dev, struct devfs_dirent *de);
@@ -153,8 +152,6 @@ void	mac_create_devfs_directory(struct mount *mp, char *dirname,
 	    int dirnamelen, struct devfs_dirent *de);
 void	mac_create_devfs_symlink(struct ucred *cred, struct mount *mp,
 	    struct devfs_dirent *dd, struct devfs_dirent *de);
-int	mac_create_vnode_extattr(struct ucred *cred, struct mount *mp,
-	    struct vnode *dvp, struct vnode *vp, struct componentname *cnp);
 void	mac_create_mount(struct ucred *cred, struct mount *mp);
 void	mac_relabel_vnode(struct ucred *cred, struct vnode *vp,
 	    struct label *newlabel);
@@ -363,24 +360,10 @@ int	mac_check_vnode_create(struct ucred *cred, struct vnode *dvp,
 	    struct componentname *cnp, struct vattr *vap);
 int	mac_check_vnode_delete(struct ucred *cred, struct vnode *dvp,
 	    struct vnode *vp, struct componentname *cnp);
-#if 0	/* XXX HSH: no ACLs/acl_type_t, yet */
-int	mac_check_vnode_deleteacl(struct ucred *cred, struct vnode *vp,
-	    acl_type_t type);
-#endif
-int	mac_check_vnode_deleteextattr(struct ucred *cred, struct vnode *vp,
-	    int attrnamespace, const char *name);
 int	mac_check_vnode_exec(struct ucred *cred, struct vnode *vp,
 	    struct exec_package *pack);
-#if 0	/* XXX HSH: no ACLs/acl_type_t, yet */
-int	mac_check_vnode_getacl(struct ucred *cred, struct vnode *vp,
-	    acl_type_t type);
-#endif
-int	mac_check_vnode_getextattr(struct ucred *cred, struct vnode *vp,
-	    int attrnamespace, const char *name, struct uio *uio);
 int	mac_check_vnode_link(struct ucred *cred, struct vnode *dvp,
 	    struct vnode *vp, struct componentname *cnp);
-int	mac_check_vnode_listextattr(struct ucred *cred, struct vnode *vp,
-	    int attrnamespace);
 int	mac_check_vnode_lookup(struct ucred *cred, struct vnode *dvp,
  	    struct componentname *cnp);
 int	mac_check_vnode_mmap(struct ucred *cred, struct vnode *vp, int prot,
@@ -405,12 +388,6 @@ int	mac_check_vnode_rename_from(struct ucred *cred, struct vnode *dvp,
 int	mac_check_vnode_rename_to(struct ucred *cred, struct vnode *dvp,
 	    struct vnode *vp, int samedir, struct componentname *cnp);
 int	mac_check_vnode_revoke(struct ucred *cred, struct vnode *vp);
-#if 0	/* XXX HSH: no ACLs/acl_type_t, yet */
-int	mac_check_vnode_setacl(struct ucred *cred, struct vnode *vp,
-	    acl_type_t type, struct acl *acl);
-#endif
-int	mac_check_vnode_setextattr(struct ucred *cred, struct vnode *vp,
-	    int attrnamespace, const char *name, struct uio *uio);
 int	mac_check_vnode_setflags(struct ucred *cred, struct vnode *vp,
 	    u_long flags);
 int	mac_check_vnode_setmode(struct ucred *cred, struct vnode *vp,
@@ -439,6 +416,23 @@ void	mac_cred_mmapped_drop_perms(struct thread *td, struct ucred *cred);
 void	mac_associate_nfsd_label(struct ucred *cred);
 int	mac_priv_check(struct ucred *cred, int priv);
 int	mac_priv_grant(struct ucred *cred, int priv);
+
+#ifdef ACL
+int	mac_check_vnode_deleteacl(struct ucred *, struct vnode *, acl_type_t);
+int	mac_check_vnode_getacl(struct ucred *, struct vnode *, acl_type_t);
+int	mac_check_vnode_setacl(struct ucred *, struct vnode *, acl_type_t,
+	    struct acl *);
+#endif
+
+#ifdef EXTATTR
+int	mac_check_vnode_deleteextattr(struct ucred *, struct vnode *, int,
+	    const char *);
+int	mac_check_vnode_getextattr(struct ucred *, struct vnode *, int,
+	    const char *, struct uio *);
+int	mac_check_vnode_listextattr(struct ucred *, struct vnode *, int);
+int	mac_check_vnode_setextattr(struct ucred *, struct vnode *, int,
+	    const char *, struct uio *);
+#endif
 
 /*
  * Calls to help various file systems implement labeling functionality using

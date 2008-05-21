@@ -679,7 +679,7 @@ file kern/subr_evcount.c
 file kern/subr_extent.c
 file kern/subr_log.c
 file kern/subr_pool.c
-file kern/subr_posix1e.c		ffs2_acl
+file kern/subr_posix1e.c		acl
 file kern/subr_prf.c
 file kern/subr_prof.c
 file kern/subr_userconf.c		boot_config
@@ -708,13 +708,13 @@ file kern/uipc_socket.c
 file kern/uipc_socket2.c
 file kern/uipc_syscalls.c
 file kern/uipc_usrreq.c
-file kern/vfs_acl.c			ffs2_acl
+file kern/vfs_acl.c			acl
 file kern/vfs_bio.c
 file kern/vfs_cache.c
 file kern/vfs_cluster.c
 file kern/vfs_conf.c
 file kern/vfs_default.c
-file kern/vfs_extattr.c			ffs2_extattr
+file kern/vfs_extattr.c			extattr
 file kern/vfs_init.c
 file kern/vfs_lockf.c
 file kern/vfs_lookup.c
@@ -881,7 +881,7 @@ file nfs/nfs_vfsops.c			nfsclient
 file nfs/nfs_vnops.c			nfsclient
 file ufs/ffs/ffs_alloc.c		ffs | mfs
 file ufs/ffs/ffs_balloc.c		ffs | mfs
-file ufs/ffs/ffs_extattr.c		ffs2_extattr
+file ufs/ffs/ffs_extattr.c		extattr & ffs2
 file ufs/ffs/ffs_inode.c		ffs | mfs
 file ufs/ffs/ffs_subr.c			ffs | mfs
 file ufs/ffs/ffs_softdep_stub.c		ffs | mfs
@@ -891,7 +891,7 @@ file ufs/ffs/ffs_vnops.c		ffs | mfs
 file ufs/ffs/ffs_softdep.c		ffs_softupdates
 file ufs/mfs/mfs_vfsops.c		mfs
 file ufs/mfs/mfs_vnops.c		mfs
-file ufs/ufs/ufs_acl.c			ffs2_acl
+file ufs/ufs/ufs_acl.c			acl & extattr & ffs2
 file ufs/ufs/ufs_bmap.c			ffs | mfs | ext2fs
 file ufs/ufs/ufs_dirhash.c		ufs_dirhash & (ffs | mfs)
 file ufs/ufs/ufs_ihash.c		ffs | mfs | ext2fs

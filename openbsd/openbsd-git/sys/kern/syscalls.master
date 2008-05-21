@@ -611,7 +611,7 @@
 304	STD		{ int sys___getcwd(char *buf, size_t len); }
 305	STD		{ int sys_adjfreq(const int64_t *freq, \
 			    int64_t *oldfreq); }
-#ifdef FFS2_EXTATTR
+#ifdef EXTATTR
 306	STD		{ int sys_extattr_set_fd(int fd, \
 			    int attrnamespace, const char *attrname, \
 			    void *data, size_t nbytes); }
@@ -671,7 +671,7 @@
 317	UNIMPL
 318	UNIMPL
 #endif
-#ifdef FFS2_ACL
+#ifdef ACL
 319	STD		{ int sys___acl_get_file(const char *path, \
 			    acl_type_t type, struct acl *aclp); }
 320	STD		{ int sys___acl_set_file(const char *path, \

@@ -423,7 +423,7 @@ char *syscallnames[] = {
 #endif
 	"__getcwd",			/* 304 = __getcwd */
 	"adjfreq",			/* 305 = adjfreq */
-#ifdef FFS2_EXTATTR
+#ifdef EXTATTR
 	"extattr_set_fd",			/* 306 = extattr_set_fd */
 	"extattr_get_fd",			/* 307 = extattr_get_fd */
 	"extattr_delete_fd",			/* 308 = extattr_delete_fd */
@@ -452,7 +452,7 @@ char *syscallnames[] = {
 	"#317 (unimplemented)",		/* 317 = unimplemented */
 	"#318 (unimplemented)",		/* 318 = unimplemented */
 #endif
-#ifdef FFS2_ACL
+#ifdef ACL
 	"__acl_get_file",			/* 319 = __acl_get_file */
 	"__acl_set_file",			/* 320 = __acl_set_file */
 	"__acl_get_fd",			/* 321 = __acl_get_fd */

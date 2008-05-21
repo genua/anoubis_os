@@ -822,7 +822,7 @@ struct sysent sysent[] = {
 	    sys___getcwd },			/* 304 = __getcwd */
 	{ 2, s(struct sys_adjfreq_args), 0,
 	    sys_adjfreq },			/* 305 = adjfreq */
-#ifdef FFS2_EXTATTR
+#ifdef EXTATTR
 	{ 5, s(struct sys_extattr_set_fd_args), 0,
 	    sys_extattr_set_fd },		/* 306 = extattr_set_fd */
 	{ 5, s(struct sys_extattr_get_fd_args), 0,
@@ -877,7 +877,7 @@ struct sysent sysent[] = {
 	{ 0, 0, 0,
 	    sys_nosys },			/* 318 = unimplemented */
 #endif
-#ifdef FFS2_ACL
+#ifdef ACL
 	{ 3, s(struct sys___acl_get_file_args), 0,
 	    sys___acl_get_file },		/* 319 = __acl_get_file */
 	{ 3, s(struct sys___acl_set_file_args), 0,

@@ -61,17 +61,6 @@
 #include <security/mac/mac_internal.h>
 #include <security/mac/mac_policy.h>
 
-#ifdef EXTATTR
-/*
- * Warn about EA transactions only the first time they happen.  No locking on
- * this variable.
- */
-static int	ea_warn_once = 0;
-
-static int	mac_setlabel_vnode_extattr(struct ucred *cred,
-		    struct vnode *vp, struct label *intlabel);
-#endif
-
 #define mac_assert_vnode_locked(VP) \
     assert((((VP)->v_flag & VLOCKSWORK) == 0) || VOP_ISLOCKED((VP)))
 
@@ -177,19 +166,6 @@ mac_internalize_vnode_label(struct label *label, char *string)
 	return (error);
 }
 
-int
-mac_associate_vnode_extattr(struct mount *mp, struct vnode *vp)
-{
-	int error;
-
-	mac_assert_vnode_locked(vp);
-
-	MAC_CHECK(associate_vnode_extattr, mp, mp->mnt_label, vp,
-	    vp->v_label);
-
-	return (error);
-}
-
 void
 mac_associate_vnode_singlelabel(struct mount *mp, struct vnode *vp)
 {
@@ -197,83 +173,6 @@ mac_associate_vnode_singlelabel(struct mount *mp, struct vnode *vp)
 	MAC_PERFORM(associate_vnode_singlelabel, mp, mp->mnt_label, vp,
 	    vp->v_label);
 }
-
-#ifdef EXTATTR
-/*
- * Functions implementing extended-attribute backed labels for file systems
- * that support it.
- *
- * Where possible, we use EA transactions to make writes to multiple
- * attributes across difference policies mutually atomic.  We allow work to
- * continue on file systems not supporting EA transactions, but generate a
- * printf warning.
- */
-int
-mac_create_vnode_extattr(struct ucred *cred, struct mount *mp,
-    struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
-{
-	int error;
-
-	mac_assert_vnode_locked(dvp);
-	mac_assert_vnode_locked(vp);
-
-	error = VOP_OPENEXTATTR(vp, cred, curthread);
-	if (error == EOPNOTSUPP) {
-		if (ea_warn_once == 0) {
-			printf("Warning: transactions not supported "
-			    "in EA write.\n");
-			ea_warn_once = 1;
-		}
-	} else if (error)
-		return (error);
-
-	MAC_CHECK(create_vnode_extattr, cred, mp, mp->mnt_label, dvp,
-	    dvp->v_label, vp, vp->v_label, cnp);
-
-	if (error) {
-		VOP_CLOSEEXTATTR(vp, 0, NOCRED, curthread);
-		return (error);
-	}
-
-	error = VOP_CLOSEEXTATTR(vp, 1, NOCRED, curthread);
-	if (error == EOPNOTSUPP)
-		error = 0;
-
-	return (error);
-}
-
-static int
-mac_setlabel_vnode_extattr(struct ucred *cred, struct vnode *vp,
-    struct label *intlabel)
-{
-	int error;
-
-	mac_assert_vnode_locked(vp);
-
-	error = VOP_OPENEXTATTR(vp, cred, curthread);
-	if (error == EOPNOTSUPP) {
-		if (ea_warn_once == 0) {
-			printf("Warning: transactions not supported "
-			    "in EA write.\n");
-			ea_warn_once = 1;
-		}
-	} else if (error)
-		return (error);
-
-	MAC_CHECK(setlabel_vnode_extattr, cred, vp, vp->v_label, intlabel);
-
-	if (error) {
-		VOP_CLOSEEXTATTR(vp, 0, NOCRED, curthread);
-		return (error);
-	}
-
-	error = VOP_CLOSEEXTATTR(vp, 1, NOCRED, curthread);
-	if (error == EOPNOTSUPP)
-		error = 0;
-
-	return (error);
-}
-#endif
 
 void
 mac_execve_transition(struct ucred *old, struct ucred *new, struct vnode *vp,
@@ -360,7 +259,7 @@ mac_check_vnode_delete(struct ucred *cred, struct vnode *dvp, struct vnode *vp,
 	return (error);
 }
 
-#ifdef EXTATTR
+#ifdef ACL
 int
 mac_check_vnode_deleteacl(struct ucred *cred, struct vnode *vp,
     acl_type_t type)
@@ -372,7 +271,9 @@ mac_check_vnode_deleteacl(struct ucred *cred, struct vnode *vp,
 	MAC_CHECK(check_vnode_deleteacl, cred, vp, vp->v_label, type);
 	return (error);
 }
+#endif
 
+#ifdef EXTATTR
 int
 mac_check_vnode_deleteextattr(struct ucred *cred, struct vnode *vp,
     int attrnamespace, const char *name)
@@ -401,7 +302,7 @@ mac_check_vnode_exec(struct ucred *cred, struct vnode *vp,
 	return (error);
 }
 
-#ifdef EXTATTR
+#ifdef ACL
 int
 mac_check_vnode_getacl(struct ucred *cred, struct vnode *vp, acl_type_t type)
 {
@@ -412,7 +313,9 @@ mac_check_vnode_getacl(struct ucred *cred, struct vnode *vp, acl_type_t type)
 	MAC_CHECK(check_vnode_getacl, cred, vp, vp->v_label, type);
 	return (error);
 }
+#endif
 
+#ifdef EXTATTR
 int
 mac_check_vnode_getextattr(struct ucred *cred, struct vnode *vp,
     int attrnamespace, const char *name, struct uio *uio)
@@ -586,21 +489,6 @@ mac_check_vnode_readlink(struct ucred *cred, struct vnode *vp)
 	return (error);
 }
 
-#ifdef EXTATTR
-static int
-mac_check_vnode_relabel(struct ucred *cred, struct vnode *vp,
-    struct label *newlabel)
-{
-	int error;
-
-	mac_assert_vnode_locked(vp);
-
-	MAC_CHECK(check_vnode_relabel, cred, vp, vp->v_label, newlabel);
-
-	return (error);
-}
-#endif
-
 int
 mac_check_vnode_rename_from(struct ucred *cred, struct vnode *dvp,
     struct vnode *vp, struct componentname *cnp)
@@ -640,7 +528,7 @@ mac_check_vnode_revoke(struct ucred *cred, struct vnode *vp)
 	return (error);
 }
 
-#ifdef EXTATTR
+#ifdef ACL
 int
 mac_check_vnode_setacl(struct ucred *cred, struct vnode *vp, acl_type_t type,
     struct acl *acl)
@@ -652,7 +540,9 @@ mac_check_vnode_setacl(struct ucred *cred, struct vnode *vp, acl_type_t type,
 	MAC_CHECK(check_vnode_setacl, cred, vp, vp->v_label, type, acl);
 	return (error);
 }
+#endif
 
+#ifdef EXTATTR
 int
 mac_check_vnode_setextattr(struct ucred *cred, struct vnode *vp,
     int attrnamespace, const char *name, struct uio *uio)
@@ -764,79 +654,6 @@ mac_check_mount_stat(struct ucred *cred, struct mount *mount)
 
 	return (error);
 }
-
-#ifdef EXTATTR
-/*
- * Implementation of VOP_SETLABEL() that relies on extended attributes
- * to store label data.  Can be referenced by filesystems supporting
- * extended attributes.
- */
-int
-vop_stdsetlabel_ea(struct vop_setlabel_args *ap)
-{
-	struct vnode *vp = ap->a_vp;
-	struct label *intlabel = ap->a_label;
-	int error;
-
-	mac_assert_vnode_locked(vp);
-
-	if ((vp->v_mount->mnt_flag & MNT_MULTILABEL) == 0)
-		return (EOPNOTSUPP);
-
-	error = mac_setlabel_vnode_extattr(ap->a_cred, vp, intlabel);
-	if (error)
-		return (error);
-
-	mac_relabel_vnode(ap->a_cred, vp, intlabel);
-
-	return (0);
-}
-
-int
-vn_setlabel(struct vnode *vp, struct label *intlabel, struct ucred *cred)
-{
-	int error;
-
-	if (vp->v_mount == NULL) {
-		/* printf("vn_setlabel: null v_mount\n"); */
-		if (vp->v_type != VNON)
-			printf("vn_setlabel: null v_mount with non-VNON\n");
-		return (EBADF);
-	}
-
-	if ((vp->v_mount->mnt_flag & MNT_MULTILABEL) == 0)
-		return (EOPNOTSUPP);
-
-	/*
-	 * Multi-phase commit.  First check the policies to confirm the
-	 * change is OK.  Then commit via the filesystem.  Finally, update
-	 * the actual vnode label.
-	 *
-	 * Question: maybe the filesystem should update the vnode at the end
-	 * as part of VOP_SETLABEL()?
-	 */
-	error = mac_check_vnode_relabel(cred, vp, intlabel);
-	if (error)
-		return (error);
-
-	/*
-	 * VADMIN provides the opportunity for the filesystem to make
-	 * decisions about who is and is not able to modify labels and
-	 * protections on files.  This might not be right.  We can't assume
-	 * VOP_SETLABEL() will do it, because we might implement that as
-	 * part of vop_stdsetlabel_ea().
-	 */
-	error = VOP_ACCESS(vp, VADMIN, cred, curthread);
-	if (error)
-		return (error);
-
-	error = VOP_SETLABEL(vp, intlabel, cred, curthread);
-	if (error)
-		return (error);
-
-	return (0);
-}
-#endif
 
 /*
  * When a thread becomes an NFS server daemon, its credential may need to be

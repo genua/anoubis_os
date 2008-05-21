@@ -359,7 +359,7 @@ struct vnode *checkalias(struct vnode *, dev_t, struct mount *);
 int	getnewvnode(enum vtagtype, struct mount *, int (**vops)(void *),
 	    struct vnode **);
 int	vaccess(mode_t, uid_t, gid_t, mode_t, struct ucred *);
-#ifdef FFS2_ACL
+#ifdef ACL
 int	vaccess_acl_posix1e(uid_t, gid_t, struct acl *, mode_t, struct ucred *,
 	    int *);
 #endif

@@ -1721,7 +1721,7 @@ int	sys_thrsigdivert(struct proc *, void *, register_t *);
 #endif
 int	sys___getcwd(struct proc *, void *, register_t *);
 int	sys_adjfreq(struct proc *, void *, register_t *);
-#ifdef FFS2_EXTATTR
+#ifdef EXTATTR
 int	sys_extattr_set_fd(struct proc *, void *, register_t *);
 int	sys_extattr_get_fd(struct proc *, void *, register_t *);
 int	sys_extattr_delete_fd(struct proc *, void *, register_t *);
@@ -1737,7 +1737,7 @@ int	sys_extattr_get_file(struct proc *, void *, register_t *);
 int	sys_extattr_delete_file(struct proc *, void *, register_t *);
 #else
 #endif
-#ifdef FFS2_ACL
+#ifdef ACL
 int	sys___acl_get_file(struct proc *, void *, register_t *);
 int	sys___acl_set_file(struct proc *, void *, register_t *);
 int	sys___acl_get_fd(struct proc *, void *, register_t *);

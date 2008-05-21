@@ -258,7 +258,7 @@ main(void *framep)
 	mac_init();
 #endif
 
-#ifdef FFS2_ACL
+#ifdef ACL
 	/* Initialize ACL framework. */
 	acl_init();
 #endif

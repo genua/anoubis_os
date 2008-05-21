@@ -59,11 +59,10 @@
  * Operations are sorted first by general class of operation, then
  * alphabetically.
  */
-#if 0
-#include <sys/acl.h>	/* XXX acl_type_t */
+#ifdef ACL
+#include <sys/acl.h>
 #endif
 
-struct acl;
 struct auditinfo;
 struct auditinfo_addr;
 struct bpf_d;
@@ -203,9 +202,6 @@ typedef void	(*mpo_associate_vnode_devfs_t)(struct mount *mp,
 		    struct label *mplabel, struct devfs_dirent *de,
 		    struct label *delabel, struct vnode *vp,
 		    struct label *vplabel);
-typedef int	(*mpo_associate_vnode_extattr_t)(struct mount *mp,
-		    struct label *mplabel, struct vnode *vp,
-		    struct label *vplabel);
 typedef void	(*mpo_associate_vnode_singlelabel_t)(struct mount *mp,
 		    struct label *mplabel, struct vnode *vp,
 		    struct label *vplabel);
@@ -219,18 +215,10 @@ typedef void	(*mpo_create_devfs_symlink_t)(struct ucred *cred,
 		    struct mount *mp, struct devfs_dirent *dd,
 		    struct label *ddlabel, struct devfs_dirent *de,
 		    struct label *delabel);
-typedef int	(*mpo_create_vnode_extattr_t)(struct ucred *cred,
-		    struct mount *mp, struct label *mplabel,
-		    struct vnode *dvp, struct label *dvplabel,
-		    struct vnode *vp, struct label *vplabel,
-		    struct componentname *cnp);
 typedef void	(*mpo_create_mount_t)(struct ucred *cred, struct mount *mp,
 		    struct label *mplabel);
 typedef void	(*mpo_relabel_vnode_t)(struct ucred *cred, struct vnode *vp,
 		    struct label *vplabel, struct label *label);
-typedef int	(*mpo_setlabel_vnode_extattr_t)(struct ucred *cred,
-		    struct vnode *vp, struct label *vplabel,
-		    struct label *intlabel);
 typedef void	(*mpo_update_devfs_t)(struct mount *mp,
 		    struct devfs_dirent *de, struct label *delabel,
 		    struct vnode *vp, struct label *vplabel);
@@ -536,32 +524,13 @@ typedef int	(*mpo_check_vnode_delete_t)(struct ucred *cred,
 		    struct vnode *dvp, struct label *dvplabel,
 		    struct vnode *vp, struct label *vplabel,
 		    struct componentname *cnp);
-#if 0	/* XXX HSH: no ACLs/acl_type_t, yet */
-typedef int	(*mpo_check_vnode_deleteacl_t)(struct ucred *cred,
-		    struct vnode *vp, struct label *vplabel,
-		    acl_type_t type);
-#endif
-typedef int	(*mpo_check_vnode_deleteextattr_t)(struct ucred *cred,
-		    struct vnode *vp, struct label *vplabel,
-		    int attrnamespace, const char *name);
 typedef int	(*mpo_check_vnode_exec_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel,
 		    struct exec_package *pack, struct label *execlabel);
-#if 0	/* XXX HSH: no ACLs/acl_type_t, yet */
-typedef int	(*mpo_check_vnode_getacl_t)(struct ucred *cred,
-		    struct vnode *vp, struct label *vplabel,
-		    acl_type_t type);
-#endif
-typedef int	(*mpo_check_vnode_getextattr_t)(struct ucred *cred,
-		    struct vnode *vp, struct label *vplabel,
-		    int attrnamespace, const char *name, struct uio *uio);
 typedef int	(*mpo_check_vnode_link_t)(struct ucred *cred,
 		    struct vnode *dvp, struct label *dvplabel,
 		    struct vnode *vp, struct label *vplabel,
 		    struct componentname *cnp);
-typedef int	(*mpo_check_vnode_listextattr_t)(struct ucred *cred,
-		    struct vnode *vp, struct label *vplabel,
-		    int attrnamespace);
 typedef int	(*mpo_check_vnode_lookup_t)(struct ucred *cred,
 		    struct vnode *dvp, struct label *dvplabel,
 		    struct componentname *cnp);
@@ -604,14 +573,6 @@ typedef int	(*mpo_check_vnode_rename_to_t)(struct ucred *cred,
 		    struct componentname *cnp);
 typedef int	(*mpo_check_vnode_revoke_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel);
-#if 0	/* XXX HSH: no ACLs/acl_type_t, yet */
-typedef int	(*mpo_check_vnode_setacl_t)(struct ucred *cred,
-		    struct vnode *vp, struct label *vplabel, acl_type_t type,
-		    struct acl *acl);
-#endif
-typedef int	(*mpo_check_vnode_setextattr_t)(struct ucred *cred,
-		    struct vnode *vp, struct label *vplabel,
-		    int attrnamespace, const char *name, struct uio *uio);
 typedef int	(*mpo_check_vnode_setflags_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel, u_long flags);
 typedef int	(*mpo_check_vnode_setmode_t)(struct ucred *cred,
@@ -631,6 +592,28 @@ typedef int	(*mpo_check_vnode_write_t)(struct ucred *active_cred,
 typedef void	(*mpo_associate_nfsd_label_t)(struct ucred *cred);
 typedef int	(*mpo_priv_check_t)(struct ucred *cred, int priv);
 typedef int	(*mpo_priv_grant_t)(struct ucred *cred, int priv);
+
+#ifdef ACL
+typedef int	(*mpo_check_vnode_deleteacl_t)(struct ucred *, struct vnode *,
+		    struct label *, acl_type_t);
+typedef int	(*mpo_check_vnode_getacl_t)(struct ucred *, struct vnode *,
+		    struct label *, acl_type_t);
+typedef int	(*mpo_check_vnode_setacl_t)(struct ucred *, struct vnode *,
+		    struct label *, acl_type_t, struct acl *);
+#endif
+
+#ifdef EXTATTR
+typedef int	(*mpo_check_vnode_deleteextattr_t)(struct ucred *,
+		    struct vnode *, struct label *, int, const char *);
+typedef int	(*mpo_check_vnode_getextattr_t)(struct ucred *,
+		    struct vnode *, struct label *, int, const char *,
+		    struct uio *);
+typedef int	(*mpo_check_vnode_listextattr_t)(struct ucred *,
+		    struct vnode *, struct label *, int);
+typedef int	(*mpo_check_vnode_setextattr_t)(struct ucred *,
+		    struct vnode *, struct label *, int, const char *,
+		    struct uio *);
+#endif
 
 struct mac_policy_ops {
 	/*
@@ -720,16 +703,13 @@ struct mac_policy_ops {
 	 * look a lot like file system objects.
 	 */
 	mpo_associate_vnode_devfs_t		mpo_associate_vnode_devfs;
-	mpo_associate_vnode_extattr_t		mpo_associate_vnode_extattr;
 	mpo_associate_vnode_singlelabel_t	mpo_associate_vnode_singlelabel;
 	mpo_create_devfs_device_t		mpo_create_devfs_device;
 	mpo_create_devfs_directory_t		mpo_create_devfs_directory;
 	mpo_create_devfs_symlink_t		mpo_create_devfs_symlink;
 	mpo_placeholder_t			_mpo_placeholder5;
-	mpo_create_vnode_extattr_t		mpo_create_vnode_extattr;
 	mpo_create_mount_t			mpo_create_mount;
 	mpo_relabel_vnode_t			mpo_relabel_vnode;
-	mpo_setlabel_vnode_extattr_t		mpo_setlabel_vnode_extattr;
 	mpo_update_devfs_t			mpo_update_devfs;
 
 	/*
@@ -892,18 +872,9 @@ struct mac_policy_ops {
 	mpo_check_vnode_chroot_t		mpo_check_vnode_chroot;
 	mpo_check_vnode_create_t		mpo_check_vnode_create;
 	mpo_check_vnode_delete_t		mpo_check_vnode_delete;
-#if 0	/* XXX HSH: no ACLs/acl_type_t, yet */
-	mpo_check_vnode_deleteacl_t		mpo_check_vnode_deleteacl;
-#endif
-	mpo_check_vnode_deleteextattr_t		mpo_check_vnode_deleteextattr;
 	mpo_check_vnode_exec_t			mpo_check_vnode_exec;
-#if 0	/* XXX HSH: no ACLs/acl_type_t, yet */
-	mpo_check_vnode_getacl_t		mpo_check_vnode_getacl;
-#endif
-	mpo_check_vnode_getextattr_t		mpo_check_vnode_getextattr;
 	mpo_placeholder_t			_mpo_placeholder24;
 	mpo_check_vnode_link_t			mpo_check_vnode_link;
-	mpo_check_vnode_listextattr_t		mpo_check_vnode_listextattr;
 	mpo_check_vnode_lookup_t		mpo_check_vnode_lookup;
 	mpo_check_vnode_mmap_t			mpo_check_vnode_mmap;
 	mpo_check_vnode_mmap_downgrade_t	mpo_check_vnode_mmap_downgrade;
@@ -921,10 +892,6 @@ struct mac_policy_ops {
 	mpo_check_vnode_rename_from_t		mpo_check_vnode_rename_from;
 	mpo_check_vnode_rename_to_t		mpo_check_vnode_rename_to;
 	mpo_check_vnode_revoke_t		mpo_check_vnode_revoke;
-#if 0	/* XXX HSH: no ACLs/acl_type_t, yet */
-	mpo_check_vnode_setacl_t		mpo_check_vnode_setacl;
-#endif
-	mpo_check_vnode_setextattr_t		mpo_check_vnode_setextattr;
 	mpo_check_vnode_setflags_t		mpo_check_vnode_setflags;
 	mpo_check_vnode_setmode_t		mpo_check_vnode_setmode;
 	mpo_check_vnode_setowner_t		mpo_check_vnode_setowner;
@@ -939,6 +906,17 @@ struct mac_policy_ops {
 	mpo_create_mbuf_from_syncache_t		mpo_create_mbuf_from_syncache;
 	mpo_priv_check_t			mpo_priv_check;
 	mpo_priv_grant_t			mpo_priv_grant;
+#ifdef ACL
+	mpo_check_vnode_deleteacl_t		mpo_check_vnode_deleteacl;
+	mpo_check_vnode_getacl_t		mpo_check_vnode_getacl;
+	mpo_check_vnode_setacl_t		mpo_check_vnode_setacl;
+#endif
+#ifdef EXTATTR
+	mpo_check_vnode_deleteextattr_t		mpo_check_vnode_deleteextattr;
+	mpo_check_vnode_getextattr_t		mpo_check_vnode_getextattr;
+	mpo_check_vnode_listextattr_t		mpo_check_vnode_listextattr;
+	mpo_check_vnode_setextattr_t		mpo_check_vnode_setextattr;
+#endif
 };
 
 /*

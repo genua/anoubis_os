@@ -94,6 +94,15 @@ int	ufsfifo_write(void *);
 int	ufsfifo_close(void *);
 #endif
 
+/* ACL functionality in FFS2 depends on Extended Attributes support. */
+#if defined(FFS2) && defined(ACL) && defined(EXTATTR)
+#define	FFS2_ACL
+#endif
+
+#if defined(FFS2) && defined(EXTATTR)
+#define FFS2_EXTATTR
+#endif
+
 /* ufs_bmap.c */
 int ufs_bmaparray(struct vnode *, daddr64_t, daddr64_t *, struct indir *,
 		       struct buf *, int *, int *);
