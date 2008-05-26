@@ -919,7 +919,8 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct proc *p)
 		} else
 #endif
 			printf("ffs_mountfs(): WARNING, mounting %s with *NO* "
-			    "discretionary access control!\n");
+			    "discretionary access control!\n",
+			    mp->mnt_stat.f_mntonname);
 	}
 
 	return (0);

@@ -1872,6 +1872,9 @@ loop:
 			if (flags & V_SAVEMETA)
 				while (blist && blist->b_lblkno < 0)
 					blist = LIST_NEXT(blist, b_vnbufs);
+			else if (flags & V_NORMAL)
+				while (blist && blist->b_flags & B_EXTATTR)
+					blist = LIST_NEXT(blist, b_vnbufs);
 			else if (flags & V_EXT)
 				while (blist && !(blist->b_flags & B_EXTATTR))
 					blist = LIST_NEXT(blist, b_vnbufs);
@@ -1912,7 +1915,7 @@ loop:
 			brelse(bp);
 		}
 	}
-	if (!(flags & V_SAVEMETA) && !(flags & V_EXT) &&
+	if (!(flags & V_SAVEMETA) && !(flags & (V_EXT | V_NORMAL)) &&
 	    (!LIST_EMPTY(&vp->v_dirtyblkhd) || !LIST_EMPTY(&vp->v_cleanblkhd)))
 		panic("vinvalbuf: flush failed");
 	splx(s);
