@@ -145,8 +145,14 @@ static int alf_check_policy(int op, struct socket *sock,
 	if (address == NULL) {
 		int addrlen;
 
+		/*
+		 * NOTE: Passing 2 instead of 1 for the peer parameter
+		 * will return the (old) peer address even if the socket
+		 * is already closed. The SO_GETPEERNAME socket option
+		 * uses the same trick so this should be ok.
+		 */
 		if (sock->ops->getname(sock, (struct sockaddr *)tmpaddr,
-		    &addrlen, 1) < 0)
+		    &addrlen, 2) < 0)
 			return -EBADF;
 
 		address = (struct sockaddr *)&tmpaddr;
