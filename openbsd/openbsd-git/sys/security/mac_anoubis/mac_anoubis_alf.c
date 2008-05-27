@@ -307,12 +307,18 @@ alf_update_label(struct socket *sock, struct alf_label *label,
 
 		label->set |= 1;
 
-		if (event->op != ALF_CONNECT) {
-			if (sotopf(sock) == PF_INET) {
-				label->local.in_addr = event->local.in_addr;
-			} else {
-				label->local.in6_addr = event->local.in6_addr;
-			}
+		/*
+		 * If the event type is ALF_CONNECT the local address
+		 * might be unknown yet. In this case we copy a zero
+		 * address to the label which is ok because we will update
+		 * the label at the next event. However, it might also be
+		 * non zero if the socket was explicitly bound to a specific
+		 * local port. In this case we want to use this information.
+		 */
+		if (sotopf(sock) == PF_INET) {
+			label->local.in_addr = event->local.in_addr;
+		} else {
+			label->local.in6_addr = event->local.in6_addr;
 		}
 	}
 }
