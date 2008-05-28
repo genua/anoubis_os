@@ -136,6 +136,26 @@ struct anoubis_hooks {
 	DECLARE(file_mmap);
 	DECLARE(bprm_set_security);
 	DECLARE(bprm_post_apply_creds);
+	DECLARE(ptrace);
+	DECLARE(capget);
+	DECLARE(capset_check);
+	DECLARE(capset_set);
+	DECLARE(capable);
+	DECLARE(settime);
+	DECLARE(netlink_send);
+	DECLARE(netlink_recv);
+	DECLARE(bprm_apply_creds);
+	DECLARE(bprm_secureexec);
+	DECLARE(inode_need_killpriv);
+	DECLARE(inode_killpriv);
+	DECLARE(task_kill);
+	DECLARE(task_setscheduler);
+	DECLARE(task_setioprio);
+	DECLARE(task_setnice);
+	DECLARE(task_post_setuid);
+	DECLARE(task_reparent_to_init);
+	DECLARE(syslog);
+	DECLARE(vm_enough_memory);
 };
 #undef DECLARE
 
