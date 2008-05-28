@@ -1,0 +1,14 @@
+While most of these tests are not implementation-specific per se, they are here
+because FFS2 is the only file system to support access control lists in OpenBSD.
+In order to perform them, it is necessary:
+
+(1) To have superuser privileges.
+(2) To be running a kernel compiled with options 'FFS2', 'ACL' and 'EXTATTR'.
+(3) To have a vacant vnd(4) slot represented in 'VND' (an environment variable).
+(4) To have spare '_beta0', '_beta1', '_gamma0' and '_gamma1' groupnames.
+(5) To have spare '_alpha0', '_alpha1', '_alpha2' and '_alpha3' usernames.
+
+If not set, 'VND' is assumed as 'vnd0'.
+
+A summary of what each test does can be found in the respective '.sh' file,
+in a comment just after the license.
