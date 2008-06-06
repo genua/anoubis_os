@@ -184,8 +184,6 @@ alf_check_policy(int op, struct socket *sock, const struct sockaddr *address,
 	event->type = sock->so_type;
 	event->protocol = sock->so_proto->pr_protocol;
 	event->op = op;
-	event->pid = curproc->p_pid;
-	event->uid = curproc->p_cred->p_ruid;
 
 	/*
 	 * Check if the socket is not connected, so we need to take the

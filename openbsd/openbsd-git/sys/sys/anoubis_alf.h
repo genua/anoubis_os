@@ -59,8 +59,6 @@ struct alf_event
 	unsigned short protocol;
 
 	unsigned short op;
-	pid_t	pid;
-	uid_t	uid;
 };
 
 /* Stat keys for ANOUBIS_SOURCE_ALF */

@@ -103,7 +103,7 @@ static inline int alf_ask(struct alf_event *event)
 		if (!info_printed) {
 			printk(KERN_WARNING
 			    "preempt_count: %d, pid: %u, op: %u\n",
-			    preempt_count(), event->pid, event->op);
+			    preempt_count(), current->pid, event->op);
 			debug_show_all_locks();
 			WARN_ON(1);
 			info_printed = 1;
@@ -166,8 +166,6 @@ static int alf_check_policy(int op, struct socket *sock,
 	event->type = sock->type;
 	event->protocol = sock->sk->sk_protocol;
 	event->op = op;
-	event->pid = current->pid;
-	event->uid = current->uid;
 
 	if (sock->sk->sk_family == AF_INET) {
 		/* IPv4 */
