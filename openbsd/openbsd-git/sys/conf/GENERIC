@@ -28,8 +28,8 @@ option		COMPAT_43	# and 4.3BSD
 
 option		LKM		# loadable kernel modules
 
-#option		ACL		# Support for POSIX.1e Access Control Lists.
-#option		EXTATTR		# Support for POSIX.1e Extended Attributes.
+option		ACL		# Support for POSIX.1e Access Control Lists.
+option		EXTATTR		# Support for POSIX.1e Extended Attributes.
 option		FFS		# UFS
 option		FFS2		# UFS2
 option		FFS_SOFTUPDATES	# Soft updates
