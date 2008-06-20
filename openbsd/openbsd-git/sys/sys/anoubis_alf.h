@@ -88,6 +88,7 @@ struct alf_address_rule {
 
 struct alf_rule {
 	unsigned short family;
+	unsigned short type;
 	unsigned short protocol;
 	unsigned short op;
 

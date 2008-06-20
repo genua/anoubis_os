@@ -32,6 +32,7 @@
 #include <sys/mutex.h>
 #include <sys/proc.h>
 #include <sys/rwlock.h>
+#include <sys/time.h>
 
 #include <dev/eventdev.h>
 #include <dev/anoubis.h>
@@ -124,7 +125,8 @@ struct anoubis_kernel_policy * anoubis_match_policy(void *data, int datalen,
 	rw_enter_read(&(curproc->policy_lock));
 	p = curproc->policy;
 	while(p) {
-		if (p->anoubis_source == source) {
+		if ((p->anoubis_source == source) &&
+		    ((p->expire == 0) || (p->expire < time_second))) {
 			if (anoubis_policy_matcher(p, data, datalen) ==
 			    POLICY_MATCH)
 				break;

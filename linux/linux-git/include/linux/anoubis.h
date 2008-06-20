@@ -78,6 +78,8 @@ struct anoubis_kernel_policy {
 	int anoubis_source;
 	int decision;
 	unsigned int rule_len;
+	time_t expire;
+
 	struct anoubis_kernel_policy *next;
 	/* Module specific rule, no type known at this time */
 	unsigned char rule[0];

@@ -462,6 +462,9 @@ alf_policy_matcher(struct anoubis_kernel_policy * policy, void * data,
 	if ((rule->family != event->family) && (rule->family != AF_UNSPEC))
 		return POLICY_NOMATCH;
 
+	if ((rule->type != event->type) && (rule->type != ALF_ANY))
+		return POLICY_NOMATCH;
+
 	if ((rule->protocol != event->protocol) &&
 			(rule->protocol != IPPROTO_IP))
 		return POLICY_NOMATCH;

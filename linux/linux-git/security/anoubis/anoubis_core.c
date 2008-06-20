@@ -36,6 +36,7 @@
 #include <linux/sched.h>
 #include <linux/security.h>
 #include <linux/types.h>
+#include <linux/time.h>
 #include <linux/anoubis.h>
 #include <asm/uaccess.h>
 
@@ -552,14 +553,18 @@ struct anoubis_kernel_policy * anoubis_match_policy(void *data, int datalen,
 {
 	struct anoubis_task_label * l = current->security;
 	struct anoubis_kernel_policy * p;
+	time_t now;
 
 	if (unlikely(!l || !l->policy))
 		return NULL;
 
+	now = get_seconds();
+
 	read_lock(&l->policy_lock);
 	p = l->policy;
 	while(p) {
-		if (p->anoubis_source == source) {
+		if ((p->anoubis_source == source) &&
+		    ((p->expire == 0) || p->expire < now)) {
 			if (anoubis_policy_matcher(p, data, datalen) ==
 			    POLICY_MATCH)
 				break;
