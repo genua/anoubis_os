@@ -407,6 +407,22 @@ mac_check_vnode_mprotect(struct ucred *cred, struct vnode *vp, int prot)
 	return (error);
 }
 
+#ifdef ANOUBIS
+int
+mac_check_vnode_open(struct ucred *cred, struct vnode *vp, int acc_mode,
+    struct vnode *dirvp, struct componentname *cnp)
+{
+	int error;
+	struct label *dirl = NULL;
+
+	mac_assert_vnode_locked(vp);
+	if (dirvp)
+		dirl = dirvp->v_label;
+	MAC_CHECK(check_vnode_open, cred, vp, vp->v_label, acc_mode,
+	    dirvp, dirl, cnp);
+	return (error);
+}
+#else
 int
 mac_check_vnode_open(struct ucred *cred, struct vnode *vp, int acc_mode)
 {
@@ -417,13 +433,17 @@ mac_check_vnode_open(struct ucred *cred, struct vnode *vp, int acc_mode)
 	MAC_CHECK(check_vnode_open, cred, vp, vp->v_label, acc_mode);
 	return (error);
 }
+#endif
 
 #ifdef ANOUBIS
 
 void
-mac_vnode_exec(struct vnode *vp)
+mac_vnode_exec(struct vnode *vp, struct vnode *dvp, struct componentname *cnp)
 {
-	MAC_PERFORM(vnode_exec, vp, vp->v_label);
+	struct label *dpl = NULL;
+	if (dvp)
+		dpl = dvp->v_label;
+	MAC_PERFORM(vnode_exec, vp, vp->v_label, dvp, dpl, cnp);
 }
 
 int

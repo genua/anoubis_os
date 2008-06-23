@@ -541,11 +541,19 @@ typedef void	(*mpo_check_vnode_mmap_downgrade_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel, int *prot);
 typedef int	(*mpo_check_vnode_mprotect_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel, int prot);
+#ifdef ANOUBIS
+typedef int	(*mpo_check_vnode_open_t)(struct ucred *cred,
+		    struct vnode *vp, struct label *vplabel, int acc_mode,
+		    struct vnode *dirvp, struct label *dirlabel,
+		    struct componentname *cnp);
+#else
 typedef int	(*mpo_check_vnode_open_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel, int acc_mode);
+#endif
 #ifdef ANOUBIS
-typedef void	(*mpo_vnode_exec_t)(struct vnode * vnode,
-		    struct label *vplabel);
+typedef void	(*mpo_vnode_exec_t)(struct vnode *vnode,
+		    struct label *vplabel, struct vnode *dvp,
+		    struct label *dplabel, struct componentname *cnp);
 typedef int	(*mpo_check_file_open_t)(struct ucred *cred, struct file * fp,
 		    struct vnode *vp, struct label *vplabel,
 		    const char * pathhint);

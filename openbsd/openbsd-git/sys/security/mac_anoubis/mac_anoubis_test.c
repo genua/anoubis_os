@@ -42,8 +42,14 @@
 int mac_anoubis_test_slot;
 
 void	mac_anoubis_test_init(struct mac_policy_conf *conf);
+#ifdef ANOUBIS
+int	mac_anoubis_test_vnode_open(struct ucred *cred, struct vnode *vp,
+	    struct label *vplabel, int acc_mode, struct vnode *vnode,
+	    struct label *dirlabel, struct componentname *cnp);
+#else
 int	mac_anoubis_test_vnode_open(struct ucred *cred, struct vnode *vp,
 	    struct label *vplabel, int acc_mode);
+#endif
 
 struct eventdevtest_event {
 	struct anoubis_event_common common;
@@ -55,9 +61,16 @@ mac_anoubis_test_init(struct mac_policy_conf *conf)
 {
 }
 
+#ifdef ANOUBIS
+int
+mac_anoubis_test_vnode_open(struct ucred *cred, struct vnode *vp,
+    struct label *vplabel, int acc_mode, struct vnode *dirvp,
+    struct label *dirlabel, struct componentname *cnp)
+#else
 int
 mac_anoubis_test_vnode_open(struct ucred *cred, struct vnode *vp,
     struct label *vplabel, int acc_mode)
+#endif
 {
 	struct vattr va;
 	int err;

@@ -473,7 +473,12 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 	int error;
 	struct nameidata nd;
 
+#ifdef ANOUBIS
+	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | SAVENAME | WANTPARENT,
+	    UIO_SYSSPACE, soun->sun_path, p);
+#else
 	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_SYSSPACE, soun->sun_path, p);
+#endif
 	if (nam->m_data + nam->m_len == &nam->m_dat[MLEN]) {	/* XXX */
 		if (*(mtod(nam, caddr_t) + nam->m_len - 1) != 0)
 			return (EMSGSIZE);
@@ -484,10 +489,21 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 	vp = nd.ni_vp;
 	if (vp->v_type != VSOCK) {
 		error = ENOTSOCK;
+#ifdef ANOUBIS
+		vrele(nd.ni_dvp);
+		pool_put(&namei_pool, nd.ni_cnd.cn_pnbuf);
+#endif
 		goto bad;
 	}
 #ifdef MAC
+#ifdef ANOUBIS
+	error = mac_check_vnode_open(p->p_ucred, vp, VWRITE | VREAD,
+	    nd.ni_dvp, &nd.ni_cnd);
+	vrele(nd.ni_dvp);
+	pool_put(&namei_pool, nd.ni_cnd.cn_pnbuf);
+#else
 	error = mac_check_vnode_open(p->p_ucred, vp, VWRITE | VREAD);
+#endif
 	if (error)
 		goto bad;
 #endif

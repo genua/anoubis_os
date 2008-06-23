@@ -117,16 +117,26 @@ check_exec(struct proc *p, struct exec_package *epp)
 {
 	int error, i;
 	struct vnode *vp;
+#ifdef ANOUBIS
+	struct vnode *dvp;
+#endif
 	struct nameidata *ndp;
 	size_t resid;
 
 	ndp = epp->ep_ndp;
 	ndp->ni_cnd.cn_nameiop = LOOKUP;
+#ifdef ANOUBIS
+	ndp->ni_cnd.cn_flags = FOLLOW | LOCKLEAF | SAVENAME | WANTPARENT;
+#else
 	ndp->ni_cnd.cn_flags = FOLLOW | LOCKLEAF | SAVENAME;
+#endif
 	/* first get the vnode */
 	if ((error = namei(ndp)) != 0)
 		return (error);
 	epp->ep_vp = vp = ndp->ni_vp;
+#ifdef ANOUBIS
+	dvp = ndp->ni_dvp;
+#endif
 
 	/* check for regular file */
 	if (vp->v_type == VDIR) {
@@ -189,8 +199,18 @@ check_exec(struct proc *p, struct exec_package *epp)
 		/* make sure the first "interesting" error code is saved. */
 		if (!newerror || error == ENOEXEC)
 			error = newerror;
+#ifdef ANOUBIS
+		if (epp->ep_flags & EXEC_DESTR) {
+			if (dvp)
+				vrele(dvp);
+			dvp = NULL;
+			if (error)
+				return (error);
+		}
+#else
 		if (epp->ep_flags & EXEC_DESTR && error != 0)
 			return (error);
+#endif
 	}
 	if (!error) {
 		/* check that entry point is sane */
@@ -219,6 +239,10 @@ bad2:
 	 */
 	vn_close(vp, FREAD, p->p_ucred, p);
 	pool_put(&namei_pool, ndp->ni_cnd.cn_pnbuf);
+#ifdef ANOUBIS
+	if (dvp)
+		vrele(dvp);
+#endif
 	return (error);
 
 bad1:
@@ -228,6 +252,10 @@ bad1:
 	 */
 	pool_put(&namei_pool, ndp->ni_cnd.cn_pnbuf);
 	vput(vp);
+#ifdef ANOUBIS
+	if (dvp)
+		vrele(dvp);
+#endif
 	return (error);
 }
 
@@ -266,6 +294,9 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	size_t pathbuflen;
 #endif
 	char *pathbuf = NULL;
+#ifdef ANOUBIS
+	struct vnode *dvp = NULL;
+#endif
 
 	/*
 	 * Cheap solution to complicated problems.
@@ -312,6 +343,9 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	if ((error = check_exec(p, &pack)) != 0) {
 		goto freehdr;
 	}
+#ifdef ANOUBIS
+	dvp = nid.ni_dvp;
+#endif
 
 	/* XXX -- THE FOLLOWING SECTION NEEDS MAJOR CLEANUP */
 
@@ -468,7 +502,10 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	VREF(pack.ep_vp);
 	p->p_textvp = pack.ep_vp;
 #ifdef ANOUBIS
-	mac_vnode_exec(p->p_textvp);
+	mac_vnode_exec(p->p_textvp, dvp, &nid.ni_cnd);
+	if (dvp)
+		vrele(dvp);
+	dvp = NULL;
 #endif
 
 	atomic_setbits_int(&p->p_flag, P_EXEC);
@@ -598,6 +635,10 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
 	pool_put(&namei_pool, nid.ni_cnd.cn_pnbuf);
+#ifdef ANOUBIS
+	if (dvp)
+		vrele(dvp);
+#endif
 	vn_close(pack.ep_vp, FREAD, cred, p);
 
 	/*
@@ -687,6 +728,10 @@ bad:
 	/* close and put the exec'd file */
 	vn_close(pack.ep_vp, FREAD, cred, p);
 	pool_put(&namei_pool, nid.ni_cnd.cn_pnbuf);
+#ifdef ANOUBIS
+	if (dvp)
+		vrele(dvp);
+#endif
 	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
  freehdr:
@@ -714,6 +759,10 @@ exec_abort:
 	if (pack.ep_emul_arg != NULL)
 		free(pack.ep_emul_arg, M_TEMP);
 	pool_put(&namei_pool, nid.ni_cnd.cn_pnbuf);
+#ifdef ANOUBIS
+	if (dvp)
+		vrele(dvp);
+#endif
 	vn_close(pack.ep_vp, FREAD, cred, p);
 	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 

@@ -44,6 +44,7 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/buf.h>
+#include <sys/pool.h>
 #include <sys/proc.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
@@ -82,6 +83,11 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 	struct ucred *cred = p->p_ucred;
 	struct vattr va;
 	int error;
+#ifdef ANOUBIS
+	struct componentname *cnp = NULL;
+	struct vnode *dirvp = NULL;
+	struct nameidata savendp = *ndp;
+#endif
 
 	if ((fmode & (FREAD|FWRITE)) == 0)
 		return (EINVAL);
@@ -89,12 +95,28 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		return (EINVAL);
 	if (fmode & O_CREAT) {
 		ndp->ni_cnd.cn_nameiop = CREATE;
+#ifdef ANOUBIS
+		/*
+		 * NOTE: We do not actually need SAVESTART but setting
+		 * it explicitly will prevent VOP_ABORTOP from freeing
+		 * the name buffer.
+		 */
+		ndp->ni_cnd.cn_flags = LOCKPARENT | LOCKLEAF
+		    | SAVENAME | SAVESTART;
+#else
 		ndp->ni_cnd.cn_flags = LOCKPARENT | LOCKLEAF;
+#endif
 		if ((fmode & O_EXCL) == 0 && (fmode & O_NOFOLLOW) == 0)
 			ndp->ni_cnd.cn_flags |= FOLLOW;
 		if ((error = namei(ndp)) != 0)
 			return (error);
-
+#ifdef ANOUBIS
+		dirvp = ndp->ni_dvp;
+		VREF(dirvp);
+		cnp = &ndp->ni_cnd;
+		if (ndp->ni_startdir)
+			vrele(ndp->ni_startdir);
+#endif
 #ifdef MAC
 		VATTR_NULL(&va);
 		va.va_type = VREG;
@@ -110,8 +132,18 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 #endif	/* MAC */
 			error = VOP_CREATE(ndp->ni_dvp, &ndp->ni_vp,
 					   &ndp->ni_cnd, &va);
+#ifdef ANOUBIS
+			if (error) {
+				if (dirvp)
+					vrele(dirvp);
+				if (cnp)
+					pool_put(&namei_pool, cnp->cn_pnbuf);
+				return (error);
+			}
+#else
 			if (error)
 				return (error);
+#endif
 			fmode &= ~O_TRUNC;
 			vp = ndp->ni_vp;
 		} else {
@@ -134,10 +166,38 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		}
 	} else {
 		ndp->ni_cnd.cn_nameiop = LOOKUP;
+#ifdef ANOUBIS
+		ndp->ni_cnd.cn_flags = WANTPARENT | SAVENAME |
+		    ((fmode & O_NOFOLLOW) ? NOFOLLOW : FOLLOW) | LOCKLEAF;
+#else
 		ndp->ni_cnd.cn_flags =
 		    ((fmode & O_NOFOLLOW) ? NOFOLLOW : FOLLOW) | LOCKLEAF;
+#endif
+#ifdef ANOUBIS
+		/*
+		 * If error == EISDIR we are doing a lookup on some alias
+		 * of '/'. We do not want to return an error in this case
+		 * but namei unfortunately returns EISDIR if WANTPARENT is
+		 * set. Thus redo the lookup without WANTPARENT and remember
+		 * that we do not have dirvp/cnp which is ok for directories.
+		 */
+		error = namei(ndp);
+		if (error) {
+			if (error != EISDIR)
+				return error;
+			*ndp = savendp;
+			ndp->ni_cnd.cn_flags = LOCKLEAF |
+			    ((fmode & O_NOFOLLOW) ? NOFOLLOW : FOLLOW);
+			if ((error = namei(ndp)))
+				return (error);
+		} else {
+			dirvp = ndp->ni_dvp;
+			cnp = &ndp->ni_cnd;
+		}
+#else
 		if ((error = namei(ndp)) != 0)
 			return (error);
+#endif
 		vp = ndp->ni_vp;
 	}
 	if (vp->v_type == VSOCK) {
@@ -148,6 +208,18 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		error = EMLINK;
 		goto bad;
 	}
+#ifdef ANOUBIS
+	/*
+	 * We do not have dirvp and cnp because the first lookup above
+	 * returned EISDIR. Verify that the second lookup did return a
+	 * directory. Otherwise someone messed with the namespace or with
+	 * pathname in user space between the two lookups.
+	 */
+	if (!cnp && vp->v_type != VDIR) {
+		error = ENOTDIR;
+		goto bad;
+	}
+#endif
 #ifdef MAC
 	{
 		int mode = 0;
@@ -155,7 +227,17 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 			mode |= VWRITE;
 		if (fmode & FREAD)
 			mode |= VREAD;
+#ifdef ANOUBIS
+		error = mac_check_vnode_open(cred, vp, mode, dirvp, cnp);
+		if (dirvp)
+			vrele(dirvp);
+		if (cnp)
+			pool_put(&namei_pool, cnp->cn_pnbuf);
+		dirvp = NULL;
+		cnp = NULL;
+#else
 		error = mac_check_vnode_open(cred, vp, mode);
+#endif
 		if (error)
 			goto bad;
 	}
@@ -206,6 +288,12 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 
 	return (0);
 bad:
+#ifdef ANOUBIS
+	if (dirvp)
+		vrele(dirvp);
+	if (cnp)
+		pool_put(&namei_pool, cnp->cn_pnbuf);
+#endif
 	vput(vp);
 	return (error);
 }

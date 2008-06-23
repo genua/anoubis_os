@@ -1048,7 +1048,12 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 		}
 		if (flags & FREAD)
 			mode |= VREAD;
+#ifdef ANOUBIS
+		/* We cannot generate a path for sys_fhopen. */
+		error = mac_check_vnode_open(p->p_ucred, vp, mode, NULL, NULL);
+#else
 		error = mac_check_vnode_open(p->p_ucred, vp, mode);
+#endif
 		if (error)
 			goto bad;
 		if (mode) {
