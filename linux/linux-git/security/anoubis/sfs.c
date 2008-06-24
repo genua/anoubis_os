@@ -344,12 +344,39 @@ out_allow_write:
  */
 static inline int checksum_ok(struct inode * inode)
 {
+	/*
+	 * Allow checksums on these file system even though they do
+	 * not have a real device. These checksum might not persist
+	 * over a rebooot.
+	 */
+	static const char * noreqdev[] = {
+		"nfs",
+		"nfs1",
+		"nfs2",
+		"nfs3",
+		"nfs4",
+		"smbfs",
+		"tmpfs",
+		"smbfs",
+		NULL
+	};
+	int i;
+
 	if (!inode)
 		return 0;
 	if (!S_ISREG(inode->i_mode))
 		return 0;
-	if ((inode->i_sb->s_type->fs_flags & FS_REQUIRES_DEV) == 0)
+	if ((inode->i_sb->s_type->fs_flags & FS_REQUIRES_DEV) == 0) {
+		/*
+		 * XXX CEH: This should be done once per inode not on
+		 * XXX CEH: each access.
+		 */
+		for (i=0; noreqdev[i]; ++i) {
+			if (strcmp(inode->i_sb->s_type->name, noreqdev[i]) == 0)
+				return 1;
+		}
 		return 0;
+	}
 	return 1;
 }
 
@@ -381,11 +408,11 @@ static int sfs_read_syssig(struct dentry * dentry)
 	if (!inode->i_op->getxattr)
 		goto nosig;
 	ret = inode->i_op->getxattr(dentry, XATTR_ANOUBIS_SYSSIG, NULL, 0);
-	if (ret == -ENODATA || ret == -ENOTSUPP)
+	if (ret == -ENODATA || ret == -ENOTSUPP || ret == -EOPNOTSUPP)
 		goto nosig;
 	if (ret != ANOUBIS_SFS_CS_LEN) {
 		printk(KERN_ERR "anoubis_sfs: Error while reading "
-		    "system signature\n");
+		    "system signature (%d)\n", ret);
 		return -EIO;
 	}
 	ret = inode->i_op->getxattr(dentry, XATTR_ANOUBIS_SYSSIG,
