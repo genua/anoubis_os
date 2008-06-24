@@ -257,11 +257,14 @@ sfs_csum(struct vnode * vp, struct sfs_label * sec)
 char *
 sfs_d_path(struct vnode *dirvp, struct componentname *cnp, char **bufp)
 {
+	/* XXX CEH: Temporary fix for kernel hangs. */
+#if 0
 	int	 len = 4*MAXPATHLEN;
 	int	 ret;
 	char	*buf = malloc(len, M_WAITOK, M_MACTEMP);
 	char	*bp, *bend;
 
+	return NULL;
 	if (!buf)
 		return NULL;
 	bend = bp = buf+len;
@@ -283,6 +286,10 @@ sfs_d_path(struct vnode *dirvp, struct componentname *cnp, char **bufp)
 		bp++;
 	(*bufp) = buf;
 	return bp;
+#else
+	*bufp = NULL;
+	return NULL;
+#endif
 }
 
 int
