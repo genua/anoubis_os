@@ -257,39 +257,34 @@ sfs_csum(struct vnode * vp, struct sfs_label * sec)
 char *
 sfs_d_path(struct vnode *dirvp, struct componentname *cnp, char **bufp)
 {
-	/* XXX CEH: Temporary fix for kernel hangs. */
-#if 0
 	int	 len = 4*MAXPATHLEN;
 	int	 ret;
-	char	*buf = malloc(len, M_WAITOK, M_MACTEMP);
-	char	*bp, *bend;
+	char	*buf = malloc(len, M_MACTEMP, M_WAITOK);
+	char	*bp;
 
-	return NULL;
+	(*bufp) = NULL;
 	if (!buf)
 		return NULL;
-	bend = bp = buf+len;
+	bp = buf+len;
 	*--bp = 0;
+	if (cnp->cn_namelen == 0 || cnp->cn_namelen > MAXPATHLEN) {
+		free(buf, M_MACTEMP);
+		return NULL;
+	}
 	bp -= cnp->cn_namelen;
 	bcopy(cnp->cn_nameptr, bp, cnp->cn_namelen);
 	if (*bp != '/')
 		*--bp = '/';
-	while(*--bend == '/')
-		*bend = 0;
 	ret = vfs_getcwd_common(dirvp, rootvnode, &bp, buf, len/2, 0,
 	    curproc);
 	if (ret) {
 		free(buf, M_MACTEMP);
-		(*bufp) = NULL;
 		return NULL;
 	}
 	if (bp[0] == '/' && bp[1] == '/')
 		bp++;
 	(*bufp) = buf;
 	return bp;
-#else
-	*bufp = NULL;
-	return NULL;
-#endif
 }
 
 int
