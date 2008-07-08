@@ -1,4 +1,4 @@
-/*	$OpenBSD: otto $	*/
+/*	$OpenBSD: thib $	*/
 /*	$NetBSD: vfs_vnops.c,v 1.20 1996/02/04 02:18:41 christos Exp $	*/
 
 /*
@@ -82,6 +82,7 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 	struct proc *p = ndp->ni_cnd.cn_proc;
 	struct ucred *cred = p->p_ucred;
 	struct vattr va;
+	struct cloneinfo *cip;
 	int error;
 #ifdef ANOUBIS
 	struct componentname *cnp = NULL;
@@ -275,13 +276,14 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 	}
 
 	if (vp->v_flag & VCLONED) {
-		struct cloneinfo *cip = (struct cloneinfo *) vp->v_data;
+		cip = (struct cloneinfo *)vp->v_data;
 
 		vp->v_flag &= ~VCLONED;
-		ndp->ni_vp = cip->ci_vp; /* return cloned vnode */
-		vp->v_data = cip->ci_data; /* restore v_data */
-		VOP_UNLOCK(vp, 0, p); /* keep a reference */
-		vp = ndp->ni_vp; /* for the increment below */
+
+		ndp->ni_vp = cip->ci_vp;	/* return cloned vnode */
+		vp->v_data = cip->ci_data;	/* restore v_data */
+		VOP_UNLOCK(vp, 0, p);		/* keep a reference */
+		vp = ndp->ni_vp;		/* for the increment below */
 
 		free(cip, M_TEMP);
 	}

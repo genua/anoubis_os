@@ -1,4 +1,4 @@
-#	$OpenBSD: deraadt $
+#	$OpenBSD: otto $
 #	$NetBSD: Makefile.inc,v 1.35 1995/10/16 23:49:07 jtc Exp $
 #	@(#)Makefile.inc	8.1 (Berkeley) 6/17/93
 

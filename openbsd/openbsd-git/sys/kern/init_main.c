@@ -410,7 +410,7 @@ main(void *framep)
 	{
 		volatile long newguard[8];
 
-		arc4random_bytes((long *)newguard, sizeof(newguard));
+		arc4random_buf((long *)newguard, sizeof(newguard));
 
 		for (i = sizeof(__guard)/sizeof(__guard[0]) - 1; i; i--)
 			__guard[i] = newguard[i];
@@ -460,9 +460,9 @@ main(void *framep)
 	/* Configure root/swap devices */
 	diskconf();
 
-	/* Mount the root file system. */
-	if (vfs_mountroot())
+	if (mountroot == NULL || ((*mountroot)() != 0))
 		panic("cannot mount root");
+
 	CIRCLEQ_FIRST(&mountlist)->mnt_flag |= MNT_ROOTFS;
 
 	/* Get the vnode for '/'.  Set p->p_fd->fd_cdir to reference it. */

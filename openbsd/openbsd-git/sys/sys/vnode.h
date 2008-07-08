@@ -1,4 +1,4 @@
-/*	$OpenBSD: thib $	*/
+/*	$OpenBSD: millert $	*/
 /*	$NetBSD: vnode.h,v 1.38 1996/02/29 20:59:05 cgd Exp $	*/
 
 /*
@@ -130,8 +130,9 @@ struct vnode {
 #define	VCLONED		0x0400	/* vnode was cloned */
 #define	VALIASED	0x0800	/* vnode has an alias */
 #define	VLOCKSWORK	0x4000	/* FS supports locking discipline */
+#define	VCLONE		0x8000	/* vnode is a clone */
 #define	VBITS	"\010\001ROOT\002TEXT\003SYSTEM\004ISTTY\010XLOCK" \
-    "\011XWANT\013ALIASED\016LOCKSWORK"
+    "\011XWANT\013ALIASED\016LOCKSWORK\017CLONE"
 
 /*
  * (v_bioflag) Flags that may be manipulated by interrupt handlers
@@ -306,11 +307,6 @@ struct vnodeopv_desc {
 };
 
 /*
- * A default routine which just returns an error.
- */
-int vn_default_error(void *);
-
-/*
  * A generic structure.
  * This can be used by bypass routines to identify generic arguments.
  */
@@ -347,6 +343,7 @@ struct mount;
 struct nameidata;
 struct proc;
 struct stat;
+struct statfs;
 struct ucred;
 struct uio;
 struct vattr;
@@ -358,7 +355,7 @@ int	cdevvp(dev_t, struct vnode **);
 struct vnode *checkalias(struct vnode *, dev_t, struct mount *);
 int	getnewvnode(enum vtagtype, struct mount *, int (**vops)(void *),
 	    struct vnode **);
-int	vaccess(mode_t, uid_t, gid_t, mode_t, struct ucred *);
+int	vaccess(enum vtype, mode_t, uid_t, gid_t, mode_t, struct ucred *);
 #ifdef ACL
 int	vaccess_acl_posix1e(uid_t, gid_t, struct acl *, mode_t, struct ucred *,
 	    int *);
@@ -382,6 +379,7 @@ int	vrecycle(struct vnode *, struct proc *);
 void	vrele(struct vnode *);
 void	vref(struct vnode *);
 void	vprint(char *, struct vnode *);
+void	copy_statfs_info(struct statfs *, const struct mount *);
 
 /* vfs_getcwd.c */
 int vfs_getcwd_scandir(struct vnode **, struct vnode **, char **, char *,
@@ -392,6 +390,7 @@ int vfs_getcwd_getcache(struct vnode **, struct vnode **, char **, char *);
 
 /* vfs_default.c */
 int	vop_generic_abortop(void *);
+int	vop_generic_bmap(void *);
 int	vop_generic_bwrite(void *);
 int	vop_generic_islocked(void *);
 int	vop_generic_lock(void *);

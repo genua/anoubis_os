@@ -1,4 +1,4 @@
-/*	$OpenBSD: oga $	*/
+/*	$OpenBSD: mbalmer $	*/
 /*	$NetBSD: conf.c,v 1.75 1996/05/03 19:40:20 christos Exp $	*/
 
 /*
@@ -122,7 +122,6 @@ cdev_decl(wd);
 #include "bio.h"
 #include "pty.h"
 #include "com.h"
-#include "pccom.h"
 cdev_decl(com);
 cdev_decl(fd);
 #include "ss.h"
@@ -149,6 +148,7 @@ cdev_decl(cy);
 cdev_decl(mcd);
 #include "tun.h"
 #include "audio.h"
+#include "video.h"
 #include "midi.h"
 #include "sequencer.h"
 cdev_decl(music);
@@ -199,6 +199,7 @@ cdev_decl(pci);
 #include "pf.h"
 #include "hotplug.h"
 #include "gpio.h"
+#include "amdmsr.h"
 
 struct cdevsw	cdevsw[] =
 {
@@ -230,7 +231,7 @@ struct cdevsw	cdevsw[] =
 	cdev_uk_init(NUK,uk),		/* 20: unknown SCSI */
 	cdev_acpiapm_init(1,acpiapm),	/* 21: Power Management stuff */
 	cdev_fd_init(1,filedesc),	/* 22: file descriptor pseudo-device */
-	cdev_bpftun_init(NBPFILTER,bpf),/* 23: Berkeley packet filter */
+	cdev_bpf_init(NBPFILTER,bpf),	/* 23: Berkeley packet filter */
 	cdev_notdef(),			/* 24 */
 #if 0
 	cdev_ocis_init(NPCMCIA,pcmcia), /* 25: PCMCIA Bus */
@@ -251,7 +252,7 @@ struct cdevsw	cdevsw[] =
 	cdev_notdef(),			/* 37: Extended PS/2 mouse */
 	cdev_tty_init(NCY,cy),		/* 38: Cyclom serial port */
 	cdev_disk_init(NMCD,mcd),	/* 39: Mitsumi CD-ROM */
-	cdev_bpftun_init(NTUN,tun),	/* 40: network tunnel */
+	cdev_tun_init(NTUN,tun),	/* 40: network tunnel */
 	cdev_disk_init(NVND,vnd),	/* 41: vnode disk driver */
 	cdev_audio_init(NAUDIO,audio),	/* 42: generic audio I/O */
 #ifdef COMPAT_SVR4
@@ -259,7 +260,7 @@ struct cdevsw	cdevsw[] =
 #else
 	cdev_notdef(),			/* 43 */
 #endif
-	cdev_notdef(),			/* 44 */
+	cdev_video_init(NVIDEO,video),	/* 44: generic video I/O */
 	cdev_random_init(1,random),	/* 45: random data source */
 	cdev_ocis_init(NPCTR,pctr),	/* 46: pentium performance counters */
 	cdev_disk_init(NRD,rd),		/* 47: ram disk driver */
@@ -315,8 +316,9 @@ struct cdevsw	cdevsw[] =
 	cdev_bthub_init(NBTHUB,bthub),	/* 86: bthub */
 	cdev_agp_init(NAGP,agp),	/* 87: agp */
 	cdev_drm_init(NDRMBASE,drm),	/* 88: drm */
-	cdev_eventdev_init(NEVENTDEV,eventdev), /* 89: Kernel Event Device */
-	cdev_anoubis_init(NANOUBIS,anoubis), /* 90: Anoubis Control device */
+	cdev_amdmsr_init(NAMDMSR,amdmsr),	/* 89: amdmsr */
+	cdev_eventdev_init(NEVENTDEV,eventdev), /* 90: Kernel Event Device */
+	cdev_anoubis_init(NANOUBIS,anoubis), /* 91: Anoubis Control device */
 };
 int	nchrdev = sizeof(cdevsw) / sizeof(cdevsw[0]);
 
@@ -363,28 +365,28 @@ int chrtoblktbl[] = {
 	/*  0 */	NODEV,
 	/*  1 */	NODEV,
 	/*  2 */	NODEV,
-	/*  3 */	0,
+	/*  3 */	0,		/* wd */
 	/*  4 */	NODEV,
 	/*  5 */	NODEV,
 	/*  6 */	NODEV,
 	/*  7 */	NODEV,
 	/*  8 */	NODEV,
-	/*  9 */	2,
+	/*  9 */	2,		/* fd */
 	/* 10 */	3,
-	/* 11 */	15,
+	/* 11 */	NODEV,
 	/* 12 */	NODEV,
-	/* 13 */	4,
-	/* 14 */	5,
-	/* 15 */	6,
+	/* 13 */	4,		/* sd */
+	/* 14 */	5,		/* st */
+	/* 15 */	6,		/* cd */
 	/* 16 */	NODEV,
 	/* 17 */	NODEV,
-	/* 18 */	16,
+	/* 18 */	16,		/* ccd */
 	/* 19 */	NODEV,
 	/* 20 */	NODEV,
 	/* 21 */	NODEV,
 	/* 22 */	NODEV,
 	/* 23 */	NODEV,
-	/* 24 */	18,
+	/* 24 */	NODEV,
 	/* 25 */	NODEV,
 	/* 26 */	NODEV,
 	/* 27 */	NODEV,
@@ -399,22 +401,22 @@ int chrtoblktbl[] = {
 	/* 36 */	NODEV,
 	/* 37 */	NODEV,
 	/* 38 */	NODEV,
-	/* 39 */	7,
+	/* 39 */	7,		/* mcd */
 	/* 40 */	NODEV,
-	/* 41 */	14,
+	/* 41 */	14,		/* vnd */
 	/* 42 */	NODEV,
 	/* 43 */	NODEV,
 	/* 44 */	NODEV,
 	/* 45 */	NODEV,
 	/* 46 */	NODEV,
-	/* 47 */	17,
+	/* 47 */	17,		/* rd */
 	/* 48 */	NODEV,
 	/* 49 */	NODEV,
 	/* 50 */	NODEV,
 	/* 51 */	NODEV,
 	/* 52 */	NODEV,
 	/* 53 */	NODEV,
-	/* 54 */	19,
+	/* 54 */	19,		/* raid */
 };
 int nchrtoblktbl = sizeof(chrtoblktbl) / sizeof(chrtoblktbl[0]);
 

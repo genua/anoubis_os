@@ -1,4 +1,4 @@
-/*	$OpenBSD: oga $	*/
+/*	$OpenBSD: chl $	*/
 /*	$NetBSD: malloc.h,v 1.39 1998/07/12 19:52:01 augustss Exp $	*/
 
 /*
@@ -90,7 +90,7 @@
 #define	M_VMMAP		30	/* VM map structures */
 #define	M_SEM		31	/* SVID compatible semaphores */
 #define	M_DIRHASH	32	/* UFS dirhash */
-/* 33 - free */
+#define M_ACPI		33	/* ACPI */
 #define	M_VMPMAP	34	/* VM pmap */
 /* 35-37 - free */
 #define	M_FILE		38	/* Open file structure */
@@ -221,7 +221,7 @@
 	"VM map",	/* 30 M_VMMAP */ \
 	"sem",		/* 31 M_SEM */ \
 	"dirhash",	/* 32 M_DIRHASH */ \
-	NULL, \
+	"ACPI", 	/* 33 M_ACPI */ \
 	"VM pmap",	/* 34 M_VMPMAP */ \
 	NULL,	/* 35 */ \
 	NULL,	/* 36 */ \
@@ -402,13 +402,6 @@ struct kmembuckets {
 #define	kmemxtob(alloc)	(kmembase + (alloc) * NBPG)
 #define	btokmemx(addr)	(((caddr_t)(addr) - kmembase) / NBPG)
 #define	btokup(addr)	(&kmemusage[((caddr_t)(addr) - kmembase) >> PAGE_SHIFT])
-
-/*
- * Macro versions for the usual cases of malloc/free
- */
-#define	MALLOC(space, cast, size, type, flags) \
-	(space) = (cast)malloc((u_long)(size), type, flags)
-#define	FREE(addr, type) free((caddr_t)(addr), type)
 
 extern struct kmemstats kmemstats[];
 extern struct kmemusage *kmemusage;

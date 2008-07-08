@@ -1,4 +1,4 @@
-/*	$OpenBSD: chl $	*/
+/*	$OpenBSD: thib $	*/
 /*	$NetBSD: pstat.c,v 1.27 1996/10/23 22:50:06 cgd Exp $	*/
 
 /*-
@@ -40,7 +40,7 @@ static char copyright[] =
 #if 0
 from: static char sccsid[] = "@(#)pstat.c	8.9 (Berkeley) 2/16/94";
 #else
-static char *rcsid = "$OpenBSD: chl $";
+static char *rcsid = "$OpenBSD: thib $";
 #endif
 #endif /* not lint */
 
@@ -1001,6 +1001,8 @@ filemode(void)
 	static char *dtypes[] = { "???", "inode", "socket" };
 	int mib[2], maxfile, nfile;
 	size_t len;
+
+	globalnl = vnodenl;
 
 	if (kd == 0) {
 		mib[0] = CTL_KERN;

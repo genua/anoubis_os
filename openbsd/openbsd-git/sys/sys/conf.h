@@ -1,4 +1,4 @@
-/*	$OpenBSD: oga $	*/
+/*	$OpenBSD: mbalmer $	*/
 /*	$NetBSD: conf.h,v 1.33 1996/05/03 20:03:32 christos Exp $	*/
 
 /*-
@@ -299,7 +299,14 @@ extern struct cdevsw cdevsw[];
 	0, (dev_type_poll((*))) enodev, (dev_type_mmap((*))) enodev }
 
 /* open, close, read, write, ioctl, poll, kqfilter -- XXX should be generic device */
-#define cdev_bpftun_init(c,n) { \
+#define cdev_tun_init(c,n) { \
+	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
+	dev_init(c,n,write), dev_init(c,n,ioctl), (dev_type_stop((*))) enodev, \
+	0, dev_init(c,n,poll), (dev_type_mmap((*))) enodev, \
+	0, D_KQFILTER, dev_init(c,n,kqfilter) }
+
+/* open, close, read, write, ioctl, poll, kqfilter, cloning -- XXX should be generic device */
+#define cdev_bpf_init(c,n) { \
 	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
 	dev_init(c,n,write), dev_init(c,n,ioctl), (dev_type_stop((*))) enodev, \
 	0, dev_init(c,n,poll), (dev_type_mmap((*))) enodev, \
@@ -443,6 +450,13 @@ void	randomattach(void);
 	(dev_type_stop((*))) enodev, 0, (dev_type_poll((*))) enodev, \
 	(dev_type_mmap((*))) enodev }
 
+/* open, close, ioctl, read, mmap */
+#define cdev_video_init(c,n) { \
+	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
+	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
+	(dev_type_stop((*))) enodev, 0, (dev_type_poll((*))) enodev, \
+	dev_init(c,n,mmap) }
+
 /* open, close, write, ioctl */
 #define cdev_spkr_init(c,n) { \
 	dev_init(c,n,open), dev_init(c,n,close), (dev_type_read((*))) enodev, \
@@ -502,7 +516,14 @@ void	randomattach(void);
 	dev_init(c,n,open), dev_init(c,n,close), dev_init(c,n,read), \
 	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
 	(dev_type_stop((*))) enodev, 0, dev_init(c,n,poll), \
-	dev_init(c,n,mmap), D_TTY }
+	dev_init(c,n,mmap), 0, D_CLONE }
+
+/* open, close, ioctl */
+#define cdev_amdmsr_init(c,n) { \
+	dev_init(c,n,open), dev_init(c,n,close), (dev_type_read((*))) enodev, \
+	(dev_type_write((*))) enodev, dev_init(c,n,ioctl), \
+	(dev_type_stop((*))) enodev, 0, (dev_type_poll((*))) enodev, \
+	(dev_type_mmap((*))) enodev }
 
 /* open, close, read, write, ioctl */
 #define cdev_eventdev_init(c,n) { \
@@ -592,6 +613,7 @@ cdev_decl(audio);
 cdev_decl(midi);
 cdev_decl(sequencer);
 cdev_decl(radio);
+cdev_decl(video);
 cdev_decl(cn);
 
 bdev_decl(sw);
@@ -671,6 +693,7 @@ cdev_decl(urio);
 
 cdev_decl(hotplug);
 cdev_decl(gpio);
+cdev_decl(amdmsr);
 
 cdev_decl(eventdev);
 cdev_decl(anoubis);

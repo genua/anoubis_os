@@ -1,4 +1,4 @@
-/*	$OpenBSD: blambert $	*/
+/*	$OpenBSD: mk $	*/
 /*	$NetBSD: vfs_subr.c,v 1.53 1996/04/22 01:39:13 christos Exp $	*/
 
 /*
@@ -221,30 +221,6 @@ vfs_rootmountalloc(char *fstypename, char *devname, struct mount **mpp)
  }
 
 /*
- * Find an appropriate filesystem to use for the root. If a filesystem
- * has not been preselected, walk through the list of known filesystems
- * trying those that have mountroot routines, and try them until one
- * works or we have tried them all.
- */
-int
-vfs_mountroot(void)
-{
-	struct vfsconf *vfsp;
-	int error;
-
-	if (mountroot != NULL)
-		return ((*mountroot)());
-	for (vfsp = vfsconf; vfsp; vfsp = vfsp->vfc_next) {
-		if (vfsp->vfc_mountroot == NULL)
-			continue;
-		if ((error = (*vfsp->vfc_mountroot)()) == 0)
-			return (0);
-		printf("%s_mountroot failed: %d\n", vfsp->vfc_name, error);
- 	}
-	return (ENODEV);
-}
-
-/*
  * Lookup a mount point by filesystem identifier.
  */
 struct mount *
@@ -371,8 +347,7 @@ getnewvnode(enum vtagtype tag, struct mount *mp, int (**vops)(void *),
 	    ((TAILQ_FIRST(listhd = &vnode_free_list) == NULL) &&
 	    ((TAILQ_FIRST(listhd = &vnode_hold_list) == NULL) || toggle))) {
 		splx(s);
-		vp = pool_get(&vnode_pool, PR_WAITOK);
-		bzero((char *)vp, sizeof *vp);
+		vp = pool_get(&vnode_pool, PR_WAITOK | PR_ZERO);
 		numvnodes++;
 	} else {
 		for (vp = TAILQ_FIRST(listhd); vp != NULLVP;
@@ -1281,7 +1256,6 @@ vfs_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		tmpvfsp = malloc(sizeof(*tmpvfsp), M_TEMP, M_WAITOK);
 		bcopy(vfsp, tmpvfsp, sizeof(*tmpvfsp));
 		tmpvfsp->vfc_vfsops = NULL;
-		tmpvfsp->vfc_mountroot = NULL;
 		tmpvfsp->vfc_next = NULL;
 
 		ret = sysctl_rdstruct(oldp, oldlenp, newp, tmpvfsp,
@@ -1289,8 +1263,12 @@ vfs_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 
 		free(tmpvfsp, M_TEMP);
 		return (ret);
-	}
+	case VFS_BCACHESTAT:	/* buffer cache statistics */
+		ret = sysctl_rdstruct(oldp, oldlenp, newp, &bcstats,
+		    sizeof(struct bcachestats));
+		return(ret);
 
+	}
 	return (EOPNOTSUPP);
 }
 
@@ -1456,7 +1434,7 @@ vfs_hang_addrlist(struct mount *mp, struct netexport *nep,
 		}
 	}
 	rn = (*rnh->rnh_addaddr)((caddr_t)saddr, (caddr_t)smask, rnh,
-		np->netc_rnodes);
+		np->netc_rnodes, 0);
 	if (rn == 0 || np != (struct netcred *)rn) { /* already exists */
 		error = EPERM;
 		goto out;
@@ -1553,14 +1531,19 @@ vfs_export_lookup(struct mount *mp, struct netexport *nep, struct mbuf *nam)
  * while acc_mode and cred are from the VOP_ACCESS parameter list
  */
 int
-vaccess(mode_t file_mode, uid_t uid, gid_t gid, mode_t acc_mode,
-    struct ucred *cred)
+vaccess(enum vtype type, mode_t file_mode, uid_t uid, gid_t gid,
+    mode_t acc_mode, struct ucred *cred)
 {
 	mode_t mask;
 
-	/* User id 0 always gets access. */
-	if (cred->cr_uid == 0)
+	/* User id 0 always gets read/write access. */
+	if (cred->cr_uid == 0) {
+		/* For VEXEC, at least one of the execute bits must be set. */
+		if ((acc_mode & VEXEC) && type != VDIR &&
+		    (file_mode & (S_IXUSR|S_IXGRP|S_IXOTH)) == 0)
+			return EACCES;
 		return 0;
+	}
 
 	mask = 0;
 
@@ -1721,7 +1704,7 @@ vfs_syncwait(int verbose)
 			if (bp->b_flags & B_DELWRI) {
 				s = splbio();
 				bremfree(bp);
-				bp->b_flags |= B_BUSY;
+				buf_acquire(bp);
 				splx(s);
 				nbusy++;
 				bawrite(bp);
@@ -1900,7 +1883,7 @@ loop:
 				break;
 			}
 			bremfree(bp);
-			bp->b_flags |= B_BUSY;
+			buf_acquire(bp);
 			/*
 			 * XXX Since there are no node locks for NFS, I believe
 			 * there is a slight chance that a delayed write will
@@ -1938,7 +1921,7 @@ loop:
 		if ((bp->b_flags & B_DELWRI) == 0)
 			panic("vflushbuf: not dirty");
 		bremfree(bp);
-		bp->b_flags |= B_BUSY;
+		buf_acquire(bp);
 		splx(s);
 		/*
 		 * Wait for I/O associated with indirect blocks to complete,
@@ -2273,19 +2256,22 @@ vfs_mount_print(struct mount *mp, int full, int (*pr)(const char *, ...))
             vfc->vfc_vfsops, vfc->vfc_name, vfc->vfc_typenum,
 	    vfc->vfc_refcount, vfc->vfc_flags);
 
-	(*pr)("statvfs cache: bsize %x iosize %x\nblocks %u free %u avail %u\n",
+	(*pr)("statvfs cache: bsize %x iosize %x\nblocks %llu free %llu avail %lld\n",
 	    mp->mnt_stat.f_bsize, mp->mnt_stat.f_iosize, mp->mnt_stat.f_blocks,
 	    mp->mnt_stat.f_bfree, mp->mnt_stat.f_bavail);
 
-	(*pr)("  files %u ffiles %u\n", mp->mnt_stat.f_files,
-	    mp->mnt_stat.f_ffree);
+	(*pr)("  files %llu ffiles %llu favail $lld\n", mp->mnt_stat.f_files,
+	    mp->mnt_stat.f_ffree, mp->mnt_stat.f_favail);
 
 	(*pr)("  f_fsidx {0x%x, 0x%x} owner %u ctime 0x%x\n",
 	    mp->mnt_stat.f_fsid.val[0], mp->mnt_stat.f_fsid.val[1],
 	    mp->mnt_stat.f_owner, mp->mnt_stat.f_ctime);
 
- 	(*pr)("  syncwrites %lu asyncwrites = %lu\n",
+ 	(*pr)("  syncwrites %llu asyncwrites = %llu\n",
 	    mp->mnt_stat.f_syncwrites, mp->mnt_stat.f_asyncwrites);
+
+ 	(*pr)("  syncreads %llu asyncreads = %llu\n",
+	    mp->mnt_stat.f_syncreads, mp->mnt_stat.f_asyncreads);
 
 	(*pr)("  fstype \"%s\" mnton \"%s\" mntfrom \"%s\"\n",
 	    mp->mnt_stat.f_fstypename, mp->mnt_stat.f_mntonname,
@@ -2314,7 +2300,32 @@ vfs_mount_print(struct mount *mp, int full, int (*pr)(const char *, ...))
 				(*pr)(" %p,\n\t", vp);
 			else
 				(*pr)(" %p,", vp);
-		(*pr)("\n", vp);
+		(*pr)("\n");
 	}
 }
 #endif /* DDB */
+
+void
+copy_statfs_info(struct statfs *sbp, const struct mount *mp)
+{
+	const struct statfs *mbp;
+
+	strncpy(sbp->f_fstypename, mp->mnt_vfc->vfc_name, MFSNAMELEN);
+
+	if (sbp == (mbp = &mp->mnt_stat))
+		return;
+
+	sbp->f_fsid = mbp->f_fsid;
+	sbp->f_owner = mbp->f_owner;
+	sbp->f_flags = mbp->f_flags;
+	sbp->f_syncwrites = mbp->f_syncwrites;
+	sbp->f_asyncwrites = mbp->f_asyncwrites;
+	sbp->f_syncreads = mbp->f_syncreads;
+	sbp->f_asyncreads = mbp->f_asyncreads;
+	sbp->f_namemax = mbp->f_namemax;
+	bcopy(mp->mnt_stat.f_mntonname, sbp->f_mntonname, MNAMELEN);
+	bcopy(mp->mnt_stat.f_mntfromname, sbp->f_mntfromname, MNAMELEN);
+	bcopy(&mp->mnt_stat.mount_info.ufs_args, &sbp->mount_info.ufs_args,
+	    sizeof(struct ufs_args));
+}
+

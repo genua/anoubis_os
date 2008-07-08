@@ -1,4 +1,4 @@
-/*	$OpenBSD: chl $	*/
+/*	$OpenBSD: thib $	*/
 /*	$NetBSD: kern_descrip.c,v 1.42 1996/03/30 22:24:38 christos Exp $	*/
 
 /*
@@ -809,8 +809,7 @@ restart:
 	 * the list of open files.
 	 */
 	nfiles++;
-	fp = pool_get(&file_pool, PR_WAITOK);
-	bzero(fp, sizeof(struct file));
+	fp = pool_get(&file_pool, PR_WAITOK|PR_ZERO);
 	fp->f_iflags = FIF_LARVAL;
 	if ((fq = p->p_fd->fd_ofiles[0]) != NULL) {
 		LIST_INSERT_AFTER(fq, fp, f_list);
@@ -838,8 +837,7 @@ fdinit(struct proc *p)
 	struct filedesc0 *newfdp;
 	extern int cmask;
 
-	newfdp = pool_get(&fdesc_pool, PR_WAITOK);
-	bzero(newfdp, sizeof(struct filedesc0));
+	newfdp = pool_get(&fdesc_pool, PR_WAITOK|PR_ZERO);
 	if (p != NULL) {
 		struct filedesc *fdp = p->p_fd;
 

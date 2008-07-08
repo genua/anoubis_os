@@ -1,4 +1,4 @@
-/*	$OpenBSD: fgsch $	*/
+/*	$OpenBSD: millert $	*/
 /*	$NetBSD: ufs_vnops.c,v 1.18 1996/05/11 18:28:04 mycroft Exp $	*/
 
 /*
@@ -264,7 +264,7 @@ ufs_access(void *v)
 		    ap->a_p);
 		switch (error) {
 		case EOPNOTSUPP:
-			error = vaccess(DIP(ip, mode), DIP(ip, uid),
+			error = vaccess(vp->v_type, DIP(ip, mode), DIP(ip, uid),
 			    DIP(ip, gid), mode, ap->a_cred);
 			break;
 		case 0:
@@ -278,14 +278,14 @@ ufs_access(void *v)
 			 * Fall back until debugged. Should eventually possibly
 			 * log an error, and return EPERM for safety.
 			 */
-			error = vaccess(DIP(ip, mode), DIP(ip, uid),
+			error = vaccess(vp->v_type, DIP(ip, mode), DIP(ip, uid),
 			    DIP(ip, gid), mode, ap->a_cred);
 		}
 		pool_put(&aclpool, acl);
 	} else
 #endif /* FFS2_ACL */
-		error = vaccess(DIP(ip, mode), DIP(ip, uid), DIP(ip, gid),
-		    mode, ap->a_cred);
+		error = vaccess(vp->v_type, DIP(ip, mode), DIP(ip, uid),
+		    DIP(ip, gid), mode, ap->a_cred);
 
 	return (error);
 }

@@ -1,4 +1,4 @@
-/*	$OpenBSD: tedu $	*/
+/*	$OpenBSD: miod $	*/
 /*	$NetBSD: uvm_extern.h,v 1.57 2001/03/09 01:02:12 chs Exp $	*/
 
 /*
@@ -178,14 +178,15 @@ typedef int		vm_prot_t;
 #define UVM_ADV_MASK	0x7	/* mask */
 
 /* mapping flags */
-#define UVM_FLAG_FIXED      0x010000 /* find space */
-#define UVM_FLAG_OVERLAY    0x020000 /* establish overlay */
-#define UVM_FLAG_NOMERGE    0x040000 /* don't merge map entries */
-#define UVM_FLAG_COPYONW    0x080000 /* set copy_on_write flag */
-#define UVM_FLAG_AMAPPAD    0x100000 /* for bss: pad amap to reduce malloc() */
-#define UVM_FLAG_TRYLOCK    0x200000 /* fail if we can not lock map */
-#define UVM_FLAG_DENYWRITE  0x400000 /* Deny writes to the underlying vnode */
-#define UVM_FLAG_WRITECOUNT 0x800000 /* Increment u_writecount on mappings. */
+#define UVM_FLAG_FIXED   0x010000 /* find space */
+#define UVM_FLAG_OVERLAY 0x020000 /* establish overlay */
+#define UVM_FLAG_NOMERGE 0x040000 /* don't merge map entries */
+#define UVM_FLAG_COPYONW 0x080000 /* set copy_on_write flag */
+#define UVM_FLAG_AMAPPAD 0x100000 /* for bss: pad amap to reduce malloc() */
+#define UVM_FLAG_TRYLOCK 0x200000 /* fail if we can not lock map */
+#define	UVM_FLAG_HOLE    0x400000 /* no backend */
+#define UVM_FLAG_DENYWRITE  0x800000 /* Deny writes to the underlying vnode */
+#define UVM_FLAG_WRITECOUNT 0x1000000 /* Increment u_writecount on mappings. */
 
 /* macros to extract info */
 #define UVM_PROTECTION(X)	((X) & UVM_PROT_MASK)
@@ -557,6 +558,7 @@ void			uvm_pagerealloc(struct vm_page *,
 void			uvm_page_physload(paddr_t, paddr_t,
 					       paddr_t, paddr_t, int);
 void			uvm_setpagesize(void);
+void			uvm_shutdown(void);
 
 /* uvm_pager.c */
 void			uvm_aio_biodone1(struct buf *);

@@ -392,7 +392,7 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		if (*oldlenp > sizeof(buf))
 			*oldlenp = sizeof(buf);
 		if (oldp) {
-			arc4random_bytes(buf, *oldlenp);
+			arc4random_buf(buf, *oldlenp);
 			if ((error = copyout(buf, oldp, *oldlenp)))
 				return (error);
 		}
@@ -647,6 +647,12 @@ hw_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 			return (sysctl_rdstring(oldp, oldlenp, newp, hw_uuid));
 		else
 			return (EOPNOTSUPP);
+	case HW_PHYSMEM64:
+		return (sysctl_rdquad(oldp, oldlenp, newp,
+		    ptoa((psize_t)physmem)));
+	case HW_USERMEM64:
+		return (sysctl_rdquad(oldp, oldlenp, newp,
+		    ptoa((psize_t)physmem - uvmexp.wired)));
 	default:
 		return (EOPNOTSUPP);
 	}

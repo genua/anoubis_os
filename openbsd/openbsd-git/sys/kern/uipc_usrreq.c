@@ -1,4 +1,4 @@
-/*	$OpenBSD: tedu $	*/
+/*	$OpenBSD: thib $	*/
 /*	$NetBSD: uipc_usrreq.c,v 1.18 1996/02/09 19:00:50 christos Exp $	*/
 
 /*
@@ -65,12 +65,11 @@ ino_t	unp_ino;			/* prototype for fake inode numbers */
 /*ARGSUSED*/
 int
 uipc_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
-    struct mbuf *control)
+    struct mbuf *control, struct proc *p)
 {
 	struct unpcb *unp = sotounpcb(so);
 	struct socket *so2;
 	int error = 0;
-	struct proc *p = curproc;	/* XXX */
 
 	if (req == PRU_CONTROL)
 		return (EOPNOTSUPP);
@@ -667,29 +666,27 @@ unp_externalize(struct mbuf *rights)
 
 	fdp = malloc(nfds * sizeof(int), M_TEMP, M_WAITOK);
 
-#ifdef notyet
 	/* Make sure the recipient should be able to see the descriptors.. */
-	if (p->p_cwdi->cwdi_rdir != NULL) {
+	if (p->p_fd->fd_rdir != NULL) {
 		rp = (struct file **)CMSG_DATA(cm);
 		for (i = 0; i < nfds; i++) {
 			fp = *rp++;
 			/*
-			 * If we are in a chroot'ed directory, and
-			 * someone wants to pass us a directory, make
-			 * sure it's inside the subtree we're allowed
-			 * to access.
+			 * No to block devices.  If passing a directory,
+			 * make sure that it is underneath the root.
 			 */
 			if (fp->f_type == DTYPE_VNODE) {
 				struct vnode *vp = (struct vnode *)fp->f_data;
-				if ((vp->v_type == VDIR) &&
-				    !vn_isunder(vp, p->p_cwdi->cwdi_rdir, p)) {
+
+				if (vp->v_type == VBLK ||
+				    (vp->v_type == VDIR &&
+				    !vn_isunder(vp, p->p_fd->fd_rdir, p))) {
 					error = EPERM;
 					break;
 				}
 			}
 		}
 	}
-#endif
 
 restart:
 	fdplock(p->p_fd);
@@ -778,8 +775,13 @@ unp_internalize(struct mbuf *control, struct proc *p)
 	int i, error;
 	int nfds, *ip, fd, neededspace;
 
+	/*
+	 * Check for two potential msg_controllen values because
+	 * IETF stuck their nose in a place it does not belong.
+	 */ 
 	if (cm->cmsg_type != SCM_RIGHTS || cm->cmsg_level != SOL_SOCKET ||
-	    cm->cmsg_len != control->m_len)
+	    !(cm->cmsg_len == control->m_len ||
+	    control->m_len == CMSG_ALIGN(cm->cmsg_len)))
 		return (EINVAL);
 	nfds = (cm->cmsg_len - CMSG_ALIGN(sizeof(*cm))) / sizeof (int);
 
@@ -831,8 +833,8 @@ morespace:
 fail:
 	/* Back out what we just did. */
 	for ( ; i > 0; i--) {
-		bcopy(rp, &fp, sizeof(fp));
 		rp++;
+		bcopy(rp, &fp, sizeof(fp));
 		fp->f_count--;
 		fp->f_msgcount--;
 		unp_rights--;

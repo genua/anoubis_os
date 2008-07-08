@@ -1,4 +1,4 @@
-/*	$OpenBSD: otto $	*/
+/*	$OpenBSD: deraadt $	*/
 /*	$NetBSD: ffs_inode.c,v 1.10 1996/05/11 18:27:19 mycroft Exp $	*/
 
 /*
@@ -577,6 +577,8 @@ ffs_indirtrunc(struct inode *ip, daddr64_t lbn, daddr64_t dbn,
 	bp = getblk(vp, lbn, (int)fs->fs_bsize, 0, 0);
 	if (!(bp->b_flags & (B_DONE | B_DELWRI))) {
 		curproc->p_stats->p_ru.ru_inblock++;	/* pay for read */
+		bcstats.pendingreads++;
+		bcstats.numreads++;
 		bp->b_flags |= B_READ;
 		if (bp->b_bcount > bp->b_bufsize)
 			panic("ffs_indirtrunc: bad buffer size");

@@ -444,7 +444,7 @@ marshal(const char *name)
 		break;
 	}
 	/* -S unimplemented */
-	printf("-s %jd ", (intmax_t)afs.fs_size);
+	printf("-s %jd ", (intmax_t)afs.fs_size * (afs.fs_fsize / DEV_BSIZE));
 	printf("%s ", name);
 	printf("\n");
 

@@ -1,4 +1,4 @@
-;	$OpenBSD: miod $
+;	$OpenBSD: otto $
 ;	$NetBSD: syscalls.master,v 1.32 1996/04/23 10:24:21 mycroft Exp $
 
 ;	@(#)syscalls.master	8.2 (Berkeley) 1/13/94
@@ -514,17 +514,17 @@
 #else
 259	UNIMPL
 #endif
-260	STD		{ int sys_getfsstat(struct statfs *buf, size_t bufsize, \
+260	COMPAT_O43	{ int sys_getfsstat(struct o43statfs *buf, size_t bufsize, \
 			    int flags); }
-261	STD		{ int sys_statfs(const char *path, \
-			    struct statfs *buf); }
-262	STD		{ int sys_fstatfs(int fd, struct statfs *buf); }
+261	COMPAT_O43	{ int sys_statfs(const char *path, \
+			    struct o43statfs *buf); }
+262	COMPAT_O43	{ int sys_fstatfs(int fd, struct o43statfs *buf); }
 263	STD		{ int sys_pipe(int *fdp); }
 264	STD		{ int sys_fhopen(const fhandle_t *fhp, int flags); }
 265	COMPAT_35	{ int sys_fhstat(const fhandle_t *fhp, \
 			    struct stat35 *sb); }
-266	STD		{ int sys_fhstatfs(const fhandle_t *fhp, \
-			    struct statfs *buf); }
+266	COMPAT_O43	{ int sys_fhstatfs(const fhandle_t *fhp, \
+			    struct o43statfs *buf); }
 267	STD		{ ssize_t sys_preadv(int fd, \
 			  const struct iovec *iovp, int iovcnt, \
 			  int pad, off_t offset); }
@@ -611,56 +611,59 @@
 304	STD		{ int sys___getcwd(char *buf, size_t len); }
 305	STD		{ int sys_adjfreq(const int64_t *freq, \
 			    int64_t *oldfreq); }
+306	STD		{ int sys_getfsstat(struct statfs *buf, size_t bufsize, \
+			    int flags); }
+307	STD		{ int sys_statfs(const char *path, \
+			    struct statfs *buf); }
+308	STD		{ int sys_fstatfs(int fd, struct statfs *buf); }
+309	STD		{ int sys_fhstatfs(const fhandle_t *fhp, \
+			    struct statfs *buf); }
 #ifdef EXTATTR
-306	STD		{ int sys_extattr_set_fd(int fd, \
+310	STD		{ int sys_extattr_set_fd(int fd, \
 			    int attrnamespace, const char *attrname, \
 			    void *data, size_t nbytes); }
-307	STD		{ ssize_t sys_extattr_get_fd(int fd, \
+311	STD		{ ssize_t sys_extattr_get_fd(int fd, \
 			    int attrnamespace, const char *attrname, \
 			    void *data, size_t nbytes); }
-308	STD		{ int sys_extattr_delete_fd(int fd, \
+312	STD		{ int sys_extattr_delete_fd(int fd, \
 			    int attrnamespace, \
 			    const char *attrname); }
-309	STD		{ int sys_extattr_set_link( \
+313	STD		{ int sys_extattr_set_link( \
 			    const char *path, int attrnamespace, \
 			    const char *attrname, void *data, \
 			    size_t nbytes); }
-310	STD		{ ssize_t sys_extattr_get_link( \
+314	STD		{ ssize_t sys_extattr_get_link( \
 			    const char *path, int attrnamespace, \
 			    const char *attrname, void *data, \
 			    size_t nbytes); }
-311	STD		{ int sys_extattr_delete_link( \
+315	STD		{ int sys_extattr_delete_link( \
 			    const char *path, int attrnamespace, \
 			    const char *attrname); }
-312	STD		{ ssize_t sys_extattr_list_fd(int fd, \
+316	STD		{ ssize_t sys_extattr_list_fd(int fd, \
 			    int attrnamespace, void *data, \
 			    size_t nbytes); }
-313	STD		{ ssize_t sys_extattr_list_file( \
+317	STD		{ ssize_t sys_extattr_list_file( \
 			    const char *path, int attrnamespace, \
 			    void *data, size_t nbytes); }
-314	STD		{ ssize_t sys_extattr_list_link( \
+318	STD		{ ssize_t sys_extattr_list_link( \
 			    const char *path, int attrnamespace, \
 			    void *data, size_t nbytes); }
-315	STD		{ int sys_extattrctl(const char *path, int cmd, \
+319	STD		{ int sys_extattrctl(const char *path, int cmd, \
 			    const char *filename, int attrnamespace, \
 			    const char *attrname); }
-316	STD		{ int sys_extattr_set_file( \
+320	STD		{ int sys_extattr_set_file( \
 			    const char *path, int attrnamespace, \
 			    const char *attrname, void *data, \
 			    size_t nbytes); }
-317	STD		{ ssize_t sys_extattr_get_file( \
+321	STD		{ ssize_t sys_extattr_get_file( \
 			    const char *path, int attrnamespace, \
 			    const char *attrname, void *data, \
 			    size_t nbytes); }
-318	STD		{ int sys_extattr_delete_file( \
+322	STD		{ int sys_extattr_delete_file( \
 			    const char *path, int attrnamespace, \
 			    const char *attrname, void *data, \
 			    size_t nbytes); }
 #else
-306	UNIMPL
-307	UNIMPL
-308	UNIMPL
-309	UNIMPL
 310	UNIMPL
 311	UNIMPL
 312	UNIMPL
@@ -670,37 +673,37 @@
 316	UNIMPL
 317	UNIMPL
 318	UNIMPL
-#endif
-#ifdef ACL
-319	STD		{ int sys___acl_get_file(const char *path, \
-			    acl_type_t type, struct acl *aclp); }
-320	STD		{ int sys___acl_set_file(const char *path, \
-			    acl_type_t type, struct acl *aclp); }
-321	STD		{ int sys___acl_get_fd(int filedes, acl_type_t type, \
-			    struct acl *aclp); }
-322	STD		{ int sys___acl_set_fd(int filedes, acl_type_t type, \
-			    struct acl *aclp); }
-323	STD		{ int sys___acl_delete_file(const char *path, \
-			    acl_type_t type); }
-324	STD		{ int sys___acl_delete_fd(int filedes, \
-			    acl_type_t type); }
-325	STD		{ int sys___acl_aclcheck_file(const char *path, \
-			    acl_type_t type, struct acl *aclp); }
-326	STD		{ int sys___acl_aclcheck_fd(int filedes, \
-			    acl_type_t type, struct acl *aclp); }
-327	STD		{ int sys___acl_get_link(const char *path, \
-			    acl_type_t type, struct acl *aclp); }
-328	STD		{ int sys___acl_set_link(const char *path, \
-			    acl_type_t type, struct acl *aclp); }
-329	STD		{ int sys___acl_delete_link(const char *path, \
-			    acl_type_t type); }
-330	STD		{ int sys___acl_aclcheck_link(const char *path, \
-			    acl_type_t type, struct acl *aclp); }
-#else
 319	UNIMPL
 320	UNIMPL
 321	UNIMPL
 322	UNIMPL
+#endif
+#ifdef ACL
+323	STD		{ int sys___acl_get_file(const char *path, \
+			    acl_type_t type, struct acl *aclp); }
+324	STD		{ int sys___acl_set_file(const char *path, \
+			    acl_type_t type, struct acl *aclp); }
+325	STD		{ int sys___acl_get_fd(int filedes, acl_type_t type, \
+			    struct acl *aclp); }
+326	STD		{ int sys___acl_set_fd(int filedes, acl_type_t type, \
+			    struct acl *aclp); }
+327	STD		{ int sys___acl_delete_file(const char *path, \
+			    acl_type_t type); }
+328	STD		{ int sys___acl_delete_fd(int filedes, \
+			    acl_type_t type); }
+329	STD		{ int sys___acl_aclcheck_file(const char *path, \
+			    acl_type_t type, struct acl *aclp); }
+330	STD		{ int sys___acl_aclcheck_fd(int filedes, \
+			    acl_type_t type, struct acl *aclp); }
+331	STD		{ int sys___acl_get_link(const char *path, \
+			    acl_type_t type, struct acl *aclp); }
+332	STD		{ int sys___acl_set_link(const char *path, \
+			    acl_type_t type, struct acl *aclp); }
+333	STD		{ int sys___acl_delete_link(const char *path, \
+			    acl_type_t type); }
+334	STD		{ int sys___acl_aclcheck_link(const char *path, \
+			    acl_type_t type, struct acl *aclp); }
+#else
 323	UNIMPL
 324	UNIMPL
 325	UNIMPL
@@ -709,4 +712,9 @@
 328	UNIMPL
 329	UNIMPL
 330	UNIMPL
+331	UNIMPL
+332	UNIMPL
+333	UNIMPL
+334	UNIMPL
 #endif
+; NUMBER OF SYSCALLS: 334

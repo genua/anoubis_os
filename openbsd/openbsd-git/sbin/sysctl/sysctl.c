@@ -1,4 +1,4 @@
-/*	$OpenBSD: deraadt $	*/
+/*	$OpenBSD: norby $	*/
 /*	$NetBSD: sysctl.c,v 1.9 1995/09/30 07:12:50 thorpej Exp $	*/
 
 /*
@@ -40,7 +40,7 @@ static const char copyright[] =
 #if 0
 static const char sccsid[] = "@(#)sysctl.c	8.5 (Berkeley) 5/9/95";
 #else
-static const char rcsid[] = "$OpenBSD: deraadt $";
+static const char rcsid[] = "$OpenBSD: norby $";
 #endif
 #endif /* not lint */
 
@@ -92,6 +92,8 @@ static const char rcsid[] = "$OpenBSD: deraadt $";
 #include <netinet6/ip6_var.h>
 #include <netinet6/pim6_var.h>
 #endif
+
+#include <netmpls/mpls.h>
 
 #include <uvm/uvm_swap_encrypt.h>
 
@@ -211,6 +213,7 @@ int sysctl_inet(char *, char **, int *, int, int *);
 int sysctl_inet6(char *, char **, int *, int, int *);
 #endif
 int sysctl_bpf(char *, char **, int *, int, int *);
+int sysctl_mpls(char *, char **, int *, int, int *);
 int sysctl_fs(char *, char **, int *, int, int *);
 static int sysctl_vfs(char *, char **, int[], int, int *);
 static int sysctl_vfsgen(char *, char **, int[], int, int *);
@@ -484,8 +487,11 @@ parse(char *string, int flags)
 			break;
 		case HW_PHYSMEM:
 		case HW_USERMEM:
-			special |= UNSIGNED;
-			break;
+			/*
+			 * Don't print these; we'll print the 64-bit
+			 * variants instead.
+			 */
+			return;
 		}
 		break;
 
@@ -589,6 +595,12 @@ parse(char *string, int flags)
 #endif
 		if (mib[1] == PF_BPF) {
 			len = sysctl_bpf(string, &bufp, mib, flags, &type);
+			if (len < 0)
+				return;
+			break;
+		}
+		if (mib[1] == PF_MPLS) {
+			len = sysctl_mpls(string, &bufp, mib, flags, &type);
 			if (len < 0)
 				return;
 			break;
@@ -2070,6 +2082,41 @@ sysctl_bpf(char *string, char **bufpp, int mib[], int flags, int *typep)
 	return (3);
 }
 
+struct ctlname mplsname[] = MPLSCTL_NAMES;
+struct list mplslist = { mplsname, MPLSCTL_MAXID };
+
+/* handle MPLS requests */
+int
+sysctl_mpls(char *string, char **bufpp, int mib[], int flags, int *typep)
+{
+	struct list *lp;
+	int indx;
+
+	if (*bufpp == NULL) {
+		listall(string, &mplslist);
+		return (-1);
+	}
+	if ((indx = findname(string, "third", bufpp, &mplslist)) == -1)
+		return (-1);
+	mib[2] = indx;
+	*typep = mplslist.list[indx].ctl_type;
+	if (*typep == CTLTYPE_NODE) {
+		int tindx;
+
+		if (*bufpp == NULL) {
+			listall(string, &ifqlist);
+			return(-1);
+		}
+		lp = &ifqlist;
+		if ((tindx = findname(string, "fourth", bufpp, lp)) == -1)
+			return (-1);
+		mib[3] = tindx;
+		*typep = lp->list[tindx].ctl_type;
+		return(4);
+	}
+	return (3);
+}
+
 /*
  * Handle SysV semaphore info requests
  */
@@ -2709,8 +2756,9 @@ void
 usage(void)
 {
 
-	(void)fprintf(stderr, "usage:\t%s\n\t%s\n\t%s\n",
-	    "sysctl [-n] name ...", "sysctl [-nq] name=value ...",
-	    "sysctl [-Aan]");
+	(void)fprintf(stderr,
+	    "usage: sysctl [-Aan]\n"
+	    "       sysctl [-n] name ...\n"
+	    "       sysctl [-nq] name=value ...\n");
 	exit(1);
 }

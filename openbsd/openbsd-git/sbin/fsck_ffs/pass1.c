@@ -149,7 +149,7 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 				inodirty();
 			}
 		}
-		statemap[inumber] = USTATE;
+		SET_ISTATE(inumber, USTATE);
 		return;
 	}
 	lastino = inumber;
@@ -261,13 +261,13 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	}
 	if (mode == IFDIR) {
 		if (DIP(dp, di_size) == 0)
-			statemap[inumber] = DCLEAR;
+			SET_ISTATE(inumber, DCLEAR);
 		else
-			statemap[inumber] = DSTATE;
+			SET_ISTATE(inumber, DSTATE);
 		cacheino(dp, inumber);
 	} else
-		statemap[inumber] = FSTATE;
-	typemap[inumber] = IFTODT(mode);
+		SET_ISTATE(inumber, FSTATE);
+	SET_ITYPE(inumber, IFTODT(mode));
 	if (sblock.fs_magic == FS_UFS1_MAGIC && doinglevel2 &&
 	   (dp->dp1.di_ouid != (u_short)-1 ||
 	    dp->dp1.di_ogid != (u_short)-1)) {
@@ -313,9 +313,9 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	return;
 unknown:
 	pfatal("UNKNOWN FILE TYPE I=%u", inumber);
-	statemap[inumber] = FCLEAR;
+	SET_ISTATE(inumber, FCLEAR);
 	if (reply("CLEAR") == 1) {
-		statemap[inumber] = USTATE;
+		SET_ISTATE(inumber, USTATE);
 		dp = ginode(inumber);
 		clearinode(dp);
 		inodirty();

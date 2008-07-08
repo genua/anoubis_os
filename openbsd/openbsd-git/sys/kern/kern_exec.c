@@ -426,6 +426,9 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	sgap = STACKGAPLEN;
 	if (stackgap_random != 0)
 		sgap += (arc4random() * ALIGNBYTES) & (stackgap_random - 1);
+#ifdef MACHINE_STACK_GROWS_UP
+	sgap = ALIGN(sgap);
+#endif
 	/* Now check if args & environ fit into new stack */
 	len = ((argc + envc + 2 + pack.ep_emul->e_arglen) * sizeof(char *) +
 	    sizeof(long) + dp + sgap + sizeof(struct ps_strings)) - argp;
@@ -473,8 +476,8 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	arginfo.ps_nenvstr = envc;
 
 #ifdef MACHINE_STACK_GROWS_UP
-	stack = (char *)USRSTACK + sizeof(arginfo) + ALIGN(sgap);
-	slen = len - sizeof(arginfo) - ALIGN(sgap);
+	stack = (char *)USRSTACK + sizeof(arginfo) + sgap;
+	slen = len - sizeof(arginfo) - sgap;
 #else
 	stack = (char *)(USRSTACK - len);
 #endif
