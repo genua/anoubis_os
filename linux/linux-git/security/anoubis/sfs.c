@@ -37,6 +37,7 @@
 #include <linux/crypto.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/gfp.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/mman.h>
@@ -238,33 +239,6 @@ static void sfs_file_free_security(struct file * file)
 	kfree(sec);
 }
 
-/*
- * Actor function for do_generic_file_read. This function will be
- * called once for each chunk of the file and add that chunk to the
- * digest.
- */
-static int chksum_actor(read_descriptor_t * rdesc, struct page * page,
-			unsigned long off, unsigned long count)
-{
-	struct scatterlist sg[1];
-	struct hash_desc * cdesc = rdesc->arg.data;
-	int err;
-
-	if (count > rdesc->count) {
-		rdesc->error = -EIO;
-		return 0;
-	}
-	sg_set_page(sg, page, count, off);
-	err = crypto_hash_update(cdesc, sg, count);
-	if (err) {
-		rdesc->error = err;
-		return 0;
-	}
-	rdesc->count -= count;
-	rdesc->written += count;
-	return count;
-}
-
 static inline int csum_uptodate(struct sfs_inode_sec * sec)
 {
 	int uptodate;
@@ -286,9 +260,10 @@ static int sfs_do_csum(struct file * file, struct inode * inode,
 {
 	struct hash_desc cdesc;
 	loff_t size, pos = 0;
-	read_descriptor_t rdesc;
 	u8 csum[ANOUBIS_SFS_CS_LEN];
 	int err;
+	mm_segment_t oldfs;
+	struct page * p;
 
 	BUG_ON(!sec);
 	err = anoubis_deny_write_access(inode);
@@ -299,11 +274,10 @@ static int sfs_do_csum(struct file * file, struct inode * inode,
 		return 0;
 	}
 	sfs_stat_csum_recalc++;
+	p = alloc_page(GFP_KERNEL);
+	if (!p)
+		goto out_allow_write;
 	size = i_size_read(inode);
-	rdesc.written = 0;
-	rdesc.arg.data = &cdesc;
-	rdesc.count = size;
-	rdesc.error = 0;
 	cdesc.flags = CRYPTO_TFM_REQ_MAY_SLEEP;
 	cdesc.tfm = crypto_alloc_hash("sha256", 0, CRYPTO_ALG_ASYNC);
 	if (IS_ERR(cdesc.tfm)) {
@@ -313,17 +287,33 @@ static int sfs_do_csum(struct file * file, struct inode * inode,
 	err = crypto_hash_init(&cdesc);
 	if (err)
 		goto out;
-	do_generic_file_read(file, &pos, &rdesc, &chksum_actor);
-	err = rdesc.error;
-	if (err)
-		goto out;
-	err = -EIO;
-	if (rdesc.written != size)
-		goto out;
+	oldfs = get_fs();
+	set_fs(get_ds());
+	while(pos < size) {
+		ssize_t ret;
+		int count = PAGE_SIZE;
+		struct scatterlist sg[1];
+
+		if (size - pos < count)
+			count = size - pos;
+		ret = vfs_read(file, page_address(p), count, &pos);
+		if (ret != count) {
+			err = EIO;
+			set_fs(oldfs);
+			goto out;
+		}
+		sg_set_page(sg, p, count, 0);
+		err = crypto_hash_update(&cdesc, sg, count);
+		if (err) {
+			err = EIO;
+			set_fs(oldfs);
+			goto out;
+		}
+	}
+	set_fs(oldfs);
 	err = crypto_hash_final(&cdesc, csum);
 	if (err)
 		goto out;
-
 	spin_lock(&sec->lock);
 	memcpy(&sec->hash, csum, ANOUBIS_SFS_CS_LEN);
 	sec->sfsmask |= SFS_CS_UPTODATE;
@@ -333,6 +323,8 @@ out:
 	crypto_free_hash(cdesc.tfm);
 out_allow_write:
 	anoubis_allow_write_access(inode);
+	if (p)
+		__free_page(p);
 	return err;
 }
 
@@ -663,8 +655,8 @@ static int sfs_inode_permission(struct inode * inode,
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
-	if (nd && nd->dentry)
-		sfs_read_syssig(nd->dentry);
+	if (nd && nd->path.dentry)
+		sfs_read_syssig(nd->path.dentry);
 	spin_lock(&sec->lock);
 	syssig = (sec->sfsmask & SFS_HAS_SYSSIG);
 	if (syssig && (sec->sfsmask & SFS_CS_UPTODATE) &&
@@ -677,7 +669,8 @@ static int sfs_inode_permission(struct inode * inode,
 		return -EACCES;
 	if (!nd)
 		return sfs_open_checks(NULL, NULL, NULL, inode, mask, 0);
-	return sfs_open_checks(NULL, nd->mnt, nd->dentry, inode, mask, 0);
+	return sfs_open_checks(NULL, nd->path.mnt, nd->path.dentry, inode,
+	    mask, 0);
 }
 
 /*
@@ -774,6 +767,11 @@ static int sfs_file_permission(struct file * file, int mask)
 	struct sfs_inode_sec * sec;
 	int err = 0;
 
+	if ((mask & (MAY_WRITE|MAY_APPEND)) == 0) {
+		/* If the data is only copied to the kernel allow it. */
+		if (segment_eq(get_fs(), get_ds()))
+			return 0;
+	}
 	if (!checksum_ok(inode))
 		return 0;
 	sec = sfs_late_inode_alloc_security(inode);
@@ -871,15 +869,15 @@ static int sfs_bprm_set_security(struct linux_binprm * bprm)
  * Deny access to the syssig security attribute while the SFS module
  * is loaded.
  */
-static int sfs_inode_setxattr(struct dentry * dentry, char * name,
-    void * value, size_t size, int flags)
+static int sfs_inode_setxattr(struct dentry * dentry, const char * name,
+    const void * value, size_t size, int flags)
 {
 	if (strcmp(name, XATTR_ANOUBIS_SYSSIG) == 0)
 		return -EPERM;
 	return 0;
 }
 
-static int sfs_inode_removexattr(struct dentry *dentry, char *name)
+static int sfs_inode_removexattr(struct dentry *dentry, const char *name)
 {
 	if (strcmp(name, XATTR_ANOUBIS_SYSSIG) == 0)
 		return -EPERM;

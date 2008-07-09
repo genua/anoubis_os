@@ -95,10 +95,10 @@ static int eventdevtest_inode_permission (struct inode * inode, int mask,
 	int xattr, err;
 	struct eventdevtest_event * buf;
 
-	if (!nd || !nd->dentry || !nd->dentry->d_inode)
+	if (!nd || !nd->path.dentry || !nd->path.dentry->d_inode)
 		return 0;
-	BUG_ON(nd->dentry->d_inode != inode);
-	xattr = lookup_xattr(nd->dentry);
+	BUG_ON(nd->path.dentry->d_inode != inode);
+	xattr = lookup_xattr(nd->path.dentry);
 	if (xattr == EVENT_NONE)
 		return 0;
 	buf = kmalloc(sizeof(struct eventdevtest_event), GFP_KERNEL);
