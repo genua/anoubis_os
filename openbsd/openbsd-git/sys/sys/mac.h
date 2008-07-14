@@ -1,4 +1,4 @@
-/*	$Id: 3a62bf,v 1.3 2008/07/08 08:43:57 ehrhardt Exp $	*/
+/*	$Id:$	*/
 /*-
  * Copyright (c) 1999-2002 Robert N. M. Watson
  * Copyright (c) 2001-2005 Networks Associates Technology, Inc.
