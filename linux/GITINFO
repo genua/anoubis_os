@@ -1,13 +1,8 @@
-ANOUBISTREE: a26863153655b9cdc305b510aff891bbb550e2b3
-REFERENCECOMMIT: e1441b9a41c33aa9236008a7cfe49a8e723fb397
-tree 87053114a75777dfdc6a81de97ae43fc55991ad8
-parent 70c85057e0bde35eb56352a293ecb5d1641a0334
-parent 656acd2bbc4ce7f224de499ee255698701396c48
-author Linus Torvalds <torvalds@linux-foundation.org> 1214841489 -0700
-committer Linus Torvalds <torvalds@linux-foundation.org> 1214841489 -0700
+ANOUBISTREE: 39ccc3052b881b38fbdb04c984b7dbf93c05d0be
+REFERENCECOMMIT: bce7f793daec3e65ec5c5705d2457b81fe7b5725
+tree 05bc81f9b27a1ab60ea4e506357f0c7f2ece4eda
+parent ec229e830060091b9be63c8f873c1b2407a82821
+author Linus Torvalds <torvalds@linux-foundation.org> 1215985889 -0700
+committer Linus Torvalds <torvalds@linux-foundation.org> 1215985889 -0700
 
-Merge branch 'for-linus' of git://git.kernel.org/pub/scm/linux/kernel/git/dtor/input
-
-* 'for-linus' of git://git.kernel.org/pub/scm/linux/kernel/git/dtor/input:
-  Input: fix locking in force-feedback core
-  Input: add KEY_MEDIA_REPEAT definition
+Linux 2.6.26
