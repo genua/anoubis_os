@@ -554,13 +554,13 @@ anoubis_alf_getstats(struct anoubis_internal_stat_value ** val, int * cnt)
 struct mac_policy_ops mac_anoubis_alf_ops =
 {
 	.mpo_init = mac_anoubis_alf_init,
-	.mpo_check_socket_connect = mac_anoubis_alf_check_socket_connect,
-	.mpo_check_socket_accepted = mac_anoubis_alf_check_socket_accepted,
-	.mpo_check_socket_send = mac_anoubis_alf_check_socket_send,
-	.mpo_check_socket_receive = mac_anoubis_alf_check_socket_receive,
-	.mpo_check_socket_soreceive = mac_anoubis_alf_check_socket_soreceive,
-	.mpo_init_socket_label = mac_anoubis_alf_init_socket_label,
-	.mpo_destroy_socket_label = mac_anoubis_alf_destroy_socket_label
+	.mpo_socket_check_connect = mac_anoubis_alf_check_socket_connect,
+	.mpo_socket_check_accepted = mac_anoubis_alf_check_socket_accepted,
+	.mpo_socket_check_send = mac_anoubis_alf_check_socket_send,
+	.mpo_socket_check_receive = mac_anoubis_alf_check_socket_receive,
+	.mpo_socket_check_soreceive = mac_anoubis_alf_check_socket_soreceive,
+	.mpo_socket_init_label = mac_anoubis_alf_init_socket_label,
+	.mpo_socket_destroy_label = mac_anoubis_alf_destroy_socket_label
 
 };
 

@@ -171,7 +171,7 @@ sonewconn(struct socket *head, int connstatus)
 		return ((struct socket *)0);
 	bzero(so, sizeof(*so));
 #ifdef MAC
-	if (mac_init_socket(so, PR_NOWAIT) != 0) {
+	if (mac_socket_init(so, PR_NOWAIT) != 0) {
 		pool_put(&socket_pool, so);
 		return (NULL);
 	}
@@ -191,7 +191,7 @@ sonewconn(struct socket *head, int connstatus)
 	so->so_siguid = head->so_siguid;
 	so->so_sigeuid = head->so_sigeuid;
 #ifdef MAC
-	mac_create_socket_from_socket(head, so);
+	mac_socket_newconn(head, so);
 #endif
 
 	/*

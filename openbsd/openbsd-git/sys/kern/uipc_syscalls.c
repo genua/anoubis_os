@@ -77,7 +77,7 @@ sys_socket(struct proc *p, void *v, register_t *retval)
 	int fd, error;
 
 #ifdef MAC
-	error = mac_check_socket_create(p->p_ucred, SCARG(uap, domain),
+	error = mac_socket_check_create(p->p_ucred, SCARG(uap, domain),
 	    SCARG(uap, type), SCARG(uap, protocol));
 	if (error)
 		return (error);
@@ -121,7 +121,7 @@ sys_bind(struct proc *p, void *v, register_t *retval)
 	if ((error = getsock(p->p_fd, SCARG(uap, s), &fp)) != 0)
 		return (error);
 #ifdef MAC
-	error = mac_check_socket_bind(p->p_ucred, fp->f_data, SCARG(uap, name));
+	error = mac_socket_check_bind(p->p_ucred, fp->f_data, SCARG(uap, name));
 	if (error)
 		goto done;
 #endif
@@ -152,7 +152,7 @@ sys_listen(struct proc *p, void *v, register_t *retval)
 	if ((error = getsock(p->p_fd, SCARG(uap, s), &fp)) != 0)
 		return (error);
 #ifdef MAC
-	error = mac_check_socket_listen(p->p_ucred, fp->f_data);
+	error = mac_socket_check_listen(p->p_ucred, fp->f_data);
 	if (error)
 		goto done;
 #endif
@@ -192,7 +192,7 @@ sys_accept(struct proc *p, void *v, register_t *retval)
 		goto bad;
 	}
 #ifdef MAC
-	error = mac_check_socket_accept(p->p_ucred, head);
+	error = mac_socket_check_accept(p->p_ucred, head);
 	if (error != 0)
 		goto bad;
 #endif
@@ -261,7 +261,7 @@ sys_accept(struct proc *p, void *v, register_t *retval)
 	error = soaccept(so, nam);
 #ifdef MAC
 	if (!error)
-		error = mac_check_socket_accepted(p->p_ucred, so, nam);
+		error = mac_socket_check_accepted(p->p_ucred, so, nam);
 #endif
 	if (!error && SCARG(uap, name)) {
 		if (namelen > nam->m_len)
@@ -309,7 +309,7 @@ sys_connect(struct proc *p, void *v, register_t *retval)
 		return (EALREADY);
 	}
 #ifdef MAC
-	error = mac_check_socket_connect(p->p_ucred, so, SCARG(uap, name));
+	error = mac_socket_check_connect(p->p_ucred, so, SCARG(uap, name));
 	if (error)
 		goto bad;
 #endif
@@ -362,7 +362,7 @@ sys_socketpair(struct proc *p, void *v, register_t *retval)
 	int fd, error, sv[2];
 
 #ifdef MAC
-	error = mac_check_socket_create(p->p_ucred, SCARG(uap, domain),
+	error = mac_socket_check_create(p->p_ucred, SCARG(uap, domain),
 	    SCARG(uap, type), SCARG(uap, protocol));
 	if (error)
 		return (error);
@@ -510,7 +510,7 @@ sendit(struct proc *p, int s, struct msghdr *mp, int flags, register_t *retsize)
 		return (error);
 
 #ifdef MAC
-	error = mac_check_socket_send(p->p_ucred, fp->f_data);
+	error = mac_socket_check_send(p->p_ucred, fp->f_data);
 	if (error)
 		goto bad;
 #endif
@@ -695,7 +695,7 @@ recvit(struct proc *p, int s, struct msghdr *mp, caddr_t namelenp,
 	if ((error = getsock(p->p_fd, s, &fp)) != 0)
 		return (error);
 #ifdef MAC
-	error = mac_check_socket_receive(p->p_ucred, fp->f_data);
+	error = mac_socket_check_receive(p->p_ucred, fp->f_data);
 	if (error)
 		goto out;
 #endif

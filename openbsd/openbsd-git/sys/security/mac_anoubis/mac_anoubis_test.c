@@ -105,7 +105,7 @@ mac_anoubis_test_vnode_open(struct ucred *cred, struct vnode *vp,
 struct mac_policy_ops mac_anoubis_test_ops =
 {
 	.mpo_init = &mac_anoubis_test_init,
-	.mpo_check_vnode_open = &mac_anoubis_test_vnode_open,
+	.mpo_vnode_check_open = &mac_anoubis_test_vnode_open,
 };
 
 MAC_POLICY_SET(&mac_anoubis_test_ops, mac_anoubis_test, "Anoubis Test",

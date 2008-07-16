@@ -109,7 +109,7 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	s = splsoftnet();
 	so = pool_get(&socket_pool, PR_WAITOK | PR_ZERO);
 #ifdef MAC
-	if ((error = mac_init_socket(so, PR_WAITOK)) != 0) {
+	if ((error = mac_socket_init(so, PR_WAITOK)) != 0) {
 		pool_put(&socket_pool, so);
 		splx(s);
 		return (error);
@@ -127,7 +127,7 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	so->so_cpid = p->p_pid;
 	so->so_proto = prp;
 #ifdef MAC
-	mac_create_socket(p->p_ucred, so);
+	mac_socket_create(p->p_ucred, so);
 #endif
 	error = (*prp->pr_usrreq)(so, PRU_ATTACH, NULL,
 	    (struct mbuf *)(long)proto, NULL, p);
@@ -205,7 +205,7 @@ sofree(struct socket *so)
 	sbrelease(&so->so_snd);
 	sorflush(so);
 #ifdef MAC
-	mac_destroy_socket(so);
+	mac_socket_destroy(so);
 #endif
 	pool_put(&socket_pool, so);
 }
@@ -688,7 +688,7 @@ dontblock:
 #endif
 #ifdef MAC
 		splx(s);
-		error = mac_check_socket_soreceive(so, m);
+		error = mac_socket_check_soreceive(so, m);
 		s = splsoftnet();
 		nextrecord = m->m_nextpkt;
 

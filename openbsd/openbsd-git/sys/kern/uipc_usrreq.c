@@ -433,7 +433,7 @@ unp_bind(struct unpcb *unp, struct mbuf *nam, struct proc *p)
 	vattr.va_type = VSOCK;
 	vattr.va_mode = ACCESSPERMS &~ p->p_fd->fd_cmask;
 #ifdef MAC
-	error = mac_check_vnode_create(p->p_ucred, nd.ni_dvp, &nd.ni_cnd,
+	error = mac_vnode_check_create(p->p_ucred, nd.ni_dvp, &nd.ni_cnd,
 	    &vattr);
 	if (error)
 		goto abort;
@@ -496,12 +496,12 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 	}
 #ifdef MAC
 #ifdef ANOUBIS
-	error = mac_check_vnode_open(p->p_ucred, vp, VWRITE | VREAD,
+	error = mac_vnode_check_open(p->p_ucred, vp, VWRITE | VREAD,
 	    nd.ni_dvp, &nd.ni_cnd);
 	vrele(nd.ni_dvp);
 	pool_put(&namei_pool, nd.ni_cnd.cn_pnbuf);
 #else
-	error = mac_check_vnode_open(p->p_ucred, vp, VWRITE | VREAD);
+	error = mac_vnode_check_open(p->p_ucred, vp, VWRITE | VREAD);
 #endif
 	if (error)
 		goto bad;

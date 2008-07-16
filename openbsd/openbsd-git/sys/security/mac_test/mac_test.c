@@ -398,7 +398,7 @@ mac_test_check_socket_stat(struct ucred *cred, struct socket *so,
 static struct mac_policy_ops mac_test_ops =
 {
 	.mpo_init = mac_test_init,
-	.mpo_init_bpfdesc_label = mac_test_init_bpfdesc_label,
+	.mpo_bpfdesc_init_label = mac_test_init_bpfdesc_label,
 #if 0	/* XXX HSH: not yet */
 	.mpo_init_cred_label = mac_test_init_cred_label,
 	.mpo_init_devfs_label = mac_test_init_devfs_label,
@@ -415,12 +415,12 @@ static struct mac_policy_ops mac_test_ops =
 	.mpo_init_posix_sem_label = mac_test_init_posix_sem_label,
 	.mpo_init_proc_label = mac_test_init_proc_label,
 #endif	/* 0 */
-	.mpo_init_socket_label = mac_test_init_socket_label,
-	.mpo_init_socket_peer_label = mac_test_init_socket_peer_label,
+	.mpo_socket_init_label = mac_test_init_socket_label,
+	.mpo_socketpeer_init_label = mac_test_init_socket_peer_label,
 #if 0	/* XXX HSH: not yet */
 	.mpo_init_vnode_label = mac_test_init_vnode_label,
 #endif
-	.mpo_destroy_bpfdesc_label = mac_test_destroy_bpfdesc_label,
+	.mpo_bpfdesc_destroy_label = mac_test_destroy_bpfdesc_label,
 #if 0	/* XXX HSH: not yet */
 	.mpo_destroy_cred_label = mac_test_destroy_cred_label,
 	.mpo_destroy_devfs_label = mac_test_destroy_devfs_label,
@@ -438,8 +438,8 @@ static struct mac_policy_ops mac_test_ops =
 	.mpo_destroy_posix_sem_label = mac_test_destroy_posix_sem_label,
 	.mpo_destroy_proc_label = mac_test_destroy_proc_label,
 #endif	/* 0 */
-	.mpo_destroy_socket_label = mac_test_destroy_socket_label,
-	.mpo_destroy_socket_peer_label = mac_test_destroy_socket_peer_label,
+	.mpo_socket_destroy_label = mac_test_destroy_socket_label,
+	.mpo_socketpeer_destroy_label = mac_test_destroy_socket_peer_label,
 #if 0	/* XXX HSH: not yet */
 	.mpo_destroy_vnode_label = mac_test_destroy_vnode_label,
 	.mpo_copy_cred_label = mac_test_copy_cred_label,
@@ -474,15 +474,15 @@ static struct mac_policy_ops mac_test_ops =
 	.mpo_create_pipe = mac_test_create_pipe,
 	.mpo_create_posix_sem = mac_test_create_posix_sem,
 #endif	/* 0 */
-	.mpo_create_socket = mac_test_create_socket,
-	.mpo_create_socket_from_socket = mac_test_create_socket_from_socket,
+	.mpo_socket_create = mac_test_create_socket,
+	.mpo_socket_newconn = mac_test_create_socket_from_socket,
 #if 0	/* XXX HSH: not yet */
 	.mpo_relabel_pipe = mac_test_relabel_pipe,
 	.mpo_relabel_socket = mac_test_relabel_socket,
 	.mpo_set_socket_peer_from_mbuf = mac_test_set_socket_peer_from_mbuf,
 	.mpo_set_socket_peer_from_socket = mac_test_set_socket_peer_from_socket,
 #endif
-	.mpo_create_bpfdesc = mac_test_create_bpfdesc,
+	.mpo_bpfdesc_create = mac_test_create_bpfdesc,
 #if 0	/* XXX HSH: not yet */
 	.mpo_create_ifnet = mac_test_create_ifnet,
 	.mpo_create_inpcb_from_socket = mac_test_create_inpcb_from_socket,
@@ -496,7 +496,7 @@ static struct mac_policy_ops mac_test_ops =
 	.mpo_create_mbuf_from_inpcb = mac_test_create_mbuf_from_inpcb,
 	.mpo_create_mbuf_linklayer = mac_test_create_mbuf_linklayer,
 #endif	/* 0 */
-	.mpo_create_mbuf_from_bpfdesc = mac_test_create_mbuf_from_bpfdesc,
+	.mpo_bpfdesc_create_mbuf = mac_test_create_mbuf_from_bpfdesc,
 #if 0	/* XXX HSH: not yet */
 	.mpo_create_mbuf_from_ifnet = mac_test_create_mbuf_from_ifnet,
 	.mpo_create_mbuf_multicast_encap = mac_test_create_mbuf_multicast_encap,
@@ -518,7 +518,7 @@ static struct mac_policy_ops mac_test_ops =
 	.mpo_cleanup_sysv_sem = mac_test_cleanup_sysv_sem,
 	.mpo_cleanup_sysv_shm = mac_test_cleanup_sysv_shm,
 #endif	/* 0 */
-	.mpo_check_bpfdesc_receive = mac_test_check_bpfdesc_receive,
+	.mpo_bpfdesc_check_receive = mac_test_check_bpfdesc_receive,
 #if 0	/* XXX HSH: not yet */
 	.mpo_check_cred_relabel = mac_test_check_cred_relabel,
 	.mpo_check_cred_visible = mac_test_check_cred_visible,
@@ -575,21 +575,21 @@ static struct mac_policy_ops mac_test_ops =
 	.mpo_check_proc_signal = mac_test_check_proc_signal,
 	.mpo_check_proc_wait = mac_test_check_proc_wait,
 #endif	/* 0 */
-	.mpo_check_socket_accept = mac_test_check_socket_accept,
-	.mpo_check_socket_accepted = mac_test_check_socket_accepted,
-	.mpo_check_socket_bind = mac_test_check_socket_bind,
-	.mpo_check_socket_connect = mac_test_check_socket_connect,
-	.mpo_check_socket_deliver = mac_test_check_socket_deliver,
-	.mpo_check_socket_listen = mac_test_check_socket_listen,
-	.mpo_check_socket_poll = mac_test_check_socket_poll,
-	.mpo_check_socket_receive = mac_test_check_socket_receive,
+	.mpo_socket_check_accept = mac_test_check_socket_accept,
+	.mpo_socket_check_accepted = mac_test_check_socket_accepted,
+	.mpo_socket_check_bind = mac_test_check_socket_bind,
+	.mpo_socket_check_connect = mac_test_check_socket_connect,
+	.mpo_socket_check_deliver = mac_test_check_socket_deliver,
+	.mpo_socket_check_listen = mac_test_check_socket_listen,
+	.mpo_socket_check_poll = mac_test_check_socket_poll,
+	.mpo_socket_check_receive = mac_test_check_socket_receive,
 #if 0	/* XXX HSH: not yet */
-	.mpo_check_socket_relabel = mac_test_check_socket_relabel,
+	.mpo_socket_check_relabel = mac_test_check_socket_relabel,
 #endif
-	.mpo_check_socket_send = mac_test_check_socket_send,
-	.mpo_check_socket_stat = mac_test_check_socket_stat,
+	.mpo_socket_check_send = mac_test_check_socket_send,
+	.mpo_socket_check_stat = mac_test_check_socket_stat,
 #if 0	/* XXX HSH: not yet */
-	.mpo_check_socket_visible = mac_test_check_socket_visible,
+	.mpo_socket_check_visible = mac_test_check_socket_visible,
 	.mpo_check_system_acct = mac_test_check_system_acct,
 	.mpo_check_system_audit = mac_test_check_system_audit,
 	.mpo_check_system_auditctl = mac_test_check_system_auditctl,

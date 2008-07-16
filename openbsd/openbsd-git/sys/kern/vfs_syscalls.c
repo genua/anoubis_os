@@ -910,7 +910,7 @@ sys_open(struct proc *p, void *v, register_t *retval)
 	}
 #ifdef ANOUBIS
 	assert(p == curproc);
-	error = mac_check_file_open(p->p_ucred, fp, vp, SCARG(uap, path));
+	error = mac_file_check_open(p->p_ucred, fp, vp, SCARG(uap, path));
 	if (error) {
 		VOP_UNLOCK(vp, 0, p);
 		/* closef will close the file for us. */
@@ -1046,9 +1046,9 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 			mode |= VREAD;
 #ifdef ANOUBIS
 		/* We cannot generate a path for sys_fhopen. */
-		error = mac_check_vnode_open(p->p_ucred, vp, mode, NULL, NULL);
+		error = mac_vnode_check_open(p->p_ucred, vp, mode, NULL, NULL);
 #else
-		error = mac_check_vnode_open(p->p_ucred, vp, mode);
+		error = mac_vnode_check_open(p->p_ucred, vp, mode);
 #endif
 		if (error)
 			goto bad;
@@ -1113,7 +1113,7 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 	}
 #ifdef ANOUBIS
 	assert(p == curproc);
-	error = mac_check_file_open(p->p_ucred, fp, vp, NULL);
+	error = mac_file_check_open(p->p_ucred, fp, vp, NULL);
 	if (error) {
 		VOP_UNLOCK(vp, 0, p);
 		vp = NULL;
@@ -1258,7 +1258,7 @@ sys_mknod(struct proc *p, void *v, register_t *retval)
 	}
 #ifdef MAC
 	if (!error)
-		error = mac_check_vnode_create(p->p_ucred, nd.ni_dvp,
+		error = mac_vnode_check_create(p->p_ucred, nd.ni_dvp,
 		    &nd.ni_cnd, &vattr);
 #endif
 	if (!error) {
@@ -1314,7 +1314,7 @@ sys_mkfifo(struct proc *p, void *v, register_t *retval)
 	vattr.va_type = VFIFO;
 	vattr.va_mode = (SCARG(uap, mode) & ALLPERMS) &~ p->p_fd->fd_cmask;
 #ifdef MAC
-	error = mac_check_vnode_create(p->p_ucred, nd.ni_dvp, &nd.ni_cnd,
+	error = mac_vnode_check_create(p->p_ucred, nd.ni_dvp, &nd.ni_cnd,
 	    &vattr);
 	if (error)
 		goto abort;
@@ -1419,7 +1419,7 @@ sys_symlink(struct proc *p, void *v, register_t *retval)
 	VATTR_NULL(&vattr);
 	vattr.va_mode = ACCESSPERMS &~ p->p_fd->fd_cmask;
 #ifdef MAC
-	error = mac_check_vnode_create(p->p_ucred, nd.ni_dvp, &nd.ni_cnd,
+	error = mac_vnode_check_create(p->p_ucred, nd.ni_dvp, &nd.ni_cnd,
 	    &vattr);
 	if (error)
 		goto abort;
@@ -2354,7 +2354,7 @@ sys_mkdir(struct proc *p, void *v, register_t *retval)
 	vattr.va_type = VDIR;
 	vattr.va_mode = (SCARG(uap, mode) & ACCESSPERMS) &~ p->p_fd->fd_cmask;
 #ifdef MAC
-	error = mac_check_vnode_create(p->p_ucred, nd.ni_dvp, &nd.ni_cnd,
+	error = mac_vnode_check_create(p->p_ucred, nd.ni_dvp, &nd.ni_cnd,
 	    &vattr);
 	if (error)
 		goto abort;

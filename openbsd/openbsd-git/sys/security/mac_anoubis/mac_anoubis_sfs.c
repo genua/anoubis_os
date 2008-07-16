@@ -497,10 +497,10 @@ anoubis_sfs_getstats(struct anoubis_internal_stat_value ** val, int * cnt)
 struct mac_policy_ops mac_anoubis_sfs_ops =
 {
 	.mpo_init = mac_anoubis_sfs_init,
-	.mpo_init_vnode_label = mac_anoubis_sfs_init_vnode_label,
-	.mpo_destroy_vnode_label = mac_anoubis_sfs_destroy_vnode_label,
-	.mpo_check_vnode_open = mac_anoubis_sfs_vnode_open,
-	.mpo_check_file_open = NULL /* mac_anoubis_sfs_file_open */,
+	.mpo_vnode_init_label = mac_anoubis_sfs_init_vnode_label,
+	.mpo_vnode_destroy_label = mac_anoubis_sfs_destroy_vnode_label,
+	.mpo_vnode_check_open = mac_anoubis_sfs_vnode_open,
+	.mpo_file_check_open = NULL /* mac_anoubis_sfs_file_open */,
 	.mpo_vnode_exec = mac_anoubis_sfs_vnode_exec,
 };
 

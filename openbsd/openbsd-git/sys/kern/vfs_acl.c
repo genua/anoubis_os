@@ -83,7 +83,7 @@ vn_acl_set(struct proc *p, struct vnode *vp, acl_type_t type, struct acl *aclp)
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 
 #ifdef MAC
-	error = mac_check_vnode_setacl(p->p_ucred, vp, type, &inkernacl);
+	error = mac_vnode_check_setacl(p->p_ucred, vp, type, &inkernacl);
 	if (error) {
 		vput(vp);
 		return (error);
@@ -110,7 +110,7 @@ vn_acl_get(struct proc *p, struct vnode *vp, acl_type_t type, struct acl *aclp)
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 
 #ifdef MAC
-	error = mac_check_vnode_getacl(p->p_ucred, vp, type);
+	error = mac_vnode_check_getacl(p->p_ucred, vp, type);
 	if (error) {
 		vput(vp);
 		return (error);
@@ -139,7 +139,7 @@ vn_acl_del(struct proc *p, struct vnode *vp, acl_type_t type)
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 
 #ifdef MAC
-	error = mac_check_vnode_deleteacl(p->p_ucred, vp, type);
+	error = mac_vnode_check_deleteacl(p->p_ucred, vp, type);
 	if (error) {
 		vput(vp);
 		return (error);

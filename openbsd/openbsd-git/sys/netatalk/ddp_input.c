@@ -369,7 +369,7 @@ ddp_input( m, ifp, elh, phase )
     }
 
 #ifdef MAC
-	if (mac_check_socket_deliver(ddp->ddp_socket, m) != 0) {
+	if (mac_socket_check_deliver(ddp->ddp_socket, m) != 0) {
 		m_freem(m);
 		return;
 	}

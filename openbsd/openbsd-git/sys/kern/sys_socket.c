@@ -64,7 +64,7 @@ soo_read(struct file *fp, off_t *poff, struct uio *uio, struct ucred *cred)
 #ifdef MAC
 	int error;
 
-	error = mac_check_socket_receive(cred, fp->f_data);
+	error = mac_socket_check_receive(cred, fp->f_data);
 	if (error)
 		return (error);
 #endif
@@ -80,7 +80,7 @@ soo_write(struct file *fp, off_t *poff, struct uio *uio, struct ucred *cred)
 #ifdef MAC
 	int error;
 
-	error = mac_check_socket_send(cred, fp->f_data);
+	error = mac_socket_check_send(cred, fp->f_data);
 	if (error)
 		return (error);
 #endif
@@ -156,7 +156,7 @@ soo_poll(struct file *fp, int events, struct proc *p)
 	int s = splsoftnet();
 
 #ifdef MAC
-	error = mac_check_socket_poll(p->p_ucred, so);
+	error = mac_socket_check_poll(p->p_ucred, so);
 	if (error) {
 		splx(s);
 		return (error);
@@ -198,7 +198,7 @@ soo_stat(struct file *fp, struct stat *ub, struct proc *p)
 #endif
 
 #ifdef MAC
-	error = mac_check_socket_stat(p->p_ucred, so);
+	error = mac_socket_check_stat(p->p_ucred, so);
 	if (error)
 		return (error);
 #endif

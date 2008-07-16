@@ -328,8 +328,8 @@ bpfopen(dev_t dev, int flag, int mode, struct proc *p)
 	d->bd_bufsize = bpf_bufsize;
 	d->bd_sig = SIGIO;
 #ifdef MAC
-	mac_init_bpfdesc(d);
-	mac_create_bpfdesc(p->p_ucred, d);
+	mac_bpfdesc_init(d);
+	mac_bpfdesc_create(p->p_ucred, d);
 #endif
 
 	D_GET(d);
@@ -354,7 +354,7 @@ bpfclose(dev_t dev, int flag, int mode, struct proc *p)
 		bpf_detachd(d);
 	bpf_wakeup(d);
 #ifdef MAC
-	mac_destroy_bpfdesc(d);
+	mac_bpfdesc_destroy(d);
 #endif
 	D_PUT(d);
 	splx(s);
@@ -548,7 +548,7 @@ bpfwrite(dev_t dev, struct uio *uio, int ioflag)
 
 	s = splsoftnet();
 #ifdef MAC
-	mac_create_mbuf_from_bpfdesc(d, m);
+	mac_bpfdesc_create_mbuf(d, m);
 #endif
 	error = (*ifp->if_output)(ifp, m, (struct sockaddr *)&dst,
 	    (struct rtentry *)0);
@@ -1136,7 +1136,7 @@ bpf_tap(caddr_t arg, u_char *pkt, u_int pktlen, u_int direction)
 			slen = bpf_filter(d->bd_rfilter, pkt, pktlen, pktlen);
 		if (slen != 0) {
 #ifdef MAC
-			if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0) {
+			if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0) {
 				bpf_catchpacket(d, pkt, pktlen, slen, bcopy);
 				if (d->bd_fildrop)
 					drop++;
@@ -1206,7 +1206,7 @@ bpf_mtap(caddr_t arg, struct mbuf *m, u_int direction)
 		    continue;
 
 #ifdef MAC
-		if (mac_check_bpfdesc_receive(d, bp->bif_ifp) == 0) {
+		if (mac_bpfdesc_check_receive(d, bp->bif_ifp) == 0) {
 			bpf_catchpacket(d, (u_char *)m, pktlen, slen,
 			    bpf_mcopy);
 			if (d->bd_fildrop)

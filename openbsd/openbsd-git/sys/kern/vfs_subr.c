@@ -398,7 +398,7 @@ getnewvnode(enum vtagtype tag, struct mount *mp, int (**vops)(void *),
 	vp->v_tag = tag;
 	vp->v_op = vops;
 #ifdef MAC
-	mac_init_vnode(vp);
+	mac_vnode_init(vp);
 #endif
 	insmntque(vp, mp);
 	*vpp = vp;

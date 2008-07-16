@@ -122,7 +122,7 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		VATTR_NULL(&va);
 		va.va_type = VREG;
 		va.va_mode = cmode;
-		error = mac_check_vnode_create(cred, ndp->ni_dvp,
+		error = mac_vnode_check_create(cred, ndp->ni_dvp,
 		    &ndp->ni_cnd, &va);
 		if (error == 0 && ndp->ni_vp == NULL) {
 #else 
@@ -229,7 +229,7 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		if (fmode & FREAD)
 			mode |= VREAD;
 #ifdef ANOUBIS
-		error = mac_check_vnode_open(cred, vp, mode, dirvp, cnp);
+		error = mac_vnode_check_open(cred, vp, mode, dirvp, cnp);
 		if (dirvp)
 			vrele(dirvp);
 		if (cnp)
@@ -237,7 +237,7 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		dirvp = NULL;
 		cnp = NULL;
 #else
-		error = mac_check_vnode_open(cred, vp, mode);
+		error = mac_vnode_check_open(cred, vp, mode);
 #endif
 		if (error)
 			goto bad;
