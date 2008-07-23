@@ -253,6 +253,28 @@ sfs_csum(struct vnode * vp, struct sfs_label * sec)
  * in a buffer that is allocated via malloc(..., M_MACTEMP). The caller
  * is responsible for freeing this buffer. The pointer that should be
  * passed to free will be stored in *bufp upon success.
+ *
+ * WARNING:
+ *   This function calls vfs_getcwd_common which must NOT be called
+ *   while we hold another vnode lock. Thus a caller must temporarily
+ *   drop the vnode lock of the file being accessed. This needs more
+ *   thought because it might not be safe to drop the lock of the file
+ *   being opened for the call to sfs_d_path.
+ *
+ *   The race in question is as follows:
+ *      Process 1 does:
+ *         -> open("/a/b")
+ *                which locks "b" via lookup
+ *         -> mac_anoubis_sfs_vnode_open(...)
+ *         -> vfs_getcwd_common (via sfs_d_path)
+ *                which tries to lock "a".
+ *      Process 2 does:
+ *         -> open("/a/b")
+ *         -> lookup
+ *              which locks "a" while looking up "b"
+ *                    tries to lock "b" once the lookup is successful
+ *      Thus locks on "a" and "b" are acquired in reverse order which
+ *      can lead to a deadlock involving two processes.
  */
 char *
 sfs_d_path(struct vnode *dirvp, struct componentname *cnp, char **bufp)
@@ -319,8 +341,15 @@ fileopen:
 	if (!sfs_enable || !CHECKSUM_OK(vp))
 		return 0;
 	pathhint = NULL;
-	if (dirvp)
+	if (dirvp) {
+		/*
+		 * The reason for the VOP_UNLOCK is explained in the
+		 * comment above sfs_d_path
+		 */
+		VOP_UNLOCK(vp, 0, curproc);
 		pathhint = sfs_d_path(dirvp, cnp, &bufp);
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
+	}
 	ret = sfs_open_checks(NULL, vp, sec, acc_mode, 1, pathhint);
 	if (pathhint)
 		free(bufp, M_MACTEMP);
