@@ -118,21 +118,21 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		if (ndp->ni_startdir)
 			vrele(ndp->ni_startdir);
 #endif
-#ifdef MAC
-		VATTR_NULL(&va);
-		va.va_type = VREG;
-		va.va_mode = cmode;
-		error = mac_vnode_check_create(cred, ndp->ni_dvp,
-		    &ndp->ni_cnd, &va);
-		if (error == 0 && ndp->ni_vp == NULL) {
-#else 
 		if (ndp->ni_vp == NULL) {
 			VATTR_NULL(&va);
 			va.va_type = VREG;
 			va.va_mode = cmode;
-#endif	/* MAC */
+#ifdef MAC
+			/* XXX PM: ndp->ni_dvp is locked. */
+			error = mac_vnode_check_create(cred, ndp->ni_dvp,
+			    &ndp->ni_cnd, &va);
+			if (error == 0)
+				error = VOP_CREATE(ndp->ni_dvp, &ndp->ni_vp,
+				    &ndp->ni_cnd, &va);
+#else
 			error = VOP_CREATE(ndp->ni_dvp, &ndp->ni_vp,
-					   &ndp->ni_cnd, &va);
+			    &ndp->ni_cnd, &va);
+#endif
 #ifdef ANOUBIS
 			if (error) {
 				if (dirvp)
@@ -229,6 +229,9 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		if (fmode & FREAD)
 			mode |= VREAD;
 #ifdef ANOUBIS
+		/*
+		 * XXX PM: 'vp' is locked, 'dirvp' is not.
+		 */
 		error = mac_vnode_check_open(cred, vp, mode, dirvp, cnp);
 		if (dirvp)
 			vrele(dirvp);
@@ -237,6 +240,9 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		dirvp = NULL;
 		cnp = NULL;
 #else
+		/*
+		 * XXX PM: 'vp' is locked, 'dirvp' is not.
+		 */
 		error = mac_vnode_check_open(cred, vp, mode);
 #endif
 		if (error)
@@ -421,10 +427,25 @@ vn_rdwr(enum uio_rw rw, struct vnode *vp, caddr_t base, int len, off_t offset,
 	auio.uio_segflg = segflg;
 	auio.uio_rw = rw;
 	auio.uio_procp = p;
+	/* XXX PM: FreeBSD has a 'IO_NOMACCHECK' flag. */
 	if (rw == UIO_READ) {
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_read(cred, NOCRED, vp);
+		if (error == 0)
+			error = VOP_READ(vp, &auio, ioflg, cred);
+#else
 		error = VOP_READ(vp, &auio, ioflg, cred);
+#endif
 	} else {
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_write(cred, NOCRED, vp);
+		if (error == 0)
+			error = VOP_WRITE(vp, &auio, ioflg, cred);
+#else
 		error = VOP_WRITE(vp, &auio, ioflg, cred);
+#endif
 	}
 	if (aresid)
 		*aresid = auio.uio_resid;
@@ -450,6 +471,14 @@ vn_read(struct file *fp, off_t *poff, struct uio *uio, struct ucred *cred)
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 	uio->uio_offset = *poff;
 	count = uio->uio_resid;
+#ifdef MAC
+	/* XXX PM: vp is locked. */
+	error = mac_vnode_check_read(cred, fp->f_cred, vp);
+	if (error) {
+		VOP_UNLOCK(vp, 0, p);
+		return (error);
+	}
+#endif
 	if (vp->v_type != VDIR)
 		error = VOP_READ(vp, uio,
 		    (fp->f_flag & FNONBLOCK) ? IO_NDELAY : 0, cred);
@@ -479,6 +508,14 @@ vn_write(struct file *fp, off_t *poff, struct uio *uio, struct ucred *cred)
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 	uio->uio_offset = *poff;
 	count = uio->uio_resid;
+#ifdef MAC
+	/* XXX PM: vp is locked. */
+	error = mac_vnode_check_write(cred, fp->f_cred, vp);
+	if (error) {
+		VOP_UNLOCK(vp, 0, p);
+		return (error);
+	}
+#endif
 	error = VOP_WRITE(vp, uio, ioflag, cred);
 	if (ioflag & IO_APPEND)
 		*poff = uio->uio_offset;
@@ -507,6 +544,14 @@ vn_stat(struct vnode *vp, struct stat *sb, struct proc *p)
 	struct vattr va;
 	int error;
 	mode_t mode;
+
+#ifdef MAC
+	/* XXX PM: vp is locked. */
+	/* XXX PM: should be able to pass 'fp->f_cred' here. */
+	error = mac_vnode_check_stat(p->p_ucred, NOCRED, vp);
+	if (error)
+		return (error);
+#endif
 
 	error = VOP_GETATTR(vp, &va, p->p_ucred, p);
 	if (error)
@@ -605,6 +650,15 @@ vn_ioctl(struct file *fp, u_long com, caddr_t data, struct proc *p)
 int
 vn_poll(struct file *fp, int events, struct proc *p)
 {
+#ifdef MAC
+	int error;
+
+	/* XXX PM: vnode is unlocked. */
+	error = mac_vnode_check_poll(p->p_ucred, fp->f_cred,
+	    (struct vnode *)fp->f_data);
+	if (error)
+		return (error);
+#endif
 	return (VOP_POLL(((struct vnode *)fp->f_data), events, p));
 }
 

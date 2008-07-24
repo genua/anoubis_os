@@ -249,6 +249,13 @@ sys_mount(struct proc *p, void *v, register_t *retval)
 	strncpy(mp->mnt_stat.f_fstypename, vfsp->vfc_name, MFSNAMELEN);
 	mp->mnt_vnodecovered = vp;
 	mp->mnt_stat.f_owner = p->p_ucred->cr_uid;
+
+#ifdef MAC
+	/* XXX PM: mp is locked. */
+	mac_mount_init(mp);
+	mac_mount_create(p->p_ucred, mp);
+#endif
+
 update:
 	/*
 	 * Set the mount level flags.
@@ -311,6 +318,10 @@ update:
 			vrele(vp);
 	} else {
 		mp->mnt_vnodecovered->v_mountedhere = (struct mount *)0;
+#ifdef MAC
+		/* XXX PM: mp is locked. */
+		mac_mount_destroy(mp);
+#endif
 		vfs_unbusy(mp);
 		free(mp, M_MOUNT);
 		vput(vp);
@@ -454,6 +465,11 @@ dounmount(struct mount *mp, int flags, struct proc *p, struct vnode *olddp)
 	if (!LIST_EMPTY(&mp->mnt_vnodelist))
 		panic("unmount: dangling vnode");
 
+#ifdef MAC
+	/* XXX PM: mp is locked. */
+	mac_mount_destroy(mp);
+#endif
+
 	vfs_unbusy(mp);
 	free(mp, M_MOUNT);
 
@@ -572,6 +588,11 @@ sys_statfs(struct proc *p, void *v, register_t *retval)
 	mp = nd.ni_vp->v_mount;
 	sp = &mp->mnt_stat;
 	vrele(nd.ni_vp);
+#ifdef MAC
+	error = mac_mount_check_stat(p->p_ucred, mp);
+	if (error)
+		return (error);
+#endif
 	if ((error = VFS_STATFS(mp, sp, p)) != 0)
 		return (error);
 	sp->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
@@ -605,6 +626,13 @@ sys_fstatfs(struct proc *p, void *v, register_t *retval)
 		FRELE(fp);
 		return (ENOENT);
 	}
+#ifdef MAC
+	error = mac_mount_check_stat(p->p_ucred, mp);
+	if (error) {
+		FRELE(fp);
+		return (error);
+	}
+#endif
 	sp = &mp->mnt_stat;
 	error = VFS_STATFS(mp, sp, p);
 	FRELE(fp);
@@ -645,6 +673,13 @@ sys_getfsstat(struct proc *p, void *v, register_t *retval)
 			nmp = CIRCLEQ_NEXT(mp, mnt_list);
 			continue;
 		}
+#ifdef MAC
+		if (mac_mount_check_stat(p->p_ucred, mp)) {
+			nmp = CIRCLEQ_NEXT(mp, mnt_list);
+			vfs_unbusy(mp);
+			continue;
+		}
+#endif
 		if (sfsp && count < maxcount) {
 			sp = &mp->mnt_stat;
 
@@ -774,6 +809,14 @@ sys_chroot(struct proc *p, void *v, register_t *retval)
 	    SCARG(uap, path), p);
 	if ((error = change_dir(&nd, p)) != 0)
 		return (error);
+#ifdef MAC
+	/* XXX PM: nd.ni_vp is not locked. */
+	error = mac_vnode_check_chroot(p->p_ucred, nd.ni_vp);
+	if (error) {
+		vrele(nd.ni_vp); /* Release ref. acquired by change_dir(). */
+		return (error);
+	}
+#endif
 	if (fdp->fd_rdir != NULL) {
 		/*
 		 * A chroot() done inside a changed root environment does
@@ -806,8 +849,18 @@ change_dir(struct nameidata *ndp, struct proc *p)
 		error = VOP_ACCESS(vp, VEXEC, p->p_ucred, p);
 	if (error)
 		vput(vp);
-	else
+	else {
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_chdir(p->p_ucred, vp);
+		if (error) {
+			vput(vp);
+			return (error);
+		}
+#endif
 		VOP_UNLOCK(vp, 0, p);
+	}
+
 	return (error);
 }
 
@@ -1025,6 +1078,7 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 		error = EOPNOTSUPP;
 		goto bad;
 	}
+
 	if (flags & FREAD) {
 		if ((error = VOP_ACCESS(vp, VREAD, cred, p)) != 0)
 			goto bad;
@@ -1072,6 +1126,12 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 	if (flags & O_TRUNC) {
 		VATTR_NULL(&va);
 		va.va_size = 0;
+#ifdef MAC
+		/* XXX PM: I'm not sure this hook is in the right place. */
+		error = mac_vnode_check_write(p->p_ucred, NOCRED, vp);
+		if (error)
+			goto bad;
+#endif
 		if ((error = VOP_SETATTR(vp, &va, cred, p)) != 0)
 			goto bad;
 	}
@@ -1203,6 +1263,11 @@ sys_fhstatfs(struct proc *p, void *v, register_t *retval)
 	mp = vp->v_mount;
 	sp = &mp->mnt_stat;
 	vput(vp);
+#ifdef MAC
+	error = mac_mount_check_stat(p->p_ucred, mp);
+	if (error)
+		return (error);
+#endif
 	if ((error = VFS_STATFS(mp, sp, p)) != 0)
 		return (error);
 	sp->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
@@ -1579,6 +1644,15 @@ sys_access(struct proc *p, void *v, register_t *retval)
 		goto out1;
 	vp = nd.ni_vp;
 
+#ifdef MAC
+	/* XXX PM: vp is locked. */
+	error = mac_vnode_check_access(cred, vp, flags);
+	if (error) {
+		vput(vp);
+		return (error);
+	}
+#endif
+
 	/* Flags == 0 means only check for existence. */
 	if (SCARG(uap, flags)) {
 		flags = 0;
@@ -1759,6 +1833,15 @@ sys_chflags(struct proc *p, void *v, register_t *retval)
 		}
 		VATTR_NULL(&vattr);
 		vattr.va_flags = SCARG(uap, flags);
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_setflags(p->p_ucred, vp,
+		    vattr.va_flags);
+		if (error) {
+			vput(vp);
+			return (error);
+		}
+#endif
 		error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
 	}
 out:
@@ -1802,6 +1885,16 @@ sys_fchflags(struct proc *p, void *v, register_t *retval)
 		}
 		VATTR_NULL(&vattr);
 		vattr.va_flags = SCARG(uap, flags);
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_setflags(p->p_ucred, vp,
+		    vattr.va_flags);
+		if (error) {
+			VOP_UNLOCK(vp, 0, p);
+			FRELE(fp);
+			return (error);
+		}
+#endif
 		error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
 	}
 out:
@@ -1839,6 +1932,13 @@ sys_chmod(struct proc *p, void *v, register_t *retval)
 	else {
 		VATTR_NULL(&vattr);
 		vattr.va_mode = SCARG(uap, mode) & ALLPERMS;
+#ifdef MAC
+		error = mac_vnode_check_setmode(p->p_ucred, vp, vattr.va_mode);
+		if (error) {
+			vput(vp);
+			return (error);
+		}
+#endif
 		error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
 	}
 	vput(vp);
@@ -1873,6 +1973,14 @@ sys_fchmod(struct proc *p, void *v, register_t *retval)
 	else {
 		VATTR_NULL(&vattr);
 		vattr.va_mode = SCARG(uap, mode) & ALLPERMS;
+#ifdef MAC
+		error = mac_vnode_check_setmode(p->p_ucred, vp, vattr.va_mode);
+		if (error) {
+			VOP_UNLOCK(vp, 0, p);
+			FRELE(fp);
+			return (error);
+		}
+#endif
 		error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
 	}
 	VOP_UNLOCK(vp, 0, p);
@@ -1921,6 +2029,15 @@ sys_chown(struct proc *p, void *v, register_t *retval)
 		vattr.va_uid = SCARG(uap, uid);
 		vattr.va_gid = SCARG(uap, gid);
 		vattr.va_mode = mode;
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_setowner(p->p_ucred, vp, vattr.va_uid,
+		    vattr.va_gid);
+		if (error) {
+			vput(vp);
+			return (error);
+		}
+#endif
 		error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
 	}
 out:
@@ -1969,6 +2086,15 @@ sys_lchown(struct proc *p, void *v, register_t *retval)
 		vattr.va_uid = SCARG(uap, uid);
 		vattr.va_gid = SCARG(uap, gid);
 		vattr.va_mode = mode;
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_setowner(p->p_ucred, vp, vattr.va_uid,
+		    vattr.va_gid);
+		if (error) {
+			vput(vp);
+			return (error);
+		}
+#endif
 		error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
 	}
 out:
@@ -2015,6 +2141,16 @@ sys_fchown(struct proc *p, void *v, register_t *retval)
 		vattr.va_uid = SCARG(uap, uid);
 		vattr.va_gid = SCARG(uap, gid);
 		vattr.va_mode = mode;
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_setowner(p->p_ucred, vp, vattr.va_uid,
+		    vattr.va_gid);
+		if (error) {
+			VOP_UNLOCK(vp, 0, p);
+			FRELE(fp);
+			return (error);
+		}
+#endif
 		error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
 	}
 out:
@@ -2068,6 +2204,15 @@ sys_utimes(struct proc *p, void *v, register_t *retval)
 		vattr.va_atime.tv_nsec = tv[0].tv_usec * 1000;
 		vattr.va_mtime.tv_sec = tv[1].tv_sec;
 		vattr.va_mtime.tv_nsec = tv[1].tv_usec * 1000;
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_setutimes(p->p_ucred, vp,
+		    vattr.va_atime, vattr.va_mtime);
+		if (error) {
+			vput(vp);
+			return (error);
+		}
+#endif
 		error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
 	}
 	vput(vp);
@@ -2118,6 +2263,16 @@ sys_futimes(struct proc *p, void *v, register_t *retval)
 		vattr.va_atime.tv_nsec = tv[0].tv_usec * 1000;
 		vattr.va_mtime.tv_sec = tv[1].tv_sec;
 		vattr.va_mtime.tv_nsec = tv[1].tv_usec * 1000;
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_setutimes(p->p_ucred, vp,
+		    vattr.va_atime, vattr.va_mtime);
+		if (error) {
+			VOP_UNLOCK(vp, 0, p);
+			FRELE(fp);
+			return (error);
+		}
+#endif
 		error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
 	}
 	VOP_UNLOCK(vp, 0, p);
@@ -2151,6 +2306,14 @@ sys_truncate(struct proc *p, void *v, register_t *retval)
 		error = EISDIR;
 	else if ((error = vn_writechk(vp)) == 0 &&
 	    (error = VOP_ACCESS(vp, VWRITE, p->p_ucred, p)) == 0) {
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_write(p->p_ucred, NOCRED, vp);
+		if (error) {
+			vput(vp);
+			return (error);
+		}
+#endif
 		VATTR_NULL(&vattr);
 		vattr.va_size = SCARG(uap, length);
 		error = VOP_SETATTR(vp, &vattr, p->p_ucred, p);
@@ -2189,6 +2352,15 @@ sys_ftruncate(struct proc *p, void *v, register_t *retval)
 	if (vp->v_type == VDIR)
 		error = EISDIR;
 	else if ((error = vn_writechk(vp)) == 0) {
+#ifdef MAC
+		/* XXX PM: vp is locked. */
+		error = mac_vnode_check_write(p->p_ucred, fp->f_cred, vp);
+		if (error) {
+			VOP_UNLOCK(vp, 0, p);
+			FRELE(fp);
+			return (error);
+		}
+#endif
 		VATTR_NULL(&vattr);
 		vattr.va_size = len;
 		error = VOP_SETATTR(vp, &vattr, fp->f_cred, p);
@@ -2466,6 +2638,14 @@ sys_getdirentries(struct proc *p, void *v, register_t *retval)
 	auio.uio_resid = SCARG(uap, count);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 	loff = auio.uio_offset = fp->f_offset;
+#ifdef MAC
+	/* XXX PM: vp is locked. */
+	error = mac_vnode_check_readdir(p->p_ucred, vp);
+	if (error) {
+		VOP_UNLOCK(vp, 0, p);
+		goto bad;
+	}
+#endif
 	error = VOP_READDIR(vp, &auio, fp->f_cred, &eofflag, 0, 0);
 	fp->f_offset = auio.uio_offset;
 	VOP_UNLOCK(vp, 0, p);
@@ -2521,6 +2701,12 @@ sys_revoke(struct proc *p, void *v, register_t *retval)
 	if (p->p_ucred->cr_uid != vattr.va_uid &&
 	    (error = suser(p, 0)))
 		goto out;
+#ifdef MAC
+	/* XXX PM: vp is not locked. */
+	error = mac_vnode_check_revoke(p->p_ucred, vp);
+	if (error)
+		goto out;
+#endif
 	if (vp->v_usecount > 1 || (vp->v_flag & (VALIASED)))
 		VOP_REVOKE(vp, REVOKEALL);
 out:

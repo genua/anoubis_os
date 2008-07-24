@@ -42,6 +42,10 @@
 #include <sys/extattr.h>
 #include <sys/syscallargs.h>
 
+#ifdef MAC
+#include <security/mac/mac_framework.h>
+#endif
+
 int	extattr_set_vp(struct vnode *, int, const char *, void *, size_t,
 	    struct proc *, register_t *);
 int	extattr_get_vp(struct vnode *, int, const char *, void *, size_t,
@@ -151,6 +155,14 @@ extattr_set_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 	auio.uio_segflg = UIO_USERSPACE;
 	auio.uio_procp = p;
 	cnt = nbytes;
+
+#ifdef MAC
+	/* XXX PM: vp is locked. */
+	error = mac_vnode_check_setextattr(p->p_ucred, vp, attrnamespace,
+	    attrname, &auio);
+	if (error)
+		goto done;
+#endif
 
 	error = VOP_SETEXTATTR(vp, attrnamespace, attrname, &auio,
 	    p->p_ucred, p);
@@ -286,6 +298,14 @@ extattr_get_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 	} else
 		sizep = &size;
 
+#ifdef MAC
+	/* XXX PM: vp is locked. */
+	error = mac_vnode_check_getextattr(p->p_ucred, vp, attrnamespace,
+	    attrname, &auio);
+	if (error)
+		goto done;
+#endif
+
 	error = VOP_GETEXTATTR(vp, attrnamespace, attrname, auiop, sizep,
 	    p->p_ucred, p);
 
@@ -392,6 +412,16 @@ extattr_delete_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 	int error;
 
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
+
+#ifdef MAC
+	/* XXX PM: vp is locked. */
+	error = mac_vnode_check_deleteextattr(p->p_ucred, vp, attrnamespace,
+	    attrname);
+	if (error) {
+		VOP_UNLOCK(vp, 0, p);
+		return (error);
+	}
+#endif
 
 	error = VOP_DELETEEXTATTR(vp, attrnamespace, attrname, p->p_ucred, p);
 	if (error == EOPNOTSUPP)
@@ -515,6 +545,13 @@ extattr_list_vp(struct vnode *vp, int attrnamespace, void *data,
 		cnt = nbytes;
 	} else
 		sizep = &size;
+
+#ifdef MAC
+	/* XXX PM: vp is locked. */
+	error = mac_vnode_check_listextattr(p->p_ucred, vp, attrnamespace);
+	if (error)
+		goto done;
+#endif
 
 	error = VOP_LISTEXTATTR(vp, attrnamespace, auiop, sizep,
 	    p->p_ucred, p);

@@ -1067,9 +1067,12 @@ file lib/libkern/arch/${MACHINE_ARCH}/strncasecmp.S | lib/libkern/strncasecmp.c
 
 # TrustedBSD MAC framework
 file	security/mac/mac_framework.c	mac needs-flag
+file	security/mac/mac_inet.c		mac needs-flag
 file	security/mac/mac_label.c	mac needs-flag
 file	security/mac/mac_net.c		mac needs-flag
+file	security/mac/mac_process.c	mac needs-flag
 file	security/mac/mac_socket.c	mac needs-flag
+file	security/mac/mac_system.c	mac needs-flag
 file	security/mac/mac_vfs.c		mac needs-flag
 
 # TrustedBSD test policy

@@ -92,9 +92,6 @@ mac_vnode_label_alloc(void)
 void
 mac_vnode_init(struct vnode *vp)
 {
-	/* XXX PM: why? */
-	if (vp->v_label)
-		mac_vnode_destroy(vp);
 	assert(vp->v_label == NULL);
 	vp->v_label = mac_vnode_label_alloc();
 }

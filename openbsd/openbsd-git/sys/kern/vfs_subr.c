@@ -390,6 +390,15 @@ getnewvnode(enum vtagtype tag, struct mount *mp, int (**vops)(void *),
 			panic("Clean vnode has pending I/O's");
 		splx(s);
 #endif
+
+#ifdef MAC
+		/*
+		 * The vnode is being recycled, but we call mac_vnode_destroy()
+		 * here to be coherent with what FreeBSD does.
+		 */
+		mac_vnode_destroy(vp);
+#endif
+
 		vp->v_flag = 0;
 		vp->v_socket = 0;
 	}
@@ -398,6 +407,7 @@ getnewvnode(enum vtagtype tag, struct mount *mp, int (**vops)(void *),
 	vp->v_tag = tag;
 	vp->v_op = vops;
 #ifdef MAC
+	/* XXX PM: vp is not locked. */
 	mac_vnode_init(vp);
 #endif
 	insmntque(vp, mp);
