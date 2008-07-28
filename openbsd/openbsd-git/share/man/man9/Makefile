@@ -21,7 +21,7 @@ MAN=	altq.9 aml_evalnode.9 atomic.9 audio.9 autoconf.9 bio_register.9 \
 	panic.9 pci_conf_read.9 pci_intr_map.9 pfind.9 physio.9 pmap.9 \
 	pool.9 powerhook_establish.9 ppsratecheck.9 printf.9 psignal.9 \
 	radio.9 random.9 rasops.9 ratecheck.9 resettodr.9 rssadapt.9 rwlock.9 \
-	sensor_attach.9 \
+	sbuf.9 sensor_attach.9 \
 	shutdownhook_establish.9 tsleep.9 spl.9 startuphook_establish.9 \
 	style.9 syscall.9 systrace.9 sysctl_int.9 \
 	tc_init.9 time.9 timeout.9 tvtohz.9 uiomove.9 uvm.9 vfs.9 vfs_busy.9 \
@@ -268,7 +268,25 @@ MLINKS+=rssadapt.9 ieee80211_rssadapt_choose.9 \
 MLINKS+=rwlock.9 rw_init.9 rwlock.9 rw_enter.9 rwlock.9 rw_exit.9 \
 	rwlock.9 rw_enter_read.9 rwlock.9 rw_enter_write.9 \
 	rwlock.9 rw_exit_read.9 rwlock.9 rw_exit_write.9 
-	
+MLINKS+=sbuf.9 sbuf_bcat.9 \
+	sbuf.9 sbuf_bcopyin.9 \
+	sbuf.9 sbuf_bcpy.9 \
+	sbuf.9 sbuf_cat.9 \
+	sbuf.9 sbuf_clear.9 \
+	sbuf.9 sbuf_copyin.9 \
+	sbuf.9 sbuf_cpy.9 \
+	sbuf.9 sbuf_data.9 \
+	sbuf.9 sbuf_delete.9 \
+	sbuf.9 sbuf_done.9 \
+	sbuf.9 sbuf_finish.9 \
+	sbuf.9 sbuf_len.9 \
+	sbuf.9 sbuf_new.9 \
+	sbuf.9 sbuf_overflowed.9 \
+	sbuf.9 sbuf_printf.9 \
+	sbuf.9 sbuf_putc.9 \
+	sbuf.9 sbuf_setpos.9 \
+	sbuf.9 sbuf_trim.9 \
+	sbuf.9 sbuf_vprintf.9
 MLINKS+=sensor_attach.9 sensordev_install.9 \
 	sensor_attach.9 sensordev_deinstall.9 \
 	sensor_attach.9 sensordev_get.9 \

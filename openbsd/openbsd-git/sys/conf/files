@@ -1064,6 +1064,7 @@ file lib/libkern/arch/${MACHINE_ARCH}/skpc.S | lib/libkern/skpc.c
 file lib/libkern/arch/${MACHINE_ARCH}/htonl.S | lib/libkern/htonl.c
 file lib/libkern/arch/${MACHINE_ARCH}/htons.S | lib/libkern/htons.c
 file lib/libkern/arch/${MACHINE_ARCH}/strncasecmp.S | lib/libkern/strncasecmp.c
+file lib/libkern/arch/${MACHINE_ARCH}/strsep.S | lib/libkern/strsep.c
 
 # TrustedBSD MAC framework
 file	security/mac/mac_framework.c	mac needs-flag
@@ -1074,6 +1075,9 @@ file	security/mac/mac_process.c	mac needs-flag
 file	security/mac/mac_socket.c	mac needs-flag
 file	security/mac/mac_system.c	mac needs-flag
 file	security/mac/mac_vfs.c		mac needs-flag
+# XXX PM: This is a multi-purpose API, but for now we only provide it if MAC
+# support is enabled in the kernel.
+file	kern/subr_sbuf.c		mac needs-flag
 
 # TrustedBSD test policy
 file	security/mac_test/mac_test.c	mac_test needs-flag

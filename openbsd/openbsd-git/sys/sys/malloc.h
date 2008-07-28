@@ -185,7 +185,9 @@
 
 #define M_MACTEMP	146	/* MAC temporary data */
 
-#define	M_LAST		147	/* Must be last type + 1 */
+#define M_SBUF		147	/* sbuf data */
+
+#define	M_LAST		148	/* Must be last type + 1 */
 
 #define	INITKMEMNAMES { \
 	"free",		/* 0 M_FREE */ \
@@ -320,6 +322,7 @@
 	"AGP Memory",	/* 144 M_AGP */ \
 	"Direct Rendering Manager",	/* 145 M_DRM */ \
 	"MAC temp data",	/* 146 M_MACTEMP */ \
+	"sbuf data",	/* 147 M_SBUF */ \
 }
 
 struct kmemstats {
