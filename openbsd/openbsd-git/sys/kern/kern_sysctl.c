@@ -1740,13 +1740,13 @@ sysctl_sysvipc(int *name, u_int namelen, void *where, size_t *sizep)
 			switch (*name) {
 #ifdef SYSVMSG
 			case KERN_SYSVIPC_MSG_INFO:
-				bcopy(&msqids[i], &msgsi->msgids[i], dssize);
+				bcopy(&msqids[i].u, &msgsi->msgids[i], dssize);
 				break;
 #endif
 #ifdef SYSVSEM
 			case KERN_SYSVIPC_SEM_INFO:
 				if (sema[i] != NULL)
-					bcopy(sema[i], &semsi->semids[i],
+					bcopy(&sema[i]->u, &semsi->semids[i],
 					    dssize);
 				else
 					bzero(&semsi->semids[i], dssize);
@@ -1755,7 +1755,7 @@ sysctl_sysvipc(int *name, u_int namelen, void *where, size_t *sizep)
 #ifdef SYSVSHM
 			case KERN_SYSVIPC_SHM_INFO:
 				if (shmsegs[i] != NULL)
-					bcopy(shmsegs[i], &shmsi->shmids[i],
+					bcopy(&shmsegs[i]->u, &shmsi->shmids[i],
 					    dssize);
 				else
 					bzero(&shmsi->shmids[i], dssize);

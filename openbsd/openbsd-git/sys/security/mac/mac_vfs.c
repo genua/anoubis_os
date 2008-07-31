@@ -47,6 +47,7 @@
 #include <sys/malloc.h>
 #include <sys/mutex.h>
 #include <sys/proc.h>
+#include <sys/pool.h>
 #include <sys/systm.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
@@ -67,7 +68,7 @@ mac_mount_label_alloc(void)
 {
 	struct label *label;
 
-	label = mac_labelpool_alloc(M_WAITOK);
+	label = mac_labelpool_alloc(PR_WAITOK);
 	MAC_PERFORM(mount_init_label, label);
 	return (label);
 }
@@ -84,7 +85,7 @@ mac_vnode_label_alloc(void)
 {
 	struct label *label;
 
-	label = mac_labelpool_alloc(M_WAITOK);
+	label = mac_labelpool_alloc(PR_WAITOK);
 	MAC_PERFORM(vnode_init_label, label);
 	return (label);
 }

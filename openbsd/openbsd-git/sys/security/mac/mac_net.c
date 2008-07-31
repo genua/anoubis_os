@@ -106,7 +106,7 @@ mac_bpfdesc_label_alloc(void)
 {
 	struct label *label;
 
-	label = mac_labelpool_alloc(M_WAITOK);
+	label = mac_labelpool_alloc(PR_WAITOK);
 	MAC_PERFORM(bpfdesc_init_label, label);
 	return (label);
 }
@@ -124,7 +124,7 @@ mac_ifnet_label_alloc(void)
 {
 	struct label *label;
 
-	label = mac_labelpool_alloc(M_WAITOK);
+	label = mac_labelpool_alloc(PR_WAITOK);
 	MAC_PERFORM(ifnet_init_label, label);
 	return (label);
 }
