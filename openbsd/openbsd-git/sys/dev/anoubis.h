@@ -31,10 +31,13 @@
 #include <sys/ioccom.h>
 #include <sys/types.h>
 
+#define ANOUBISCORE_VERSION		0x00010001UL
+
 #define ANOUBIS_DECLARE_FD		_IO('a',0x10)
 #define ANOUBIS_DECLARE_LISTENER	_IO('a',0x11)
 #define ANOUBIS_REQUEST_STATS		_IO('a',0x12)
 #define ANOUBIS_REPLACE_POLICY		_IO('a',0x14)
+#define ANOUBIS_GETVERSION		_IOR('a',0x15, unsigned long)
 
 
 #define ANOUBIS_SOURCE_TEST	0

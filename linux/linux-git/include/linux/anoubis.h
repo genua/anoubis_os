@@ -29,12 +29,15 @@
 
 #include <linux/eventdev.h>
 
+#define ANOUBISCORE_VERSION		0x00010001UL
+
 #define	ANOUBIS_TYPE			'a'
 #define ANOUBIS_DECLARE_FD		_IO(ANOUBIS_TYPE,0x10)
 #define ANOUBIS_DECLARE_LISTENER	_IO(ANOUBIS_TYPE,0x11)
 #define ANOUBIS_REQUEST_STATS		_IO(ANOUBIS_TYPE,0x12)
 #define ANOUBIS_UNDECLARE_FD		_IO(ANOUBIS_TYPE,0x13)
 #define ANOUBIS_REPLACE_POLICY		_IO(ANOUBIS_TYPE,0x14)
+#define ANOUBIS_GETVERSION		_IOR(ANOUBIS_TYPE,0x15, unsigned long)
 
 #define ANOUBIS_SOURCE_TEST	0
 #define ANOUBIS_SOURCE_ALF	10
@@ -120,6 +123,7 @@ struct anoubis_hooks {
 	/* Private Data: Do not touch from outside of anoubis_core. */
 	int magic;
 	atomic_t refcount;
+	unsigned long version;
 	/* Hooks */
 	void (*anoubis_stats)(struct anoubis_internal_stat_value**, int *);
 	DECLARE(socket_connect);

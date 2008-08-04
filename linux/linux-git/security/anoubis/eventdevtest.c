@@ -122,6 +122,7 @@ static int eventdevtest_inode_permission (struct inode * inode, int mask,
 
 /* Security operations. */
 static struct anoubis_hooks eventdevtest_ops = {
+	.version = ANOUBISCORE_VERSION,
 	.inode_permission = eventdevtest_inode_permission,
 };
 

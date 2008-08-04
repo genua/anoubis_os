@@ -351,6 +351,15 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 
 		put_task_struct(tsk);
 		break;
+	case ANOUBIS_GETVERSION:
+		{
+			unsigned long version = ANOUBISCORE_VERSION;
+			if (unlikely(!arg))
+				return -EINVAL;
+			if (copy_to_user(arg, &version, sizeof(version)))
+				return -EFAULT;
+			break;
+		}
 	default:
 		return -EINVAL;
 	}
@@ -485,6 +494,8 @@ int anoubis_register(struct anoubis_hooks * newhooks, int * idx_ptr)
 	int k, ret = -ESRCH;
 	struct anoubis_hooks * ourhooks;
 
+	if (newhooks->version != ANOUBISCORE_VERSION)
+		return -EINVAL;
 	ourhooks = kmalloc(sizeof(struct anoubis_hooks), GFP_KERNEL);
 	if (!ourhooks)
 		return -ENOMEM;

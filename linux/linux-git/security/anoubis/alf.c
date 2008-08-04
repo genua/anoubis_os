@@ -385,6 +385,7 @@ static int alf_policy_matcher(struct anoubis_kernel_policy * policy,
 
 /* Security operations. */
 static struct anoubis_hooks alf_ops = {
+	.version = ANOUBISCORE_VERSION,
 	.socket_connect = alf_socket_connect,
 	.socket_accepted = alf_socket_accepted,
 	.socket_sendmsg = alf_socket_sendmsg,

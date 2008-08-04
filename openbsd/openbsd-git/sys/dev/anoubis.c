@@ -125,6 +125,11 @@ anoubisioctl(dev_t dev, u_long cmd, caddr_t data, int fflag,
 			return ac_stats();
 		case ANOUBIS_REPLACE_POLICY:
 			return ac_replace_policy(data);
+		case ANOUBIS_GETVERSION:
+			if (data == NULL)
+				return -EINVAL;
+			*(unsigned long *)data = ANOUBISCORE_VERSION;
+			return 0;
 		default:
 			return EIO;
 	}

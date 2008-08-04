@@ -897,6 +897,7 @@ static void sfs_bprm_post_apply_creds(struct linux_binprm * bprm)
 
 /* Security operations. */
 static struct anoubis_hooks sfs_ops = {
+	.version = ANOUBISCORE_VERSION,
 	.inode_alloc_security = sfs_inode_alloc_security,
 	.inode_free_security = sfs_inode_free_security,
 	.file_alloc_security = sfs_file_alloc_security,
