@@ -493,7 +493,7 @@ typedef void	(*mpo_sysvshm_create_t)(struct ucred *cred,
 typedef void	(*mpo_sysvshm_destroy_label_t)(struct label *label);
 typedef void	(*mpo_sysvshm_init_label_t)(struct label *label);
 
-typedef void	(*mpo_thread_userret_t)(struct thread *thread);
+typedef void	(*mpo_proc_userret_t)(struct proc *proc);
 
 typedef int	(*mpo_vnode_associate_extattr_t)(struct mount *mp,
 		    struct label *mplabel, struct vnode *vp,
@@ -863,7 +863,7 @@ struct mac_policy_ops {
 	mpo_sysvshm_destroy_label_t		mpo_sysvshm_destroy_label;
 	mpo_sysvshm_init_label_t		mpo_sysvshm_init_label;
 
-	mpo_thread_userret_t			mpo_thread_userret;
+	mpo_proc_userret_t			mpo_proc_userret;
 
 #ifdef ACL
 	mpo_vnode_check_deleteacl_t		mpo_vnode_check_deleteacl;

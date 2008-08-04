@@ -1,4 +1,4 @@
-/*-
+/*
  * Copyright (c) 1999-2002 Robert N. M. Watson
  * Copyright (c) 2001 Ilmar S. Habibulin
  * Copyright (c) 2001-2003 Networks Associates Technology, Inc.
@@ -49,6 +49,7 @@
 #include <sys/mutex.h>
 #include <sys/mac.h>
 #include <sys/proc.h>
+#include <sys/pool.h>
 #include <sys/systm.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
@@ -60,28 +61,29 @@
 #include <security/mac/mac_internal.h>
 #include <security/mac/mac_policy.h>
 
-#if 0
-static int	mac_mmap_revocation = 1;
-SYSCTL_INT(_security_mac, OID_AUTO, mmap_revocation, CTLFLAG_RW,
-    &mac_mmap_revocation, 0, "Revoke mmap access to files on subject "
-    "relabel");
+/*
+ * Local parameters.
+ */
+int	mac_mmap_revocation = 1;
+int	mac_mmap_revocation_via_cow = 0;
 
-static int	mac_mmap_revocation_via_cow = 0;
-SYSCTL_INT(_security_mac, OID_AUTO, mmap_revocation_via_cow, CTLFLAG_RW,
-    &mac_mmap_revocation_via_cow, 0, "Revoke mmap access to files via "
-    "copy-on-write semantics, or by removing all write access");
+/*
+ * Local functions.
+ */
+const char     *prot2str(vm_prot_t);
+struct label   *mac_cred_label_alloc(void);
+struct label   *mac_proc_label_alloc(void);
+void		mac_proc_label_free(struct label *);
+void		mac_cred_label_free(struct label *);
+void		mac_cred_mmapped_drop_perms_recurse(struct proc *,
+		    struct ucred *, struct vm_map *);
 
-static void	mac_cred_mmapped_drop_perms_recurse(struct thread *td,
-		    struct ucred *cred, struct vm_map *map);
-#endif /* 0 */
-
-#ifdef notyet
 struct label *
 mac_cred_label_alloc(void)
 {
 	struct label *label;
 
-	label = mac_labelzone_alloc(M_WAITOK);
+	label = mac_labelpool_alloc(PR_WAITOK);
 	MAC_PERFORM(cred_init_label, label);
 	return (label);
 }
@@ -93,12 +95,12 @@ mac_cred_init(struct ucred *cred)
 	cred->cr_label = mac_cred_label_alloc();
 }
 
-static struct label *
+struct label *
 mac_proc_label_alloc(void)
 {
 	struct label *label;
 
-	label = mac_labelzone_alloc(M_WAITOK);
+	label = mac_labelpool_alloc(PR_WAITOK);
 	MAC_PERFORM(proc_init_label, label);
 	return (label);
 }
@@ -115,7 +117,7 @@ mac_cred_label_free(struct label *label)
 {
 
 	MAC_PERFORM(cred_destroy_label, label);
-	mac_labelzone_free(label);
+	mac_labelpool_free(label);
 }
 
 void
@@ -126,12 +128,12 @@ mac_cred_destroy(struct ucred *cred)
 	cred->cr_label = NULL;
 }
 
-static void
+void
 mac_proc_label_free(struct label *label)
 {
 
 	MAC_PERFORM(proc_destroy_label, label);
-	mac_labelzone_free(label);
+	mac_labelpool_free(label);
 }
 
 void
@@ -142,6 +144,7 @@ mac_proc_destroy(struct proc *p)
 	p->p_label = NULL;
 }
 
+#ifdef notyet /* XXX PM: This will be used by the MAC system calls. */
 int
 mac_cred_externalize_label(struct label *label, char *elements,
     char *outbuf, size_t outbuflen)
@@ -152,6 +155,7 @@ mac_cred_externalize_label(struct label *label, char *elements,
 
 	return (error);
 }
+#endif /* notyet */
 
 int
 mac_cred_internalize_label(struct label *label, char *string)
@@ -184,7 +188,6 @@ mac_proc_create_init(struct ucred *cred)
 
 	MAC_PERFORM(proc_create_init, cred);
 }
-#endif /* notyet */
 
 /*
  * When a thread becomes an NFS server daemon, its credential may need to be
@@ -202,12 +205,11 @@ mac_proc_associate_nfsd(struct ucred *cred)
 	MAC_PERFORM(proc_associate_nfsd, cred);
 }
 
-#ifdef notyet
 void
-mac_thread_userret(struct thread *td)
+mac_proc_userret(struct proc *p)
 {
 
-	MAC_PERFORM(thread_userret, td);
+	MAC_PERFORM(proc_userret, p);
 }
 
 /*
@@ -223,7 +225,7 @@ mac_cred_copy(struct ucred *src, struct ucred *dest)
 }
 
 int
-mac_execve_enter(struct image_params *imgp, struct mac *mac_p)
+mac_execve_enter(struct exec_package *epp, struct mac *mac_p)
 {
 	struct label *label;
 	struct mac mac;
@@ -255,16 +257,16 @@ mac_execve_enter(struct image_params *imgp, struct mac *mac_p)
 		mac_cred_label_free(label);
 		return (error);
 	}
-	imgp->execlabel = label;
+	epp->ep_label = label;
 	return (0);
 }
 
 void
-mac_execve_exit(struct image_params *imgp)
+mac_execve_exit(struct exec_package *epp)
 {
-	if (imgp->execlabel != NULL) {
-		mac_cred_label_free(imgp->execlabel);
-		imgp->execlabel = NULL;
+	if (epp->ep_label != NULL) {
+		mac_cred_label_free(epp->ep_label);
+		epp->ep_label = NULL;
 	}
 }
 
@@ -272,19 +274,18 @@ mac_execve_exit(struct image_params *imgp)
  * When relabeling a process, call out to the policies for the maximum
  * permission allowed for each object type we know about in its memory space,
  * and revoke access (in the least surprising ways we know) when necessary.
- * The process lock is not held here.
  */
 void
-mac_cred_mmapped_drop_perms(struct thread *td, struct ucred *cred)
+mac_cred_mmapped_drop_perms(struct proc *p, struct ucred *cred)
 {
 
-	/* XXX freeze all other threads */
-	mac_cred_mmapped_drop_perms_recurse(td, cred,
-	    &td->td_proc->p_vmspace->vm_map);
-	/* XXX allow other threads to continue */
+	/* XXX freeze all other processes */
+	mac_cred_mmapped_drop_perms_recurse(p, cred,
+	    &p->p_vmspace->vm_map);
+	/* XXX allow other processes to continue */
 }
 
-static __inline const char *
+const char *
 prot2str(vm_prot_t prot)
 {
 
@@ -308,41 +309,40 @@ prot2str(vm_prot_t prot)
 	}
 }
 
-static void
-mac_cred_mmapped_drop_perms_recurse(struct thread *td, struct ucred *cred,
+void
+mac_cred_mmapped_drop_perms_recurse(struct proc *p, struct ucred *cred,
     struct vm_map *map)
 {
 	struct vm_map_entry *vme;
-	int vfslocked, result;
+	int result;
 	vm_prot_t revokeperms;
-	vm_object_t backing_object, object;
-	vm_ooffset_t offset;
+	struct uvm_object *object;
+	voff_t offset;
 	struct vnode *vp;
-	struct mount *mp;
 
 	if (!mac_mmap_revocation)
 		return;
 
 	vm_map_lock_read(map);
 	for (vme = map->header.next; vme != &map->header; vme = vme->next) {
-		if (vme->eflags & MAP_ENTRY_IS_SUB_MAP) {
-			mac_cred_mmapped_drop_perms_recurse(td, cred,
+		if (UVM_ET_ISSUBMAP(vme)) {
+			mac_cred_mmapped_drop_perms_recurse(p, cred,
 			    vme->object.sub_map);
 			continue;
 		}
 		/*
 		 * Skip over entries that obviously are not shared.
 		 */
-		if (vme->eflags & (MAP_ENTRY_COW | MAP_ENTRY_NOSYNC) ||
-		    !vme->max_protection)
+		if (UVM_ET_ISCOPYONWRITE(vme) || !vme->max_protection)
 			continue;
 		/*
 		 * Drill down to the deepest backing object.
 		 */
 		offset = vme->offset;
-		object = vme->object.vm_object;
+		object = vme->object.uvm_obj;
 		if (object == NULL)
 			continue;
+#if 0		/* XXX PM: We don't have nested UVM objects. */
 		VM_OBJECT_LOCK(object);
 		while ((backing_object = object->backing_object) != NULL) {
 			VM_OBJECT_LOCK(backing_object);
@@ -351,34 +351,32 @@ mac_cred_mmapped_drop_perms_recurse(struct thread *td, struct ucred *cred,
 			object = backing_object;
 		}
 		VM_OBJECT_UNLOCK(object);
+#endif
 		/*
 		 * At the moment, vm_maps and objects aren't considered by
 		 * the MAC system, so only things with backing by a normal
 		 * object (read: vnodes) are checked.
 		 */
-		if (object->type != OBJT_VNODE)
+		if (!UVM_OBJ_IS_VNODE(object))
 			continue;
-		vp = (struct vnode *)object->handle;
-		vfslocked = VFS_LOCK_GIANT(vp->v_mount);
-		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+		vp = (struct vnode *)object;
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 		result = vme->max_protection;
 		mac_vnode_check_mmap_downgrade(cred, vp, &result);
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp, 0, p);
 		/*
 		 * Find out what maximum protection we may be allowing now
 		 * but a policy needs to get removed.
 		 */
 		revokeperms = vme->max_protection & ~result;
-		if (!revokeperms) {
-			VFS_UNLOCK_GIANT(vfslocked);
+		if (!revokeperms)
 			continue;
-		}
 		printf("pid %ld: revoking %s perms from %#lx:%ld "
-		    "(max %s/cur %s)\n", (long)td->td_proc->p_pid,
+		    "(max %s/cur %s)\n", (long)p->p_pid,
 		    prot2str(revokeperms), (u_long)vme->start,
 		    (long)(vme->end - vme->start),
 		    prot2str(vme->max_protection), prot2str(vme->protection));
-		vm_map_lock_upgrade(map);
+		vm_map_upgrade(map);
 		/*
 		 * This is the really simple case: if a map has more
 		 * max_protection than is allowed, but it's not being
@@ -394,19 +392,14 @@ mac_cred_mmapped_drop_perms_recurse(struct thread *td, struct ucred *cred,
 				 * pending changes to the object then turn it
 				 * copy-on-write.
 				 */
-				vm_object_reference(object);
-				(void) vn_start_write(vp, &mp, V_WAIT);
-				vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-				VM_OBJECT_LOCK(object);
-				vm_object_page_clean(object,
-				    OFF_TO_IDX(offset),
-				    OFF_TO_IDX(offset + vme->end - vme->start +
-					PAGE_MASK),
-				    OBJPC_SYNC);
-				VM_OBJECT_UNLOCK(object);
-				VOP_UNLOCK(vp, 0);
-				vn_finished_write(mp);
-				vm_object_deallocate(object);
+				object->pgops->pgo_reference(object);
+				vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
+				/* XXX PM: FreeBSD has different semantics. */
+				object->pgops->pgo_flush(object, offset,
+				    offset + vme->end - vme->start + PAGE_MASK,
+				    PGO_CLEANIT);
+				VOP_UNLOCK(vp, 0, p);
+				object->pgops->pgo_detach(object);
 				/*
 				 * Why bother if there's no read permissions
 				 * anymore?  For the rest, we need to leave
@@ -417,8 +410,8 @@ mac_cred_mmapped_drop_perms_recurse(struct thread *td, struct ucred *cred,
 					vme->max_protection &= ~VM_PROT_WRITE;
 					vme->protection &= ~VM_PROT_WRITE;
 				} if ((revokeperms & VM_PROT_READ) == 0)
-					vme->eflags |= MAP_ENTRY_COW |
-					    MAP_ENTRY_NEEDS_COPY;
+					vme->etype |= UVM_ET_COPYONWRITE |
+					    UVM_ET_NEEDSCOPY;
 			}
 			if (revokeperms & VM_PROT_EXECUTE) {
 				vme->max_protection &= ~VM_PROT_EXECUTE;
@@ -430,14 +423,15 @@ mac_cred_mmapped_drop_perms_recurse(struct thread *td, struct ucred *cred,
 			}
 			pmap_protect(map->pmap, vme->start, vme->end,
 			    vme->protection & ~revokeperms);
-			vm_map_simplify_entry(map, vme);
+			pmap_update(map->pmap);
+/*			vm_map_simplify_entry(map, vme);	*/
 		}
-		vm_map_lock_downgrade(map);
-		VFS_UNLOCK_GIANT(vfslocked);
+		vm_map_downgrade(map);
 	}
 	vm_map_unlock_read(map);
 }
 
+#ifdef notyet /* XXX PM: These will be used by the MAC system calls. */
 /*
  * When the subject's label changes, it may require revocation of privilege
  * to mapped objects.  This can't be done on-the-fly later with a unified
@@ -459,6 +453,7 @@ mac_cred_check_relabel(struct ucred *cred, struct label *newlabel)
 
 	return (error);
 }
+#endif /* notyet */
 
 int
 mac_cred_check_visible(struct ucred *cr1, struct ucred *cr2)
@@ -475,7 +470,7 @@ mac_proc_check_debug(struct ucred *cred, struct proc *p)
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_debug, cred, p);
 
@@ -487,7 +482,7 @@ mac_proc_check_sched(struct ucred *cred, struct proc *p)
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_sched, cred, p);
 
@@ -499,7 +494,7 @@ mac_proc_check_signal(struct ucred *cred, struct proc *p, int signum)
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_signal, cred, p, signum);
 
@@ -511,7 +506,7 @@ mac_proc_check_setuid(struct proc *p, struct ucred *cred, uid_t uid)
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_setuid, cred, uid);
 	return (error);
@@ -522,7 +517,7 @@ mac_proc_check_seteuid(struct proc *p, struct ucred *cred, uid_t euid)
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_seteuid, cred, euid);
 	return (error);
@@ -533,7 +528,7 @@ mac_proc_check_setgid(struct proc *p, struct ucred *cred, gid_t gid)
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_setgid, cred, gid);
 
@@ -545,7 +540,7 @@ mac_proc_check_setegid(struct proc *p, struct ucred *cred, gid_t egid)
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_setegid, cred, egid);
 
@@ -558,7 +553,7 @@ mac_proc_check_setgroups(struct proc *p, struct ucred *cred, int ngroups,
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_setgroups, cred, ngroups, gidset);
 	return (error);
@@ -570,7 +565,7 @@ mac_proc_check_setreuid(struct proc *p, struct ucred *cred, uid_t ruid,
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_setreuid, cred, ruid, euid);
 
@@ -583,7 +578,7 @@ mac_proc_check_setregid(struct proc *proc, struct ucred *cred, gid_t rgid,
 {
 	int error;
 
-	PROC_LOCK_ASSERT(proc, MA_OWNED);
+/*	PROC_LOCK_ASSERT(proc, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_setregid, cred, rgid, egid);
 
@@ -596,7 +591,7 @@ mac_proc_check_setresuid(struct proc *p, struct ucred *cred, uid_t ruid,
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_setresuid, cred, ruid, euid, suid);
 	return (error);
@@ -608,7 +603,7 @@ mac_proc_check_setresgid(struct proc *p, struct ucred *cred, gid_t rgid,
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_setresgid, cred, rgid, egid, sgid);
 
@@ -620,10 +615,9 @@ mac_proc_check_wait(struct ucred *cred, struct proc *p)
 {
 	int error;
 
-	PROC_LOCK_ASSERT(p, MA_OWNED);
+/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
 
 	MAC_CHECK(proc_check_wait, cred, p);
 
 	return (error);
 }
-#endif /* notyet */

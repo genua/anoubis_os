@@ -257,6 +257,7 @@ struct proc {
 	u_short	p_xstat;	/* Exit status for wait; also stop signal. */
 	u_short	p_acflag;	/* Accounting flags. */
 	struct	rusage *p_ru;	/* Exit information. XXX */
+	struct	label *p_label;	/* MAC label */
 #ifdef ANOUBIS
 	/* XXX This should move into a per process security attribute. */
 	int listener;		/* Process is an anoubis listener. */
@@ -315,6 +316,7 @@ struct proc {
 #define	P_IGNEXITRV	0x8000000	/* For thread kills */
 #define	P_SOFTDEP	0x10000000	/* Stuck processing softdep worklist */
 #define P_STOPPED	0x20000000	/* Just stopped. */
+#define P_MACPEND	0x40000000	/* Pending MAC call before userret() */
 
 #define	P_BITS \
     ("\20\01ADVLOCK\02CTTY\04NOCLDSTOP\05PPWAIT\06PROFIL\07SELECT" \

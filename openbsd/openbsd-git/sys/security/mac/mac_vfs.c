@@ -1,4 +1,4 @@
-/*-
+/*
  * Copyright (c) 1999-2002 Robert N. M. Watson
  * Copyright (c) 2001 Ilmar S. Habibulin
  * Copyright (c) 2001-2005 McAfee, Inc.
@@ -192,7 +192,7 @@ mac_vnode_execve_transition(struct ucred *old, struct ucred *new,
 	mac_assert_vnode_locked(vp);
 
 	MAC_PERFORM(vnode_execve_transition, old, new, vp, vp->v_label,
-	    interpvplabel, pack, pack->execlabel);
+	    interpvplabel, pack, pack->ep_label);
 }
 
 int
@@ -204,7 +204,7 @@ mac_vnode_execve_will_transition(struct ucred *old, struct vnode *vp,
 	mac_assert_vnode_locked(vp);
 	result = 0;
 	MAC_BOOLEAN(vnode_execve_will_transition, ||, old, vp, vp->v_label,
-	    interpvplabel, pack, pack->execlabel);
+	    interpvplabel, pack, pack->ep_label);
 
 	return (result);
 }
@@ -292,7 +292,7 @@ mac_vnode_check_exec(struct ucred *cred, struct vnode *vp,
 	mac_assert_vnode_locked(vp);
 
 	MAC_CHECK(vnode_check_exec, cred, vp, vp->v_label, pack,
-	    pack->execlabel);
+	    pack->ep_label);
 
 	return (error);
 }

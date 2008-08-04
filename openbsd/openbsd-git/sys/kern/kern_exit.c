@@ -82,6 +82,10 @@
 #include <security/mac_anoubis/mac_anoubis.h>
 #endif
 
+#ifdef MAC
+#include <security/mac/mac_framework.h>
+#endif
+
 /*
  * exit --
  *	Death of process.
@@ -473,6 +477,15 @@ loop:
 		    p->p_pgid != -SCARG(uap, pid)))
 			continue;
 
+#ifdef MAC
+		/*
+		 * XXX PM: This is a little bit odd. We should return an error
+		 * here, I believe.
+		 */
+		if (mac_proc_check_wait(curproc->p_ucred, p))
+			continue;
+#endif
+
 		/*
 		 * Wait for processes with p_exitsig != SIGCHLD processes only
 		 * if WALTSIG is set; wait for processes with pexitsig ==
@@ -599,6 +612,10 @@ proc_zap(struct proc *p)
 	 */
 	if (p->p_textvp)
 		vrele(p->p_textvp);
+
+#ifdef MAC
+	mac_proc_destroy(p);
+#endif
 
 	/*
 	 * Remove us from our process list, possibly killing the process

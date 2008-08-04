@@ -39,6 +39,7 @@
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/mount.h>
+#include <sys/mac.h>
 #include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/namei.h>
@@ -75,6 +76,12 @@
 #if NSYSTRACE > 0
 #include <dev/systrace.h>
 #endif
+
+#ifdef MAC
+#include <security/mac/mac_framework.h>
+#endif
+
+int do_execve(struct proc *, void *, register_t *, struct mac *);
 
 /*
  * Map the shared signal code.
@@ -266,6 +273,12 @@ bad1:
 int
 sys_execve(struct proc *p, void *v, register_t *retval)
 {
+	return (do_execve(p, v, retval, NULL));
+}
+
+int
+do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
+{
 	struct sys_execve_args /* {
 		syscallarg(const char *) path;
 		syscallarg(char *const *) argp;
@@ -276,7 +289,7 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	struct nameidata nid;
 	struct vattr attr;
 	struct ucred *cred = p->p_ucred;
-	char *argp;
+	char *argp = NULL;
 	char * const *cpp, *dp, *sp;
 	long argc, envc;
 	size_t len, sgap;
@@ -343,10 +356,15 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	if ((error = check_exec(p, &pack)) != 0) {
 		goto freehdr;
 	}
+#ifdef MAC
+	error = mac_execve_enter(&pack, mac_p);
+	if (error)
+		goto bad1;
+#endif
 #ifdef ANOUBIS
 	dvp = nid.ni_dvp;
 #endif
-
+	
 	/* XXX -- THE FOLLOWING SECTION NEEDS MAJOR CLEANUP */
 
 	/* allocate an argument buffer */
@@ -697,6 +715,10 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	/* update p_emul, the old value is no longer needed */
 	p->p_emul = pack.ep_emul;
 
+#ifdef MAC
+	mac_execve_exit(&pack);
+#endif
+
 #ifdef KTRACE
 	if (KTRPOINT(p, KTR_EMUL))
 		ktremul(p, p->p_emul->e_name);
@@ -717,6 +739,10 @@ sys_execve(struct proc *p, void *v, register_t *retval)
 	return (0);
 
 bad:
+#ifdef MAC
+	mac_execve_exit(&pack);
+bad1:
+#endif
 	/* free the vmspace-creation commands, and release their references */
 	kill_vmcmds(&pack.ep_vmcmds);
 	/* kill any opened file descriptor, if necessary */
@@ -735,7 +761,8 @@ bad:
 	if (dvp)
 		vrele(dvp);
 #endif
-	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
+	if (argp != NULL)
+		uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
  freehdr:
 	free(pack.ep_hdr, M_EXEC);
@@ -755,6 +782,9 @@ exec_abort:
 	 * get rid of the (new) address space we have created, if any, get rid
 	 * of our namei data and vnode, and exit noting failure
 	 */
+#ifdef MAC
+	mac_execve_exit(&pack);
+#endif
 	uvm_deallocate(&vm->vm_map, VM_MIN_ADDRESS,
 		VM_MAXUSER_ADDRESS - VM_MIN_ADDRESS);
 	if (pack.ep_interp != NULL)
@@ -770,6 +800,9 @@ exec_abort:
 	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
 free_pack_abort:
+#ifdef MAC
+	mac_execve_exit(&pack);
+#endif
 	free(pack.ep_hdr, M_EXEC);
 	exit1(p, W_EXITCODE(0, SIGABRT), EXIT_NORMAL);
 

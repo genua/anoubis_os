@@ -299,6 +299,10 @@ main(void *framep)
 	p->p_ucred = crget();
 	p->p_ucred->cr_ngroups = 1;	/* group 0 */
 
+#ifdef MAC
+	mac_proc_create_swapper(p->p_ucred);
+#endif
+
 	/* Initialize signal state for process 0. */
 	signal_init();
 	p->p_sigacts = &sigacts0;
@@ -598,6 +602,10 @@ start_init(void *arg)
 	/*
 	 * Now in process 1.
 	 */
+
+#ifdef MAC
+	mac_proc_create_init(p->p_ucred);
+#endif
 
 	/*
 	 * Wait for main() to tell us that it's safe to exec.

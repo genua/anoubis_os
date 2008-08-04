@@ -85,6 +85,10 @@
 #include <sys/shm.h>
 #endif
 
+#ifdef MAC
+#include <security/mac/mac_framework.h>
+#endif
+
 #define	PTRTOINT64(_x)	((u_int64_t)(u_long)(_x))
 
 extern struct forkstat forkstat;
@@ -957,6 +961,11 @@ sysctl_file(char *where, size_t *sizep)
 	where += sizeof(filehead);
 
 	/*
+	 * XXX PM: This function needs to be rewritten so we can filter files
+	 * opened by non-accessible processes using mac_cred_check_visible().
+	 */
+
+	/*
 	 * followed by an array of file structures
 	 */
 	LIST_FOREACH(fp, &filehead, f_list) {
@@ -1022,6 +1031,13 @@ again:
 		 */
 		if (p->p_stat == SIDL)
 			continue;
+#ifdef MAC
+		/*
+		 * Show a user only appropriate processes.
+		 */
+		if (mac_cred_check_visible(curproc->p_ucred, p->p_ucred))
+			continue;
+#endif
 		/*
 		 * TODO - make more efficient (see notes below).
 		 */
@@ -1392,6 +1408,12 @@ sysctl_proc_args(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 
 	if ((vp = pfind(pid)) == NULL)
 		return (ESRCH);
+
+#ifdef MAC
+	error = mac_cred_check_visible(cp->p_ucred, vp->p_ucred);
+	if (error)
+		return (error);
+#endif
 
 	if (oldp == NULL) {
 		if (op == KERN_PROC_NARGV || op == KERN_PROC_NENV)

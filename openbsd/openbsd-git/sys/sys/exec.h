@@ -156,7 +156,7 @@ struct exec_package {
 	char	*ep_interp;		/* name of interpreter if any */
 	u_long	ep_interp_pos;		/* interpreter load position */
 #ifdef MAC
-	struct	label *execlabel;	/* MAC label for exec. */
+	struct	label *ep_label;	/* MAC label */
 #endif
 };
 #define	EXEC_INDIR	0x0001		/* script handling already done */

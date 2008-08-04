@@ -79,7 +79,6 @@ struct socket;
 struct sysctl_oid;
 struct sysctl_req;
 struct pipepair;
-struct thread;
 struct timespec;
 struct ucred;
 struct uio;
@@ -357,7 +356,7 @@ void	mac_sysvshm_create(struct ucred *cred,
 void	mac_sysvshm_destroy(struct shmid_kernel *);
 void	mac_sysvshm_init(struct shmid_kernel *);
 
-void	mac_thread_userret(struct thread *td);
+void	mac_proc_userret(struct proc *);
 
 int	mac_vnode_associate_extattr(struct mount *mp, struct vnode *vp);
 void	mac_vnode_associate_singlelabel(struct mount *mp, struct vnode *vp);
@@ -451,7 +450,7 @@ void		 mac_cred_label_free(struct label *);
 struct label	*mac_vnode_label_alloc(void);
 void		 mac_vnode_label_free(struct label *);
 
-void	mac_cred_mmapped_drop_perms(struct thread *td, struct ucred *cred);
+void	mac_cred_mmapped_drop_perms(struct proc *, struct ucred *);
 
 /*
  * Calls to help various file systems implement labeling functionality using

@@ -70,6 +70,10 @@
 #include <security/mac_anoubis/mac_anoubis.h>
 #endif
 
+#ifdef MAC
+#include <security/mac/mac_framework.h>
+#endif
+
 int	nprocs = 1;		/* process 0 */
 int	randompid;		/* when set to 1, pid's go random */
 pid_t	lastpid;
@@ -246,6 +250,10 @@ fork1(struct proc *p1, int exitsig, int flags, void *stack, size_t stacksize,
 	}
 #else
 	process_new(p2, p1);
+#endif
+
+#ifdef MAC
+	mac_proc_init(p2);
 #endif
 
 	/*
