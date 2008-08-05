@@ -351,6 +351,9 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 	pack.ep_vap = &attr;
 	pack.ep_emul = &emul_native;
 	pack.ep_flags = 0;
+#ifdef MAC
+	pack.ep_label = NULL;
+#endif
 
 	/* see if we can run it. */
 	if ((error = check_exec(p, &pack)) != 0) {
@@ -782,9 +785,6 @@ exec_abort:
 	 * get rid of the (new) address space we have created, if any, get rid
 	 * of our namei data and vnode, and exit noting failure
 	 */
-#ifdef MAC
-	mac_execve_exit(&pack);
-#endif
 	uvm_deallocate(&vm->vm_map, VM_MIN_ADDRESS,
 		VM_MAXUSER_ADDRESS - VM_MIN_ADDRESS);
 	if (pack.ep_interp != NULL)
