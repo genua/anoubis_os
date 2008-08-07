@@ -1,4 +1,4 @@
-/*-
+/*
  * Copyright (c) 1999-2002 Robert N. M. Watson
  * Copyright (c) 2001 Ilmar S. Habibulin
  * Copyright (c) 2001-2004 Networks Associates Technology, Inc.
@@ -45,13 +45,14 @@
 #include <sys/lock.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
-#include <sys/mutex.h>
 #include <sys/mac.h>
 #include <sys/systm.h>
 #include <sys/mount.h>
 #include <sys/file.h>
 #include <sys/namei.h>
 #include <sys/protosw.h>
+#include <sys/rwlock.h>
+#include <sys/sbuf.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/sysctl.h>
@@ -66,18 +67,19 @@
 #include <security/mac/mac_internal.h>
 #include <security/mac/mac_policy.h>
 
-/*
- * XXXRW: struct ifnet locking is incomplete in the network code, so we use
- * our own global mutex for struct ifnet.  Non-ideal, but should help in the
- * SMP environment.
- */
-static struct mutex mac_ifnet_mtx = MUTEX_INITIALIZER(0);
-#define	MAC_IFNET_LOCK(ifp)	mtx_enter(&mac_ifnet_mtx)
-#define	MAC_IFNET_UNLOCK(ifp)	mtx_leave(&mac_ifnet_mtx)
+struct rwlock mac_ifnet_lock = RWLOCK_INITIALIZER("miflk");
 
-/* XXX HSH */
-#define M_ASSERTPKTHDR(m)	KASSERT(m != NULL && m->m_flags & M_PKTHDR);
-#define BPFD_LOCK_ASSERT(bd)
+/*
+ * Local functions.
+ */
+int		mac_ifnet_externalize_label(struct label *, char *, char *,
+		    size_t);
+int		mac_ifnet_internalize_label(struct label *, char *);
+struct label   *mac_bpfdesc_label_alloc(void);
+struct label   *mac_ifnet_label_alloc(void);
+void		mac_bpfdesc_label_free(struct label *);
+void		mac_ifnet_copy_label(struct label *, struct label *);
+void		mac_ifnet_label_free(struct label *);
 
 /*
  * Retrieve the label associated with an mbuf by searching for the tag.
@@ -101,7 +103,7 @@ mac_mbuf_to_label(struct mbuf *m)
 	return (label);
 }
 
-static struct label *
+struct label *
 mac_bpfdesc_label_alloc(void)
 {
 	struct label *label;
@@ -118,8 +120,7 @@ mac_bpfdesc_init(struct bpf_d *d)
 	d->bd_label = mac_bpfdesc_label_alloc();
 }
 
-#if 0	/* XXX HSH */
-static struct label *
+struct label *
 mac_ifnet_label_alloc(void)
 {
 	struct label *label;
@@ -175,15 +176,14 @@ mac_mbuf_init(struct mbuf *m, int flag)
 		return (ENOMEM);
 	error = mac_mbuf_tag_init(tag, flag);
 	if (error) {
-		m_tag_free(tag);
+		free(tag, M_PACKET_TAGS);
 		return (error);
 	}
 	m_tag_prepend(m, tag);
 	return (0);
 }
-#endif	/* 0 */
 
-static void
+void
 mac_bpfdesc_label_free(struct label *label)
 {
 
@@ -199,8 +199,7 @@ mac_bpfdesc_destroy(struct bpf_d *d)
 	d->bd_label = NULL;
 }
 
-#if 0	/* XXX HSH */
-static void
+void
 mac_ifnet_label_free(struct label *label)
 {
 
@@ -257,14 +256,14 @@ mac_mbuf_copy(struct mbuf *m_from, struct mbuf *m_to)
 	MAC_PERFORM(mbuf_copy_label, src_label, dest_label);
 }
 
-static void
+void
 mac_ifnet_copy_label(struct label *src, struct label *dest)
 {
 
 	MAC_PERFORM(ifnet_copy_label, src, dest);
 }
 
-static int
+int
 mac_ifnet_externalize_label(struct label *label, char *elements,
     char *outbuf, size_t outbuflen)
 {
@@ -275,7 +274,7 @@ mac_ifnet_externalize_label(struct label *label, char *elements,
 	return (error);
 }
 
-static int
+int
 mac_ifnet_internalize_label(struct label *label, char *string)
 {
 	int error;
@@ -293,7 +292,6 @@ mac_ifnet_create(struct ifnet *ifp)
 	MAC_PERFORM(ifnet_create, ifp, ifp->if_label);
 	MAC_IFNET_UNLOCK(ifp);
 }
-#endif	/* 0 */
 
 void
 mac_bpfdesc_create(struct ucred *cred, struct bpf_d *d)
@@ -314,7 +312,6 @@ mac_bpfdesc_create_mbuf(struct bpf_d *d, struct mbuf *m)
 	MAC_PERFORM(bpfdesc_create_mbuf, d, d->bd_label, m, label);
 }
 
-#if 0	/* XXX HSH */
 void
 mac_ifnet_create_mbuf(struct ifnet *ifp, struct mbuf *m)
 {
@@ -326,7 +323,6 @@ mac_ifnet_create_mbuf(struct ifnet *ifp, struct mbuf *m)
 	MAC_PERFORM(ifnet_create_mbuf, ifp, ifp->if_label, m, label);
 	MAC_IFNET_UNLOCK(ifp);
 }
-#endif	/* 0 */
 
 int
 mac_bpfdesc_check_receive(struct bpf_d *d, struct ifnet *ifp)
@@ -342,7 +338,6 @@ mac_bpfdesc_check_receive(struct bpf_d *d, struct ifnet *ifp)
 	return (error);
 }
 
-#if 0	/* XXX HSH */
 int
 mac_ifnet_check_transmit(struct ifnet *ifp, struct mbuf *m)
 {
@@ -432,6 +427,7 @@ mac_ifnet_ioctl_set(struct ucred *cred, struct ifreq *ifr, struct ifnet *ifp)
 		return (error);
 	}
 
+#if 0
 	/*
 	 * XXX: Note that this is a redundant privilege check, since policies
 	 * impose this check themselves if required by the policy
@@ -442,6 +438,7 @@ mac_ifnet_ioctl_set(struct ucred *cred, struct ifreq *ifr, struct ifnet *ifp)
 		mac_ifnet_label_free(intlabel);
 		return (error);
 	}
+#endif
 
 	MAC_IFNET_LOCK(ifp);
 	MAC_CHECK(ifnet_check_relabel, cred, ifp, ifp->if_label, intlabel);
@@ -457,4 +454,3 @@ mac_ifnet_ioctl_set(struct ucred *cred, struct ifreq *ifr, struct ifnet *ifp)
 	mac_ifnet_label_free(intlabel);
 	return (0);
 }
-#endif	/* 0 */

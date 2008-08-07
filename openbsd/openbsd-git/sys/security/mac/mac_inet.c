@@ -1,4 +1,4 @@
-/*-
+/*
  * Copyright (c) 1999-2002, 2007 Robert N. M. Watson
  * Copyright (c) 2001 Ilmar S. Habibulin
  * Copyright (c) 2001-2004 Networks Associates Technology, Inc.
@@ -69,20 +69,27 @@
 #include <security/mac/mac_internal.h>
 #include <security/mac/mac_policy.h>
 
-#ifdef notyet /* XXX PM */
-static struct label *
+/*
+ * Local functions.
+ */
+struct label   *mac_inpcb_label_alloc(int);
+struct label   *mac_ipq_label_alloc(int);
+void		mac_inpcb_label_free(struct label *);
+void		mac_ipq_label_free(struct label *);
+
+struct label *
 mac_inpcb_label_alloc(int flag)
 {
 	struct label *label;
 	int error;
 
-	label = mac_labelzone_alloc(flag);
+	label = mac_labelpool_alloc(flag);
 	if (label == NULL)
 		return (NULL);
 	MAC_CHECK(inpcb_init_label, label, flag);
 	if (error) {
 		MAC_PERFORM(inpcb_destroy_label, label);
-		mac_labelzone_free(label);
+		mac_labelpool_free(label);
 		return (NULL);
 	}
 	return (label);
@@ -98,20 +105,20 @@ mac_inpcb_init(struct inpcb *inp, int flag)
 	return (0);
 }
 
-static struct label *
+struct label *
 mac_ipq_label_alloc(int flag)
 {
 	struct label *label;
 	int error;
 
-	label = mac_labelzone_alloc(flag);
+	label = mac_labelpool_alloc(flag);
 	if (label == NULL)
 		return (NULL);
 
 	MAC_CHECK(ipq_init_label, label, flag);
 	if (error) {
 		MAC_PERFORM(ipq_destroy_label, label);
-		mac_labelzone_free(label);
+		mac_labelpool_free(label);
 		return (NULL);
 	}
 	return (label);
@@ -127,12 +134,12 @@ mac_ipq_init(struct ipq *q, int flag)
 	return (0);
 }
 
-static void
+void
 mac_inpcb_label_free(struct label *label)
 {
 
 	MAC_PERFORM(inpcb_destroy_label, label);
-	mac_labelzone_free(label);
+	mac_labelpool_free(label);
 }
 
 void
@@ -143,12 +150,12 @@ mac_inpcb_destroy(struct inpcb *inp)
 	inp->inp_label = NULL;
 }
 
-static void
+void
 mac_ipq_label_free(struct label *label)
 {
 
 	MAC_PERFORM(ipq_destroy_label, label);
-	mac_labelzone_free(label);
+	mac_labelpool_free(label);
 }
 
 void
@@ -202,7 +209,7 @@ mac_inpcb_create_mbuf(struct inpcb *inp, struct mbuf *m)
 {
 	struct label *mlabel;
 
-	INP_LOCK_ASSERT(inp);
+/*	INP_LOCK_ASSERT(inp);	*/
 	mlabel = mac_mbuf_to_label(m);
 
 	MAC_PERFORM(inpcb_create_mbuf, inp, inp->inp_label, m, mlabel);
@@ -303,6 +310,7 @@ mac_inpcb_check_deliver(struct inpcb *inp, struct mbuf *m)
 	return (error);
 }
 
+#ifdef notyet /* XXX PM: This will be used by the MAC system calls. */
 void
 mac_inpcb_sosetlabel(struct socket *so, struct inpcb *inp)
 {
@@ -338,7 +346,6 @@ mac_netinet_firewall_send(struct mbuf *m)
 	MAC_PERFORM(netinet_firewall_send, m, label);
 }
 
-#ifdef notyet /* XXX PM */
 /*
  * These functions really should be referencing the syncache structure
  * instead of the label.  However, due to some of the complexities associated
@@ -353,7 +360,7 @@ mac_syncache_destroy(struct label **label)
 {
 
 	MAC_PERFORM(syncache_destroy_label, *label);
-	mac_labelzone_free(*label);
+	mac_labelpool_free(*label);
 	*label = NULL;
 }
 
@@ -362,7 +369,7 @@ mac_syncache_init(struct label **label)
 {
 	int error;
 
-	*label = mac_labelzone_alloc(M_NOWAIT);
+	*label = mac_labelpool_alloc(PR_NOWAIT);
 	if (*label == NULL)
 		return (ENOMEM);
 	/*
@@ -374,7 +381,7 @@ mac_syncache_init(struct label **label)
 	MAC_CHECK(syncache_init_label, *label, M_NOWAIT);
 	if (error) {
 		MAC_PERFORM(syncache_destroy_label, *label);
-		mac_labelzone_free(*label);
+		mac_labelpool_free(*label);
 	}
 	return (error);
 }
@@ -383,7 +390,7 @@ void
 mac_syncache_create(struct label *label, struct inpcb *inp)
 {
 
-	INP_WLOCK_ASSERT(inp);
+/*	INP_WLOCK_ASSERT(inp);	*/
 	MAC_PERFORM(syncache_create, label, inp);
 }
 
@@ -396,4 +403,3 @@ mac_syncache_create_mbuf(struct label *sc_label, struct mbuf *m)
 	mlabel = mac_mbuf_to_label(m);
 	MAC_PERFORM(syncache_create_mbuf, sc_label, m, mlabel);
 }
-#endif

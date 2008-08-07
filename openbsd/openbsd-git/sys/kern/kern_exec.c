@@ -69,10 +69,6 @@
 
 #include "systrace.h"
 
-#ifdef ANOUBIS
-#include <security/mac/mac_framework.h>
-#endif
-
 #if NSYSTRACE > 0
 #include <dev/systrace.h>
 #endif

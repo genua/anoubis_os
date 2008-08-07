@@ -67,6 +67,19 @@ MALLOC_DECLARE(M_MACTEMP);
 #endif
 
 /*
+ * XXXRW: struct ifnet locking is incomplete in the network code, so we use
+ * our own global mutex for struct ifnet.  Non-ideal, but should help in the
+ * SMP environment.
+ */
+extern struct rwlock mac_ifnet_lock;
+#define	MAC_IFNET_LOCK(ifp)	rw_enter_write(&mac_ifnet_lock)
+#define	MAC_IFNET_UNLOCK(ifp)	rw_exit_write(&mac_ifnet_lock)
+
+/* XXX HSH */
+#define M_ASSERTPKTHDR(m)	KASSERT(m != NULL && m->m_flags & M_PKTHDR);
+#define BPFD_LOCK_ASSERT(bd)
+
+/*
  * MAC labels -- in-kernel storage format.
  *
  * In general, struct label pointers are embedded in kernel data structures
