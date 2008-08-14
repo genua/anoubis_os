@@ -38,6 +38,9 @@
 /*
  * Credentials.
  */
+#define	cr_startcopy	cr_uid
+#define	cr_endcopy	cr_label
+
 struct ucred {
 	u_int	cr_ref;			/* reference count */
 	uid_t	cr_uid;			/* effective user id */
