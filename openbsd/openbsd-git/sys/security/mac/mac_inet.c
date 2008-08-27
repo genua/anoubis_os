@@ -233,12 +233,13 @@ void
 mac_netinet_arp_send(struct ifnet *ifp, struct mbuf *m)
 {
 	struct label *mlabel;
+	int s;
 
 	mlabel = mac_mbuf_to_label(m);
 
-	MAC_IFNET_LOCK(ifp);
+	MAC_IFNET_LOCK(s);
 	MAC_PERFORM(netinet_arp_send, ifp, ifp->if_label, m, mlabel);
-	MAC_IFNET_UNLOCK(ifp);
+	MAC_IFNET_UNLOCK(s);
 }
 
 void
@@ -267,12 +268,13 @@ void
 mac_netinet_igmp_send(struct ifnet *ifp, struct mbuf *m)
 {
 	struct label *mlabel;
+	int s;
 
 	mlabel = mac_mbuf_to_label(m);
 
-	MAC_IFNET_LOCK(ifp);
+	MAC_IFNET_LOCK(s);
 	MAC_PERFORM(netinet_igmp_send, ifp, ifp->if_label, m, mlabel);
-	MAC_IFNET_UNLOCK(ifp);
+	MAC_IFNET_UNLOCK(s);
 }
 
 void

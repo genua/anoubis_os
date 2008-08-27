@@ -287,10 +287,11 @@ mac_ifnet_internalize_label(struct label *label, char *string)
 void
 mac_ifnet_create(struct ifnet *ifp)
 {
+	int s;
 
-	MAC_IFNET_LOCK(ifp);
+	MAC_IFNET_LOCK(s);
 	MAC_PERFORM(ifnet_create, ifp, ifp->if_label);
-	MAC_IFNET_UNLOCK(ifp);
+	MAC_IFNET_UNLOCK(s);
 }
 
 void
@@ -319,21 +320,19 @@ mac_ifnet_create_mbuf(struct ifnet *ifp, struct mbuf *m)
 
 	label = mac_mbuf_to_label(m);
 
-	MAC_IFNET_LOCK(ifp);
 	MAC_PERFORM(ifnet_create_mbuf, ifp, ifp->if_label, m, label);
-	MAC_IFNET_UNLOCK(ifp);
 }
 
 int
 mac_bpfdesc_check_receive(struct bpf_d *d, struct ifnet *ifp)
 {
-	int error;
+	int error, s;
 
 	BPFD_LOCK_ASSERT(d);
 
-	MAC_IFNET_LOCK(ifp);
+	MAC_IFNET_LOCK(s);
 	MAC_CHECK(bpfdesc_check_receive, d, d->bd_label, ifp, ifp->if_label);
-	MAC_IFNET_UNLOCK(ifp);
+	MAC_IFNET_UNLOCK(s);
 
 	return (error);
 }
@@ -342,15 +341,15 @@ int
 mac_ifnet_check_transmit(struct ifnet *ifp, struct mbuf *m)
 {
 	struct label *label;
-	int error;
+	int error, s;
 
 	M_ASSERTPKTHDR(m);
 
 	label = mac_mbuf_to_label(m);
 
-	MAC_IFNET_LOCK(ifp);
+	MAC_IFNET_LOCK(s);
 	MAC_CHECK(ifnet_check_transmit, ifp, ifp->if_label, m, label);
-	MAC_IFNET_UNLOCK(ifp);
+	MAC_IFNET_UNLOCK(s);
 
 	return (error);
 }
@@ -362,7 +361,7 @@ mac_ifnet_ioctl_get(struct ucred *cred, struct ifreq *ifr,
 	char *elements, *buffer;
 	struct label *intlabel;
 	struct mac mac;
-	int error;
+	int error, s;
 
 	error = copyin(ifr->ifr_ifru.ifru_data, &mac, sizeof(mac));
 	if (error)
@@ -381,9 +380,9 @@ mac_ifnet_ioctl_get(struct ucred *cred, struct ifreq *ifr,
 
 	buffer = malloc(mac.m_buflen, M_MACTEMP, M_WAITOK | M_ZERO);
 	intlabel = mac_ifnet_label_alloc();
-	MAC_IFNET_LOCK(ifp);
+	MAC_IFNET_LOCK(s);
 	mac_ifnet_copy_label(ifp->if_label, intlabel);
-	MAC_IFNET_UNLOCK(ifp);
+	MAC_IFNET_UNLOCK(s);
 	error = mac_ifnet_externalize_label(intlabel, elements, buffer,
 	    mac.m_buflen);
 	mac_ifnet_label_free(intlabel);
@@ -402,7 +401,7 @@ mac_ifnet_ioctl_set(struct ucred *cred, struct ifreq *ifr, struct ifnet *ifp)
 	struct label *intlabel;
 	struct mac mac;
 	char *buffer;
-	int error;
+	int error, s;
 
 	error = copyin(ifr->ifr_ifru.ifru_data, &mac, sizeof(mac));
 	if (error)
@@ -440,16 +439,16 @@ mac_ifnet_ioctl_set(struct ucred *cred, struct ifreq *ifr, struct ifnet *ifp)
 	}
 #endif
 
-	MAC_IFNET_LOCK(ifp);
+	MAC_IFNET_LOCK(s);
 	MAC_CHECK(ifnet_check_relabel, cred, ifp, ifp->if_label, intlabel);
 	if (error) {
-		MAC_IFNET_UNLOCK(ifp);
+		MAC_IFNET_UNLOCK(s);
 		mac_ifnet_label_free(intlabel);
 		return (error);
 	}
 
 	MAC_PERFORM(ifnet_relabel, cred, ifp, ifp->if_label, intlabel);
-	MAC_IFNET_UNLOCK(ifp);
+	MAC_IFNET_UNLOCK(s);
 
 	mac_ifnet_label_free(intlabel);
 	return (0);

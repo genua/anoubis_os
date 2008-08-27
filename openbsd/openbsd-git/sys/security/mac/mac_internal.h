@@ -72,8 +72,17 @@ MALLOC_DECLARE(M_MACTEMP);
  * SMP environment.
  */
 extern struct rwlock mac_ifnet_lock;
-#define	MAC_IFNET_LOCK(ifp)	rw_enter_write(&mac_ifnet_lock)
-#define	MAC_IFNET_UNLOCK(ifp)	rw_exit_write(&mac_ifnet_lock)
+#define	MAC_IFNET_LOCK(s)						\
+do {									\
+	rw_enter_write(&mac_ifnet_lock);				\
+	s = splnet();							\
+} while (/* CONSTCOND */ 0)
+
+#define	MAC_IFNET_UNLOCK(s)						\
+do {									\
+	splx(s);							\
+	rw_exit_write(&mac_ifnet_lock);					\
+} while (/* CONSTCOND */ 0)
 
 /* XXX HSH */
 #define M_ASSERTPKTHDR(m)	KASSERT(m != NULL && m->m_flags & M_PKTHDR);
