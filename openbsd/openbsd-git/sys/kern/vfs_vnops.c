@@ -137,8 +137,10 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 			if (error) {
 				if (dirvp)
 					vrele(dirvp);
-				if (cnp)
-					pool_put(&namei_pool, cnp->cn_pnbuf);
+				/*
+				 * No need to free cnp->cn_pnbuf here as
+				 * VOP_CREATE does this on error.
+				 */
 				return (error);
 			}
 #else
@@ -187,6 +189,7 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 			if (error != EISDIR)
 				return error;
 			*ndp = savendp;
+			ndp->ni_cnd.cn_nameiop = LOOKUP;
 			ndp->ni_cnd.cn_flags = LOCKLEAF |
 			    ((fmode & O_NOFOLLOW) ? NOFOLLOW : FOLLOW);
 			if ((error = namei(ndp)))
@@ -235,8 +238,11 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		error = mac_vnode_check_open(cred, vp, mode, dirvp, cnp);
 		if (dirvp)
 			vrele(dirvp);
-		if (cnp)
+		if (cnp) {
+			if ((cnp->cn_flags & HASBUF) == 0)
+				panic("Lost buffer in vn_open?");
 			pool_put(&namei_pool, cnp->cn_pnbuf);
+		}
 		dirvp = NULL;
 		cnp = NULL;
 #else
