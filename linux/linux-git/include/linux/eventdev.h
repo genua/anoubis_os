@@ -15,7 +15,7 @@ typedef u_int32_t eventdev_token;
 #define EVENTDEV_NEED_REPLY	1
 
 struct eventdev_hdr {
-	short msg_size;
+	unsigned short msg_size;
 	unsigned char msg_source;
 	unsigned char msg_flags;
 	eventdev_token msg_token;
