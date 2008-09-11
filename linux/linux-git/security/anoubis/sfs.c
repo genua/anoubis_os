@@ -705,6 +705,11 @@ int anoubis_sfs_get_csum(struct file * file, u8 * csum)
 	return err;
 }
 
+static int sfs_getcsum(struct file * file, u8 * csum)
+{
+	return anoubis_sfs_get_csum(file, csum);
+}
+
 /*
  * Part of the external interface:
  * Lock the contents of a file into the revision given by @csum.
@@ -910,6 +915,7 @@ static struct anoubis_hooks sfs_ops = {
 	.inode_setxattr = sfs_inode_setxattr,
 	.inode_removexattr = sfs_inode_removexattr,
 	.anoubis_stats = sfs_getstats,
+	.anoubis_getcsum = sfs_getcsum,
 };
 
 /*

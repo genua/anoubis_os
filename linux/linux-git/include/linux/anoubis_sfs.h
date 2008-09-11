@@ -29,7 +29,7 @@
 
 #include <linux/anoubis.h>
 
-#define ANOUBIS_SFS_CS_LEN 32		 /* Length of Checksum */
+#define ANOUBIS_SFS_CS_LEN	ANOUBIS_CS_LEN	/* Length of Checksum */
 
 #define ANOUBIS_OPEN_FLAG_READ		0x0001UL
 #define ANOUBIS_OPEN_FLAG_WRITE		0x0002UL
@@ -68,8 +68,8 @@ struct sfs_open_message
 
 #ifdef __KERNEL__
 
-int anoubis_sfs_get_csum(struct file * file, u8 * csum);
-int anoubis_sfs_file_lock(struct file * file, u8 * csum);
+int anoubis_sfs_get_csum(struct file * file, u_int8_t * csum);
+int anoubis_sfs_file_lock(struct file * file, u_int8_t * csum);
 void anoubis_sfs_file_unlock(struct file * file);
 
 #endif

@@ -94,42 +94,99 @@ int
 anoubisioctl(dev_t dev, u_long cmd, caddr_t data, int fflag,
     struct proc *p)
 {
+	int			 fd;
+	struct file		*file;
+	struct eventdev_queue	*evq = NULL;
 	switch(cmd) {
-		case ANOUBIS_DECLARE_FD: {
-			struct eventdev_queue * nq, *oq;
-			int fd = (int)(*(int*)data);
-			struct file * fp = fd_getfile(p->p_fd, fd);
-			if (!fp)
-				return EBADF;
-			FREF(fp);
-			nq = eventdev_get_queue(fp);
-			FRELE(fp);
-			if (!nq)
-				return EBADF;
-			mtx_enter(&anoubis_lock);
-			oq = anoubis_queue;
-			anoubis_queue = nq;
-			mtx_leave(&anoubis_lock);
-			if (oq)
-				eventdev_put_queue(oq);
-			return 0;
-		}
 		case ANOUBIS_DECLARE_LISTENER: {
-			int arg = (int)(*(int*)data);
-			if (arg != 0)
-				return EINVAL;
+			if (suser(p, 0) != 0)
+				return EPERM;
+			fd = (int)(*(int*)data);
+			file = fd_getfile(p->p_fd, fd);
+			if (!file)
+				return EBADF;
+			FREF(file);
+			evq = eventdev_get_queue(file);
+			FRELE(file);
+			if (!evq)
+				return EPERM;
+			mtx_enter(&anoubis_lock);
+			if (anoubis_queue != evq) {
+				mtx_leave(&anoubis_lock);
+				eventdev_put_queue(evq);
+				return EPERM;
+			}
+			mtx_leave(&anoubis_lock);
+			eventdev_put_queue(evq);
 			curproc->listener = 1;
 			return 0;
+		}
+		case ANOUBIS_DECLARE_FD: {
+			if (suser(p, 0) != 0)
+				return EPERM;
+			fd = (int)(*(int*)data);
+			file = fd_getfile(p->p_fd, fd);
+			if (!file)
+				return EBADF;
+			FREF(file);
+			evq = eventdev_get_queue(file);
+			FRELE(file);
+			if (!evq)
+				return EINVAL;
+			mtx_enter(&anoubis_lock);
+			if (anoubis_queue == NULL) {
+				anoubis_queue = evq;
+				evq = NULL;
+			}
+			mtx_leave(&anoubis_lock);
+			if (evq) {
+				eventdev_put_queue(evq);
+				return EBUSY;
+			}
+			return 0;
+		}
+		case ANOUBIS_UNDECLARE_FD: {
+			int ret;
+			if (suser(p, 0) != 0)
+				return EPERM;
+			fd = (int)(*(int*)data);
+			file = fd_getfile(p->p_fd, fd);
+			if (!file)
+				return EBADF;
+			FREF(file);
+			evq = eventdev_get_queue(file);
+			FRELE(file);
+			if (!evq)
+				return EINVAL;
+			mtx_enter(&anoubis_lock);
+			ret = EBADF;
+			if (anoubis_queue == evq) {
+				anoubis_queue = NULL;
+				eventdev_put_queue(evq);
+				ret = 0;
+			}
+			mtx_leave(&anoubis_lock);
+			eventdev_put_queue(evq);
+			return ret;
 		}
 		case ANOUBIS_REQUEST_STATS:
 			return ac_stats();
 		case ANOUBIS_REPLACE_POLICY:
+			if (suser(p, 0) != 0)
+				return EPERM;
 			return ac_replace_policy(data);
 		case ANOUBIS_GETVERSION:
 			if (data == NULL)
-				return -EINVAL;
+				return EINVAL;
 			*(unsigned long *)data = ANOUBISCORE_VERSION;
 			return 0;
+		case ANOUBIS_GETCSUM: {
+			struct anoubis_ioctl_csum *cs = (void*)data;
+			file = fd_getfile(p->p_fd, cs->fd);
+			if (!file)
+				return EBADF;
+			return anoubis_sfs_getcsum(file, cs->csum);
+		}
 		default:
 			return EIO;
 	}

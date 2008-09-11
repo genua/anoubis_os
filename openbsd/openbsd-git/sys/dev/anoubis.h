@@ -33,12 +33,20 @@
 
 #define ANOUBISCORE_VERSION		0x00010001UL
 
+#define ANOUBIS_CS_LEN		32
+struct anoubis_ioctl_csum {
+	int fd;
+	u_int8_t csum[ANOUBIS_CS_LEN];
+};
+
 #define ANOUBIS_DECLARE_FD		_IO('a',0x10)
 #define ANOUBIS_DECLARE_LISTENER	_IO('a',0x11)
 #define ANOUBIS_REQUEST_STATS		_IO('a',0x12)
+#define ANOUBIS_UNDECLARE_FD		_IO('a',0x13)
 #define ANOUBIS_REPLACE_POLICY		_IO('a',0x14)
 #define ANOUBIS_GETVERSION		_IOR('a',0x15, unsigned long)
-
+#define ANOUBIS_GETCSUM			_IOWR('a',0x16, \
+					    struct anoubis_ioctl_csum)
 
 #define ANOUBIS_SOURCE_TEST	0
 #define ANOUBIS_SOURCE_ALF	10

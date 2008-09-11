@@ -248,6 +248,32 @@ sfs_csum(struct vnode * vp, struct sfs_label * sec)
 	return ret;
 }
 
+int
+anoubis_sfs_getcsum(struct file *file, u_int8_t *csum)
+{
+	struct vnode		*vp = file->f_data;
+	struct sfs_label	*sec;
+	int			 ret;
+
+	if (!FPVNODE(file) || !CHECKSUM_OK(vp))
+		return EINVAL;
+	if (!vp->v_label)
+		return -EINVAL;
+	sec = SFS_LABEL(vp->v_label);
+	if (!sec)
+		return EINVAL;
+	ret = sfs_csum(vp, sec);
+	if (ret)
+		return ret;
+	mtx_enter(&sec->lock);
+	if (sec->sfsmask & SFS_CS_UPTODATE) {
+		bcopy(sec->hash, csum, ANOUBIS_CS_LEN);
+		ret = 0;
+	}
+	mtx_leave(&sec->lock);
+	return ret;
+}
+
 /*
  * This function returns a pointer to the actual path. The path is stored
  * in a buffer that is allocated via malloc(..., M_MACTEMP). The caller

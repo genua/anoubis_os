@@ -215,10 +215,34 @@ retry:
 	return anoubis_notify(data, sz, ANOUBIS_SOURCE_STAT);
 }
 
+static int ac_getcsum(struct file * file, u8 * csum)
+{
+	int i;
+	int ret = -ENOSYS;
+	struct anoubis_hooks * h = NULL;
+	int (*func)(struct file *, u8 *) = NULL;
+
+	rcu_read_lock();
+	for(i=0; i<MAX_ANOUBIS_MODULES; ++i) {
+		h = rcu_dereference(hooks[i]);
+		if (h && h->anoubis_getcsum) {
+			atomic_inc(&h->refcount);
+			func = h->anoubis_getcsum;
+			break;
+		}
+	}
+	rcu_read_unlock();
+	if (!h)
+		return -ENOSYS;
+	ret = (*func)(file, csum);
+	atomic_dec(&h->refcount);
+	return ret;
+}
+
 static long anoubis_ioctl(struct file * file, unsigned int cmd,
 			       unsigned long arg)
 {
-	struct eventdev_queue * q, * q2 = NULL;
+	struct eventdev_queue * q;
 	struct file * eventfile;
 	struct anoubis_task_label * l;
 	struct anoubis_kernel_policy_header policy_header;
@@ -231,9 +255,19 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 	case ANOUBIS_DECLARE_LISTENER:
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
+		eventfile = fget(arg);
+		if (!eventfile)
+			return -EBADF;
+		q = eventdev_get_queue(eventfile);
+		fput(eventfile);
+		if (!q)
+			return -EPERM;
+		if (rcu_dereference(anoubis_queue) != q) {
+			eventdev_put_queue(q);
+			return -EPERM;
+		}
+		eventdev_put_queue(q);
 		l = current->security;
-		if (unlikely(arg))
-			return -EINVAL;
 		if(unlikely(!current->security))
 			return -EINVAL;
 		l->listener = 1;
@@ -249,13 +283,16 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 		if (!q)
 			return -EINVAL;
 		spin_lock_bh(&queuelock);
-		if (anoubis_queue)
-			q2 = anoubis_queue;
-		rcu_assign_pointer(anoubis_queue, q);
+		if (anoubis_queue == NULL) {
+			rcu_assign_pointer(anoubis_queue, q);
+			q = NULL;
+		}
 		spin_unlock_bh(&queuelock);
 		synchronize_rcu();
-		if (q2)
-			eventdev_put_queue(q2);
+		if (q) {
+			eventdev_put_queue(q);
+			return -EBUSY;
+		}
 		break;
 	case ANOUBIS_UNDECLARE_FD:
 		if (!capable(CAP_SYS_ADMIN))
@@ -283,6 +320,8 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 	case ANOUBIS_REPLACE_POLICY:
 		if (unlikely(!arg))
 			return -EINVAL;
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
 
 		if (copy_from_user(&policy_header, (void *)arg,
 		    sizeof(policy_header)) != 0)
@@ -356,9 +395,29 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 			unsigned long version = ANOUBISCORE_VERSION;
 			if (unlikely(!arg))
 				return -EINVAL;
-			if (copy_to_user(arg, &version, sizeof(version)))
+			if (copy_to_user((void*)arg, &version, sizeof(version)))
 				return -EFAULT;
 			break;
+		}
+	case ANOUBIS_GETCSUM:
+		{
+			struct anoubis_ioctl_csum __user *cs = (void*)arg;
+			int fd;
+			u8 csum[ANOUBIS_CS_LEN];
+			struct file * file;
+
+			if (copy_from_user(&fd, &cs->fd, sizeof(fd)))
+				return -EFAULT;
+			file = fget(fd);
+			if (!file)
+				return -EBADF;
+			ret = ac_getcsum(file, csum);
+			fput(file);
+			if (ret < 0)
+				return ret;
+			if (copy_to_user(&cs->csum, csum, ANOUBIS_CS_LEN))
+				return -EFAULT;
+			return 0;
 		}
 	default:
 		return -EINVAL;
@@ -684,12 +743,12 @@ static int ac_inode_permission(struct inode * inode, int mask,
 {
 	return HOOKS(inode_permission, (inode, mask, nd));
 }
-static int ac_inode_setxattr(struct dentry * dentry, char * name,
-    void * value, size_t size, int flags)
+static int ac_inode_setxattr(struct dentry * dentry, const char * name,
+    const void * value, size_t size, int flags)
 {
 	return HOOKS(inode_setxattr, (dentry, name, value, size, flags));
 }
-static int ac_inode_removexattr(struct dentry *dentry, char *name)
+static int ac_inode_removexattr(struct dentry *dentry, const char *name)
 {
 	return HOOKS(inode_removexattr, (dentry, name));
 }

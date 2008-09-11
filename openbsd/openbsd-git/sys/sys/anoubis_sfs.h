@@ -29,7 +29,7 @@
 
 #include <dev/anoubis.h>
 
-#define ANOUBIS_SFS_CS_LEN 32		 /* Length of Checksum */
+#define ANOUBIS_SFS_CS_LEN		ANOUBIS_CS_LEN /* Length of Checksum */
 
 #define ANOUBIS_OPEN_FLAG_READ		0x0001UL
 #define ANOUBIS_OPEN_FLAG_WRITE		0x0002UL

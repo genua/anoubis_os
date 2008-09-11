@@ -36,6 +36,7 @@ extern struct mac_policy_conf mac_anoubis_test_mac_policy_conf;
 
 extern void anoubis_sfs_getstats(struct anoubis_internal_stat_value **, int *);
 extern void anoubis_alf_getstats(struct anoubis_internal_stat_value **, int *);
+extern int anoubis_sfs_getcsum(struct file *, u_int8_t *);
 
 extern struct eventdev_queue *anoubis_queue;
 extern struct mutex anoubis_lock;

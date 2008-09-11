@@ -31,6 +31,12 @@
 
 #define ANOUBISCORE_VERSION		0x00010001UL
 
+#define ANOUBIS_CS_LEN		32
+struct anoubis_ioctl_csum {
+	int fd;
+	u_int8_t csum[ANOUBIS_CS_LEN];
+};
+
 #define	ANOUBIS_TYPE			'a'
 #define ANOUBIS_DECLARE_FD		_IO(ANOUBIS_TYPE,0x10)
 #define ANOUBIS_DECLARE_LISTENER	_IO(ANOUBIS_TYPE,0x11)
@@ -38,6 +44,8 @@
 #define ANOUBIS_UNDECLARE_FD		_IO(ANOUBIS_TYPE,0x13)
 #define ANOUBIS_REPLACE_POLICY		_IO(ANOUBIS_TYPE,0x14)
 #define ANOUBIS_GETVERSION		_IOR(ANOUBIS_TYPE,0x15, unsigned long)
+#define ANOUBIS_GETCSUM			_IOWR(ANOUBIS_TYPE,0x16, \
+					    struct anoubis_ioctl_csum)
 
 #define ANOUBIS_SOURCE_TEST	0
 #define ANOUBIS_SOURCE_ALF	10
@@ -126,6 +134,7 @@ struct anoubis_hooks {
 	unsigned long version;
 	/* Hooks */
 	void (*anoubis_stats)(struct anoubis_internal_stat_value**, int *);
+	int (*anoubis_getcsum)(struct file *, u_int8_t *);
 	DECLARE(socket_connect);
 	DECLARE(socket_accepted);
 	DECLARE(socket_sendmsg);
