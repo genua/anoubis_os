@@ -149,6 +149,7 @@ struct anoubis_hooks {
 	DECLARE(file_free_security);
 	DECLARE(file_permission);
 	DECLARE(file_mmap);
+	DECLARE(dentry_open);
 	DECLARE(bprm_set_security);
 	DECLARE(bprm_post_apply_creds);
 	DECLARE(ptrace);

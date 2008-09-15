@@ -61,10 +61,8 @@ static int ac_index = -1;
 static u_int64_t sfs_stat_loadtime;
 static u_int64_t sfs_stat_csum_recalc;
 static u_int64_t sfs_stat_csum_recalc_fail;
-static u_int64_t sfs_stat_ev_nonstrict;
-static u_int64_t sfs_stat_ev_strict;
-static u_int64_t sfs_stat_ev_nonstrict_deny;
-static u_int64_t sfs_stat_ev_strict_deny;
+static u_int64_t sfs_stat_ev;
+static u_int64_t sfs_stat_ev_deny;
 static u_int64_t sfs_stat_late_alloc;
 
 struct anoubis_internal_stat_value sfs_stats[] = {
@@ -72,13 +70,8 @@ struct anoubis_internal_stat_value sfs_stats[] = {
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_CSUM_RECALC, &sfs_stat_csum_recalc },
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_CSUM_RECALC_FAIL,
 	    &sfs_stat_csum_recalc_fail },
-	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_NONSTRICT,
-	    &sfs_stat_ev_nonstrict },
-	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_STRICT, &sfs_stat_ev_strict },
-	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_NONSTRICT_DENY,
-	    &sfs_stat_ev_nonstrict_deny },
-	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_STRICT_DENY,
-	    &sfs_stat_ev_strict_deny },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV, &sfs_stat_ev },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_DENY, &sfs_stat_ev_deny },
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_LATE_ALLOC, &sfs_stat_late_alloc },
 };
 
@@ -113,9 +106,6 @@ static inline void anoubis_allow_write_access(struct inode * inode)
 #define SFS_HAS_SYSSIG		0x04UL	/* inode has system signature */
 #define SFS_SYSSIG_CHECKED	0x08UL	/* presence of syssig checked */
 
-/* Flags for @flags in @sfs_file_sec */
-#define SFS_OPENCHECKS_DONE	0x01UL	/* Open Checks successfully done. */
-
 /* Inode security label */
 struct sfs_inode_sec {
 	spinlock_t lock;
@@ -126,9 +116,6 @@ struct sfs_inode_sec {
 
 /* File security label */
 struct sfs_file_sec {
-	unsigned int flags;
-	int errno;
-	spinlock_t lock;
 	atomic_t denywrite;
 };
 
@@ -208,8 +195,6 @@ static int sfs_file_alloc_security(struct file * file)
 	struct sfs_file_sec * sec;
 
 	sec = kmalloc(sizeof(struct sfs_file_sec), GFP_KERNEL);
-	sec->flags = 0;
-	spin_lock_init(&sec->lock);
 	atomic_set(&sec->denywrite, 0);
 	sec = SETFSEC(file, sec);
 	BUG_ON(sec);
@@ -224,8 +209,8 @@ static void sfs_file_free_security(struct file * file)
 
 	if (!sec)
 		return;
-	if (file->f_dentry) {
-		inode = file->f_dentry->d_inode;
+	if (file->f_path.dentry) {
+		inode = file->f_path.dentry->d_inode;
 		/*
 		 * At this point we are the only one that has access to
 		 * the security label.
@@ -338,8 +323,7 @@ static inline int checksum_ok(struct inode * inode)
 {
 	/*
 	 * Allow checksums on these file system even though they do
-	 * not have a real device. These checksum might not persist
-	 * over a rebooot.
+	 * not have a real device.
 	 */
 	static const char * noreqdev[] = {
 		"nfs",
@@ -370,93 +354,6 @@ static inline int checksum_ok(struct inode * inode)
 		return 0;
 	}
 	return 1;
-}
-
-/*
- * Read the system signature of the inode assiocated with dentry into
- * the inode's security label if it is not already there.
- * Returns
- *    - a positive value if the inode has a system signature,
- *    - zero if it does not have one and
- *    - a negative value if an error occured while reading the signature.
- */
-static int sfs_read_syssig(struct dentry * dentry)
-{
-	struct inode * inode = dentry->d_inode;
-	u8 buf[ANOUBIS_SFS_CS_LEN];
-	int ret;
-	struct sfs_inode_sec * sec;
-
-	if (!checksum_ok(inode))
-		return -EINVAL;
-	sec = sfs_late_inode_alloc_security(inode);
-	if (!sec)
-		return -ENOMEM;
-	spin_lock(&sec->lock);
-	ret = sec->sfsmask;
-	spin_unlock(&sec->lock);
-	if (ret & SFS_SYSSIG_CHECKED)
-		return ret & SFS_HAS_SYSSIG;
-	if (!inode->i_op->getxattr)
-		goto nosig;
-	ret = inode->i_op->getxattr(dentry, XATTR_ANOUBIS_SYSSIG, NULL, 0);
-	if (ret == -ENODATA || ret == -ENOTSUPP || ret == -EOPNOTSUPP)
-		goto nosig;
-	if (ret != ANOUBIS_SFS_CS_LEN) {
-		printk(KERN_ERR "anoubis_sfs: Error while reading "
-		    "system signature (%d)\n", ret);
-		return -EIO;
-	}
-	ret = inode->i_op->getxattr(dentry, XATTR_ANOUBIS_SYSSIG,
-	    buf, ANOUBIS_SFS_CS_LEN);
-	if (ret != ANOUBIS_SFS_CS_LEN) {
-		printk(KERN_ERR "anoubis_sfs: Error while reading "
-		    "system signature\n");
-		return -EIO;
-	}
-	spin_lock(&sec->lock);
-	memcpy(sec->syssig, buf, ANOUBIS_SFS_CS_LEN);
-	sec->sfsmask |= (SFS_SYSSIG_CHECKED|SFS_HAS_SYSSIG);
-	spin_unlock(&sec->lock);
-	return 1;
-nosig:
-	spin_lock(&sec->lock);
-	sec->sfsmask |= SFS_SYSSIG_CHECKED;
-	spin_unlock(&sec->lock);
-	return 0;
-}
-
-static int sfs_verify_syssig(struct file * file)
-{
-	struct dentry * dentry = file->f_dentry;
-	struct inode * inode = dentry->d_inode;
-	int err;
-	struct sfs_inode_sec * sec;
-	unsigned int mask;
-
-	if (!checksum_ok(inode))
-		return 0;
-	sec = sfs_late_inode_alloc_security(inode);
-	if (!sec)
-		return -ENOMEM;
-	err = sfs_read_syssig(dentry);
-	/* An error occured or no system signature present. */
-	if (err <= 0)
-		return err;
-	/* System signature present */
-	err = sfs_do_csum(file, inode, sec);
-	if (err) {
-		sfs_stat_csum_recalc_fail++;
-		return err;
-	}
-	spin_lock(&sec->lock);
-	mask = sec->sfsmask & (SFS_HAS_SYSSIG|SFS_CS_UPTODATE);
-	err = 0;
-	if ((mask != (SFS_HAS_SYSSIG|SFS_CS_UPTODATE)) ||
-	    memcmp(sec->syssig, sec->hash, ANOUBIS_SFS_CS_LEN))
-		err = -EBUSY;
-	spin_unlock(&sec->lock);
-	return err;
 }
 
 /*
@@ -513,6 +410,114 @@ static char * __device_dpath(struct dentry * dentry, char * buf, int len)
 	return end;
 }
 
+/*
+ * Read the system signature of the inode assiocated with dentry into
+ * the inode's security label if it is not already there.
+ * Returns
+ *    - a positive value if the inode has a system signature,
+ *    - zero if it does not have one and
+ *    - a negative value if an error occured while reading the signature.
+ */
+static int sfs_read_syssig(struct dentry * dentry)
+{
+	struct inode * inode = dentry->d_inode;
+	u8 buf[ANOUBIS_SFS_CS_LEN];
+	int ret;
+	struct sfs_inode_sec * sec;
+
+	if (!checksum_ok(inode))
+		return -EINVAL;
+	sec = sfs_late_inode_alloc_security(inode);
+	if (!sec)
+		return -ENOMEM;
+	spin_lock(&sec->lock);
+	ret = sec->sfsmask;
+	spin_unlock(&sec->lock);
+	if (ret & SFS_SYSSIG_CHECKED)
+		return ret & SFS_HAS_SYSSIG;
+	if (!inode->i_op->getxattr)
+		goto nosig;
+	ret = inode->i_op->getxattr(dentry, XATTR_ANOUBIS_SYSSIG, NULL, 0);
+	if (ret == -ENODATA || ret == -ENOTSUPP || ret == -EOPNOTSUPP)
+		goto nosig;
+	if (ret != ANOUBIS_SFS_CS_LEN) {
+		printk(KERN_ERR "anoubis_sfs: Error while reading "
+		    "system signature (%d)\n", ret);
+		return -EIO;
+	}
+	ret = inode->i_op->getxattr(dentry, XATTR_ANOUBIS_SYSSIG,
+	    buf, ANOUBIS_SFS_CS_LEN);
+	if (ret != ANOUBIS_SFS_CS_LEN) {
+		printk(KERN_ERR "anoubis_sfs: Error while reading "
+		    "system signature\n");
+		return -EIO;
+	}
+	spin_lock(&sec->lock);
+	memcpy(sec->syssig, buf, ANOUBIS_SFS_CS_LEN);
+	sec->sfsmask |= (SFS_SYSSIG_CHECKED|SFS_HAS_SYSSIG);
+	spin_unlock(&sec->lock);
+	return 1;
+nosig:
+	spin_lock(&sec->lock);
+	sec->sfsmask |= SFS_SYSSIG_CHECKED;
+	spin_unlock(&sec->lock);
+	return 0;
+}
+
+static int sfs_check_syssig(struct file * file, int mask)
+{
+	struct dentry * dentry = file->f_path.dentry;
+	struct inode * inode;
+	struct sfs_inode_sec * sec;
+	int ret, sfsmask;
+
+	if (!dentry)
+		return 0;
+	inode = dentry->d_inode;
+	if (!inode || !checksum_ok(inode))
+		return 0;
+	ret = sfs_read_syssig(dentry);
+	if (ret <= 0)
+		return ret;
+	if (ret == 0)
+		return 0;
+	/* We do have a system signature. */
+	if (mask & MAY_WRITE)
+		return -EACCES;
+	sec = sfs_late_inode_alloc_security(inode);
+	if (!sec)
+		return -ENOMEM;
+	ret = sfs_do_csum(file, inode, sec);
+	if (ret) {
+		sfs_stat_csum_recalc_fail++;
+		return ret;
+	}
+	spin_lock(&sec->lock);
+	ret = 0;
+	sfsmask = sec->sfsmask & (SFS_HAS_SYSSIG|SFS_CS_UPTODATE);
+	if (sfsmask != (SFS_HAS_SYSSIG|SFS_CS_UPTODATE)
+	    || memcmp(sec->syssig, sec->hash, ANOUBIS_SFS_CS_LEN) != 0)
+		ret = -EBUSY;
+	spin_unlock(&sec->lock);
+	return ret;
+}
+
+/* Clear the SFS_CS_UPTODATE flag on ever open for write. */
+static int sfs_inode_permission(struct inode * inode, int mask,
+				struct nameidata * nd)
+{
+	struct sfs_inode_sec * sec;
+	if (mask & (MAY_WRITE|MAY_APPEND)) {
+		sec = sfs_late_inode_alloc_security(inode);
+		if (sec) {
+			spin_lock(&sec->lock);
+			sec->sfsmask &= ~SFS_CS_UPTODATE;
+			spin_unlock(&sec->lock);
+		}
+	}
+	return 0;
+}
+
 static inline char * device_dpath(struct dentry * dentry, char * buf, int len)
 {
 	char * ret;
@@ -523,9 +528,8 @@ static inline char * device_dpath(struct dentry * dentry, char * buf, int len)
 }
 
 /* We rely on the fact that GFP_KERNEL allocations cannot fail. */
-static struct sfs_open_message * sfs_fill_msg(struct file * file,
-    struct vfsmount * mnt, struct dentry * dentry, struct inode * inode,
-    int mask, int strict, int * lenp)
+static struct sfs_open_message * sfs_fill_msg(struct file * file, int mask,
+    int * lenp)
 {
 	struct sfs_open_message * msg;
 	char * path = NULL;
@@ -533,11 +537,11 @@ static struct sfs_open_message * sfs_fill_msg(struct file * file,
 	struct kstat kstat;
 	struct sfs_inode_sec * sec;
 	int pathlen, alloclen;
+	struct dentry * dentry = file->f_path.dentry;
+	struct inode * inode = dentry->d_inode;
 
-	if (dentry) {
-		buf = (char *)__get_free_page(GFP_KERNEL);
-		path = device_dpath(dentry, buf, PAGE_SIZE);
-	}
+	buf = (char *)__get_free_page(GFP_KERNEL);
+	path = device_dpath(dentry, buf, PAGE_SIZE);
 	pathlen = 1;
 	if (path)
 		pathlen = PAGE_SIZE - (path-buf);
@@ -546,7 +550,9 @@ static struct sfs_open_message * sfs_fill_msg(struct file * file,
 	msg->flags = 0;
 	if (mask & (MAY_READ|MAY_EXEC))
 		msg->flags |= ANOUBIS_OPEN_FLAG_READ;
-	if (mask & (MAY_WRITE|MAY_APPEND))
+	if (mask & MAY_EXEC)
+		msg->flags |= ANOUBIS_OPEN_FLAG_EXEC;
+	if (mask & MAY_WRITE)
 		msg->flags |= ANOUBIS_OPEN_FLAG_WRITE;
 	if (path) {
 		memcpy(msg->pathhint, path, pathlen);
@@ -556,12 +562,10 @@ static struct sfs_open_message * sfs_fill_msg(struct file * file,
 	}
 	if (buf)
 		free_page((unsigned long)buf);
-	if (strict)
-		msg->flags |= ANOUBIS_OPEN_FLAG_STRICT;
 	msg->ino = 0;
 	msg->dev = 0;
-	if (mnt && dentry) {
-		int err = vfs_getattr(mnt, dentry, &kstat);
+	if (file->f_path.mnt && dentry) {
+		int err = vfs_getattr(file->f_path.mnt, dentry, &kstat);
 		if (err == 0) {
 			msg->ino = kstat.ino;
 			msg->dev = kstat.dev;
@@ -581,41 +585,29 @@ static struct sfs_open_message * sfs_fill_msg(struct file * file,
 	return msg;
 }
 
-static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
-    struct dentry * dentry, struct inode * inode, int mask, int strict)
+static int sfs_open_checks(struct file * file, int mask)
 {
 	int ret;
 	struct sfs_open_message * msg;
 	char reported_csum[ANOUBIS_SFS_CS_LEN];
-	struct sfs_file_sec * fsec = NULL;
 	int have_reported_csum = 0;
-	int len = 0;
+	int err, len = 0;
 
-	if (file && (fsec = FSEC(file))) {
-		int ret;
-		spin_lock(&fsec->lock);
-		ret = fsec->flags & SFS_OPENCHECKS_DONE;
-		spin_unlock(&fsec->lock);
-		if (ret)
-			return fsec->errno;
-	}
-	msg = sfs_fill_msg(file, mnt, dentry, inode, mask, strict, &len);
+	err = sfs_check_syssig(file, mask);
+	if (err < 0)
+		return err;
+	msg = sfs_fill_msg(file, mask, &len);
 	if (!msg)
 		return -ENOMEM;
 	if (msg->flags & ANOUBIS_OPEN_FLAG_CSUM) {
 		memcpy(reported_csum, msg->csum, ANOUBIS_SFS_CS_LEN);
 		have_reported_csum = 1;
 	}
-	if (strict)
-		sfs_stat_ev_strict++;
-	else
-		sfs_stat_ev_nonstrict++;
+	sfs_stat_ev++;
 	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFS);
 	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
 		return 0;
 	if (ret == -EOKWITHCHKSUM) {
-		if (!strict)
-			return 0;
 		/*
 		 * The following is an error in the userland application.
 		 * It should not return EOKWITHCHKSUM if no checksum was
@@ -626,28 +618,21 @@ static int sfs_open_checks(struct file * file, struct vfsmount * mnt,
 		BUG_ON(!file);
 		ret = anoubis_sfs_file_lock(file, reported_csum);
 	}
-	if (strict && file && fsec) {
-		spin_lock(&fsec->lock);
-		fsec->flags |= SFS_OPENCHECKS_DONE;
-		fsec->errno = ret;
-		spin_unlock(&fsec->lock);
-	}
-	if (ret) {
-		if(strict)
-			sfs_stat_ev_strict_deny++;
-		else
-			sfs_stat_ev_nonstrict_deny++;
-	}
+	if (ret)
+		sfs_stat_ev_deny++;
 	return ret;
 }
 
-/* Disallow write access right away if a system signature is present. */
-static int sfs_inode_permission(struct inode * inode,
-    int mask, struct nameidata * nd)
+static int sfs_dentry_open(struct file * file)
 {
-	int syssig;
 	struct sfs_inode_sec * sec;
+	struct dentry * dentry = file->f_path.dentry;
+	struct inode * inode;
+	int mask;
 
+	if (!dentry)
+		return 0;
+	inode = dentry->d_inode;
 	if (!inode)
 		return 0;
 	if (!checksum_ok(inode))
@@ -655,22 +640,19 @@ static int sfs_inode_permission(struct inode * inode,
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
-	if (nd && nd->path.dentry)
-		sfs_read_syssig(nd->path.dentry);
-	spin_lock(&sec->lock);
-	syssig = (sec->sfsmask & SFS_HAS_SYSSIG);
-	if (syssig && (sec->sfsmask & SFS_CS_UPTODATE) &&
-	    memcmp(sec->hash, sec->syssig, ANOUBIS_SFS_CS_LEN) != 0) {
+	mask = 0;
+	if (file->f_mode & FMODE_READ)
+		mask |= MAY_READ;
+	if (file->f_mode & FMODE_WRITE)
+		mask |= MAY_WRITE;
+	if (mask & MAY_WRITE) {
+		spin_lock(&sec->lock);
+		sec->sfsmask &= ~SFS_CS_UPTODATE;
 		spin_unlock(&sec->lock);
-		return -EACCES;
+	} else {
+		sfs_csum(file, inode);
 	}
-	spin_unlock(&sec->lock);
-	if (syssig && (mask & (MAY_WRITE|MAY_APPEND)))
-		return -EACCES;
-	if (!nd)
-		return sfs_open_checks(NULL, NULL, NULL, inode, mask, 0);
-	return sfs_open_checks(NULL, nd->path.mnt, nd->path.dentry, inode,
-	    mask, 0);
+	return sfs_open_checks(file, mask);
 }
 
 /*
@@ -681,7 +663,7 @@ static int sfs_inode_permission(struct inode * inode,
  */
 int anoubis_sfs_get_csum(struct file * file, u8 * csum)
 {
-	struct inode * inode = file->f_dentry->d_inode;
+	struct inode * inode = file->f_path.dentry->d_inode;
 	struct sfs_inode_sec * sec;
 	int err;
 
@@ -720,7 +702,7 @@ static int sfs_getcsum(struct file * file, u8 * csum)
  */
 int anoubis_sfs_file_lock(struct file * file, u8 * csum)
 {
-	struct inode * inode = file->f_dentry->d_inode;
+	struct inode * inode = file->f_path.dentry->d_inode;
 	struct sfs_inode_sec * sec;
 	int err;
 
@@ -758,93 +740,7 @@ void anoubis_sfs_file_unlock(struct file * file)
 	struct sfs_file_sec * fsec = FSEC(file);
 	BUG_ON(atomic_read(&fsec->denywrite) <= 0);
 	atomic_dec(&fsec->denywrite);
-	anoubis_allow_write_access(file->f_dentry->d_inode);
-}
-
-/*
- * Check if we have to invalidate or recalculate the checksum of
- * the given file. A write access invalidates the checksum whereas a
- * read access will try to recalculate it.
- */
-static int sfs_file_permission(struct file * file, int mask)
-{
-	struct inode * inode = file->f_dentry->d_inode;
-	struct sfs_inode_sec * sec;
-	int err = 0;
-
-	if ((mask & (MAY_WRITE|MAY_APPEND)) == 0) {
-		/* If the data is only copied to the kernel allow it. */
-		if (segment_eq(get_fs(), get_ds()))
-			return 0;
-	}
-	if (!checksum_ok(inode))
-		return 0;
-	sec = sfs_late_inode_alloc_security(inode);
-	if (!sec)
-		return -ENOMEM;
-	if (mask & (MAY_WRITE | MAY_APPEND)) {
-		spin_lock(&sec->lock);
-		sec->sfsmask &= ~SFS_CS_UPTODATE;
-		spin_unlock(&sec->lock);
-	} else {
-		sfs_csum(file, inode);
-		err = sfs_verify_syssig(file);
-		if (err)
-			return err;
-	}
-	if (mask & MAY_APPEND)
-		mask |= MAY_WRITE;
-	if (file->f_mode & FMODE_WRITE)
-		mask |= MAY_WRITE;
-	if (file->f_mode & FMODE_READ)
-		mask |= MAY_READ;
-	return sfs_open_checks(file, file->f_vfsmnt, file->f_dentry,
-	    inode, mask, 1);
-}
-
-/*
- * Recalulate or invalidate the checksum when a mapping is established.
- * If the mapping is shared and the file is open for writing the checksum
- * is invalidated. Otherwise we try to recalculate the checksum as needed.
- *
- * We do not use @reqprot or @prot because these can be changed at a
- * later time by mprotect and we won't notice this.
- *
- * Also note that once a mapping has been established it is unspecified
- * if modifications to the underlying file affect the mapping. This means
- * that the only way to guarantee the integrity of the mapped region is
- * to lock the contents of the file before the mapping is established.
- */
-static int sfs_file_mmap(struct file * file, unsigned long reqprot,
-				unsigned long prot, unsigned long flags,
-				unsigned long addr, unsigned long fixed)
-{
-	struct inode * inode;
-	int err = 0;
-	int mask = MAY_READ|MAY_EXEC;
-	struct sfs_inode_sec * sec;
-
-	if (!file)
-		return 0;
-	inode = file->f_dentry->d_inode;
-	if (!checksum_ok(inode))
-		return 0;
-	sec = sfs_late_inode_alloc_security(inode);
-	if (!sec)
-		return -ENOMEM;
-	if ((file->f_mode & FMODE_WRITE) && (flags & MAP_SHARED)) {
-		spin_lock(&sec->lock);
-		sec->sfsmask &= ~SFS_CS_UPTODATE;
-		spin_unlock(&sec->lock);
-		mask |= MAY_WRITE;
-	} else {
-		sfs_csum(file, inode);
-		err = sfs_verify_syssig(file);
-		if (err)
-			return err;
-	}
-	return sfs_open_checks(file, file->f_vfsmnt, file->f_dentry,
-	    inode, mask, 1);
+	anoubis_allow_write_access(file->f_path.dentry->d_inode);
 }
 
 static int sfs_bprm_set_security(struct linux_binprm * bprm)
@@ -852,23 +748,19 @@ static int sfs_bprm_set_security(struct linux_binprm * bprm)
 	struct file * file = bprm->file;
 	struct inode * inode;
 	struct sfs_inode_sec * sec;
-	int err = 0;
 
 	BUG_ON(!file);
 	BUG_ON(file->f_mode & FMODE_WRITE);
-	inode = file->f_dentry->d_inode;
+	inode = file->f_path.dentry->d_inode;
 	if (checksum_ok(inode)) {
 		sec = sfs_late_inode_alloc_security(inode);
 		if (!sec)
 			return -ENOMEM;
 		sfs_csum(file, inode);
-		err = sfs_verify_syssig(file);
-		if (err)
-			return err;
 	}
-	return sfs_open_checks(file, file->f_vfsmnt, file->f_dentry,
-	    inode, MAY_READ|MAY_EXEC, 1);
+	return sfs_open_checks(file, MAY_READ|MAY_EXEC);
 }
+
 
 /*
  * Deny access to the syssig security attribute while the SFS module
@@ -895,8 +787,7 @@ static void sfs_bprm_post_apply_creds(struct linux_binprm * bprm)
 	struct sfs_open_message * msg;
 	int len;
 
-	msg = sfs_fill_msg(file, file->f_vfsmnt, file->f_dentry,
-	    file->f_dentry->d_inode, MAY_READ|MAY_EXEC, 0, &len);
+	msg = sfs_fill_msg(file, MAY_READ|MAY_EXEC, &len);
 	anoubis_notify(msg, len, ANOUBIS_SOURCE_SFSEXEC);
 }
 
@@ -907,11 +798,10 @@ static struct anoubis_hooks sfs_ops = {
 	.inode_free_security = sfs_inode_free_security,
 	.file_alloc_security = sfs_file_alloc_security,
 	.file_free_security = sfs_file_free_security,
-	.file_permission = sfs_file_permission,
-	.file_mmap = sfs_file_mmap,
 	.bprm_set_security = sfs_bprm_set_security,
 	.bprm_post_apply_creds = sfs_bprm_post_apply_creds,
 	.inode_permission = sfs_inode_permission,
+	.dentry_open = sfs_dentry_open,
 	.inode_setxattr = sfs_inode_setxattr,
 	.inode_removexattr = sfs_inode_removexattr,
 	.anoubis_stats = sfs_getstats,

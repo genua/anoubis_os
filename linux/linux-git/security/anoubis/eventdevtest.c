@@ -89,16 +89,19 @@ static int lookup_xattr(struct dentry * dentry)
 	return EVENT_NONE;
 }
 
-static int eventdevtest_inode_permission (struct inode * inode, int mask,
-				     struct nameidata * nd)
+static int eventdevtest_dentry_open (struct file *fp)
 {
 	int xattr, err;
 	struct eventdevtest_event * buf;
+	struct dentry * dentry = fp->f_path.dentry;
+	struct inode * inode;
 
-	if (!nd || !nd->path.dentry || !nd->path.dentry->d_inode)
+	if (!dentry)
 		return 0;
-	BUG_ON(nd->path.dentry->d_inode != inode);
-	xattr = lookup_xattr(nd->path.dentry);
+	inode = dentry->d_inode;
+	if (!inode)
+		return 0;
+	xattr = lookup_xattr(dentry);
 	if (xattr == EVENT_NONE)
 		return 0;
 	buf = kmalloc(sizeof(struct eventdevtest_event), GFP_KERNEL);
@@ -123,7 +126,7 @@ static int eventdevtest_inode_permission (struct inode * inode, int mask,
 /* Security operations. */
 static struct anoubis_hooks eventdevtest_ops = {
 	.version = ANOUBISCORE_VERSION,
-	.inode_permission = eventdevtest_inode_permission,
+	.dentry_open = eventdevtest_dentry_open,
 };
 
 static int ac_index = -1;

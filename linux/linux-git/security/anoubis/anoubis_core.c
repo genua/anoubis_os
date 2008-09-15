@@ -753,7 +753,7 @@ static int ac_inode_removexattr(struct dentry *dentry, const char *name)
 	return HOOKS(inode_removexattr, (dentry, name));
 }
 
-/* FILES */
+/* FILES and DENTRIES*/
 static int ac_file_alloc_security(struct file * file)
 {
 	if ((file->f_security = ac_alloc_label(GFP_KERNEL)) == NULL)
@@ -767,6 +767,10 @@ static void ac_file_free_security(struct file * file)
 	VOIDHOOKS(file_free_security, (file));
 	kfree(file->f_security);
 	file->f_security = NULL;
+}
+static int ac_dentry_open(struct file *file)
+{
+	return HOOKS(dentry_open, (file));
 }
 static int ac_file_permission(struct file * file, int mask)
 {
@@ -995,6 +999,7 @@ static struct security_operations anoubis_core_ops = {
 	.file_free_security = ac_file_free_security,
 	.file_permission = ac_file_permission,
 	.file_mmap = ac_file_mmap,
+	.dentry_open = ac_dentry_open,
 	.bprm_set_security = ac_bprm_set_security,
 	.bprm_post_apply_creds = ac_bprm_post_apply_creds,
 	.task_alloc_security = ac_task_alloc_security,

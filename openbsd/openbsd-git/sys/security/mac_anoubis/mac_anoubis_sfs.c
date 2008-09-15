@@ -69,8 +69,8 @@ struct sfs_label {
 static u_int64_t sfs_stat_loadtime;
 static u_int64_t sfs_stat_csum_recalc;
 static u_int64_t sfs_stat_csum_recalc_fail;
-static u_int64_t sfs_stat_ev_strict;
-static u_int64_t sfs_stat_ev_strict_deny;
+static u_int64_t sfs_stat_ev;
+static u_int64_t sfs_stat_ev_deny;
 static u_int64_t sfs_stat_disabled;
 
 struct anoubis_internal_stat_value sfs_stats[] = {
@@ -78,9 +78,9 @@ struct anoubis_internal_stat_value sfs_stats[] = {
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_CSUM_RECALC, &sfs_stat_csum_recalc },
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_CSUM_RECALC_FAIL,
 	    &sfs_stat_csum_recalc_fail },
-	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_STRICT, &sfs_stat_ev_strict },
-	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_STRICT_DENY,
-	    &sfs_stat_ev_strict_deny },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV, &sfs_stat_ev },
+	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_DENY,
+	    &sfs_stat_ev_deny },
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_DISABLED, &sfs_stat_disabled },
 };
 
@@ -100,7 +100,7 @@ int	sfs_do_csum(struct vnode *, struct sfs_label *);
 int	sfs_csum(struct vnode *, struct sfs_label *);
 char *	sfs_d_path(struct vnode *dirvp, struct componentname *cnp, char **bufp);
 int	sfs_open_checks(struct file *, struct vnode *, struct sfs_label * sec,
-	    int, int, const char *);
+	    int, const char *);
 
 void
 mac_anoubis_sfs_init_vnode_label(struct label * label)
@@ -376,7 +376,7 @@ fileopen:
 		pathhint = sfs_d_path(dirvp, cnp, &bufp);
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 	}
-	ret = sfs_open_checks(NULL, vp, sec, acc_mode, 1, pathhint);
+	ret = sfs_open_checks(NULL, vp, sec, acc_mode, pathhint);
 	if (pathhint)
 		free(bufp, M_MACTEMP);
 	return ret;
@@ -384,7 +384,7 @@ fileopen:
 
 int
 sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
-    int mode, int strict, const char * pathhint)
+    int mode, const char * pathhint)
 {
 	size_t pathlen = 1;
 	int alloclen, ret;
@@ -410,8 +410,6 @@ sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
 		msg->flags |= ANOUBIS_OPEN_FLAG_READ;
 	if (mode & VWRITE)
 		msg->flags |= ANOUBIS_OPEN_FLAG_WRITE;
-	if (strict)
-		msg->flags |= ANOUBIS_OPEN_FLAG_STRICT;
 	if (VOP_GETATTR(vp, &va, p->p_ucred, p)) {
 		free(msg, M_DEVBUF);
 		return EPERM;
@@ -434,14 +432,12 @@ sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
 	 * immediately after the security hook returns.
 	 */
 	VOP_UNLOCK(vp, 0, p);
-	sfs_stat_ev_strict++;
+	sfs_stat_ev++;
 	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 	if (ret == EPIPE /* && openation_mode != strict XXX */)
 		return 0;
 	if (ret == EOKWITHCHKSUM) {
-		if (!strict)
-			return 0;
 		/*
 		 * XXX CEH: Note: Setting ret = EPERM here is a temporary
 		 * XXX CEH: hack to make things work. We should actually
@@ -453,7 +449,7 @@ sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
 			ret = EPERM;
 	}
 	if (ret)
-		sfs_stat_ev_strict_deny++;
+		sfs_stat_ev_deny++;
 	return ret;
 }
 
@@ -482,8 +478,7 @@ mac_anoubis_sfs_file_open(struct ucred * active_cred, struct file * file,
 	 * XXX This no longer works because sfs_open_checks expects
 	 * XXX an in core pathname.
 	 */
-	return sfs_open_checks(file, vp, sec, ACC_MODE(file->f_flag), 1,
-	    pathhint);
+	return sfs_open_checks(file, vp, sec, ACC_MODE(file->f_flag), pathhint);
 #else
 	return 0;
 #endif
