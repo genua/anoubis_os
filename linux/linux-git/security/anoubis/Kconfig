@@ -6,7 +6,7 @@ menu "Anoubis framework"
 
 config SECURITY_ANOUBIS
 	bool "Anoubis framework"
-	depends on SECURITY && EVENTDEV
+	depends on SECURITY && EVENTDEV=y
 	help
 	  This option provides support for the Anoubis framework.
 
