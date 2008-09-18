@@ -377,39 +377,6 @@ static inline void sfs_csum(struct file * file, struct inode * inode)
 		sfs_stat_csum_recalc_fail++;
 }
 
-/* Must be called with the dcache_lock held. */
-static char * __device_dpath(struct dentry * dentry, char * buf, int len)
-{
-	char * end = buf+len;
-	struct dentry * parent;
-	int namelen;
-
-	*--end = 0;
-	len--;
-	for (;;) {
-		if (IS_ROOT(dentry))
-			break;
-		if (d_unhashed(dentry))
-			return NULL;
-		parent = dentry->d_parent;
-		prefetch(parent);
-		namelen = dentry->d_name.len;
-		len -= namelen + 1;
-		if (len < 0)
-			return NULL;
-		end -= namelen;
-		memcpy(end, dentry->d_name.name, namelen);
-		*--end = '/';
-		dentry = parent;
-	}
-	if (*end != '/') {
-		if (len <= 0)
-			return NULL;
-		*--end = '/';
-	}
-	return end;
-}
-
 /*
  * Read the system signature of the inode assiocated with dentry into
  * the inode's security label if it is not already there.
@@ -518,11 +485,21 @@ static int sfs_inode_permission(struct inode * inode, int mask,
 	return 0;
 }
 
-static inline char * device_dpath(struct dentry * dentry, char * buf, int len)
+/*
+ * The use of "root" below is somewhat of a hack. We should actually pass
+ * the global file system root but we don't have that. However, __d_path
+ * is prepared to handle paths that are not below the given root. Thus
+ * this trick should be ok for now.
+ */
+static inline char * global_dpath(struct path * path, char * buf, int len)
 {
 	char * ret;
+	struct path root;
+
+	root.mnt = NULL;
+	root.dentry = NULL;
 	spin_lock(&dcache_lock);
-	ret = __device_dpath(dentry, buf, len);
+	ret = __d_path(path, &root, buf, len);
 	spin_unlock(&dcache_lock);
 	return ret;
 }
@@ -541,10 +518,13 @@ static struct sfs_open_message * sfs_fill_msg(struct file * file, int mask,
 	struct inode * inode = dentry->d_inode;
 
 	buf = (char *)__get_free_page(GFP_KERNEL);
-	path = device_dpath(dentry, buf, PAGE_SIZE);
-	pathlen = 1;
-	if (path)
+	path = global_dpath(&file->f_path, buf, PAGE_SIZE);
+	if (path && !IS_ERR(path)) {
 		pathlen = PAGE_SIZE - (path-buf);
+	} else {
+		path = NULL;
+		pathlen = 1;
+	}
 	alloclen = sizeof(struct sfs_open_message) - 1 + pathlen;
 	msg = kmalloc(alloclen, GFP_KERNEL);
 	msg->flags = 0;
