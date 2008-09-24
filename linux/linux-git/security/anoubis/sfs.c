@@ -105,6 +105,8 @@ static inline void anoubis_allow_write_access(struct inode * inode)
 #define SFS_CS_UPTODATE		0x02UL	/* Checksum in ISEC is uptodate */
 #define SFS_HAS_SYSSIG		0x04UL	/* inode has system signature */
 #define SFS_SYSSIG_CHECKED	0x08UL	/* presence of syssig checked */
+#define SFS_CS_OK		0x10UL	/* Checksum calculation possible */
+#define SFS_CS_CACHEOK		0x20UL	/* Checksum caching possible */
 
 /* Inode security label */
 struct sfs_inode_sec {
@@ -129,6 +131,30 @@ struct sfs_file_sec {
 #define SETFSEC(X,V) _SETSEC(struct sfs_file_sec *, ((X)->f_security), (V))
 
 /*
+ * Allow checksum calculations on these filesystem types but do not cache
+ * the result.
+ */
+static const char * csnocache[] = {
+	"nfs",
+	"nfs1",
+	"nfs2",
+	"nfs3",
+	"nfs4",
+	"smbfs",
+	"smbfs",
+	NULL
+};
+
+/*
+ * Allow checksum calculations on these filesystem types and allow
+ * caching.
+ */
+static const char * csnodev[]  = {
+	"tmpfs",
+	NULL,
+};
+
+/*
  * Allocate a new inode security structure. This is might be called with
  * spinlocks held. In this case gfp must be make sure that the memory
  * allocation does not sleep. However, this also means that any other
@@ -137,12 +163,26 @@ struct sfs_file_sec {
 static inline struct sfs_inode_sec *
 __sfs_inode_alloc_security_common(struct inode * inode, gfp_t gfp)
 {
+	int i;
 	struct sfs_inode_sec * sec, * old;
 	sec = kmalloc(sizeof (struct sfs_inode_sec), gfp);
 	if (!sec)
 		return NULL;
 	spin_lock_init(&sec->lock);
 	sec->sfsmask = SFS_CS_REQUIRED;
+	if ((inode->i_sb->s_type->fs_flags & FS_REQUIRES_DEV)) {
+		sec->sfsmask |= (SFS_CS_OK|SFS_CS_CACHEOK);
+	} else {
+		const char * ftype = inode->i_sb->s_type->name;
+		for (i=0; csnocache[i]; ++i) {
+			if (strcmp(ftype, csnocache[i]) == 0)
+				sec->sfsmask |= SFS_CS_OK;
+		}
+		for (i=0; csnodev[i]; ++i) {
+			if (strcmp(ftype, csnodev[i]) == 0)
+				sec->sfsmask |= (SFS_CS_OK|SFS_CS_CACHEOK);
+		}
+	}
 	old = SETISEC(inode, sec);
 	BUG_ON(old);
 	return sec;
@@ -321,39 +361,19 @@ out_allow_write:
  */
 static inline int checksum_ok(struct inode * inode)
 {
-	/*
-	 * Allow checksums on these file system even though they do
-	 * not have a real device.
-	 */
-	static const char * noreqdev[] = {
-		"nfs",
-		"nfs1",
-		"nfs2",
-		"nfs3",
-		"nfs4",
-		"smbfs",
-		"tmpfs",
-		"smbfs",
-		NULL
-	};
-	int i;
-
+	int ret;
+	struct sfs_inode_sec * sec;
 	if (!inode)
 		return 0;
 	if (!S_ISREG(inode->i_mode))
 		return 0;
-	if ((inode->i_sb->s_type->fs_flags & FS_REQUIRES_DEV) == 0) {
-		/*
-		 * XXX CEH: This should be done once per inode not on
-		 * XXX CEH: each access.
-		 */
-		for (i=0; noreqdev[i]; ++i) {
-			if (strcmp(inode->i_sb->s_type->name, noreqdev[i]) == 0)
-				return 1;
-		}
+	sec = ISEC(inode);
+	if (!sec)
 		return 0;
-	}
-	return 1;
+	spin_lock(&sec->lock);
+	ret = (sec->sfsmask & SFS_CS_OK);
+	spin_unlock(&sec->lock);
+	return ret;
 }
 
 /*
@@ -392,11 +412,11 @@ static int sfs_read_syssig(struct dentry * dentry)
 	int ret;
 	struct sfs_inode_sec * sec;
 
-	if (!checksum_ok(inode))
-		return -EINVAL;
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
+	if (!checksum_ok(inode))
+		return -EINVAL;
 	spin_lock(&sec->lock);
 	ret = sec->sfsmask;
 	spin_unlock(&sec->lock);
@@ -441,13 +461,15 @@ static int sfs_check_syssig(struct file * file, int mask)
 	if (!dentry)
 		return 0;
 	inode = dentry->d_inode;
-	if (!inode || !checksum_ok(inode))
+	if (!inode)
 		return 0;
 	ret = sfs_read_syssig(dentry);
 	if (ret <= 0)
 		return ret;
 	if (ret == 0)
 		return 0;
+	if (!checksum_ok(inode))
+		return -EACCES;
 	/* We do have a system signature. */
 	if (mask & MAY_WRITE)
 		return -EACCES;
@@ -469,18 +491,23 @@ static int sfs_check_syssig(struct file * file, int mask)
 	return ret;
 }
 
-/* Clear the SFS_CS_UPTODATE flag on ever open for write. */
+/*
+ * Clear the SFS_CS_UPTODATE flag on every open for write and on
+ * if SFS_CS_CACHEOK is not set. The latter will suck wrt. performance
+ * on SFS but this is as good as we can do for now.
+ */
 static int sfs_inode_permission(struct inode * inode, int mask,
 				struct nameidata * nd)
 {
 	struct sfs_inode_sec * sec;
-	if (mask & (MAY_WRITE|MAY_APPEND)) {
-		sec = sfs_late_inode_alloc_security(inode);
-		if (sec) {
-			spin_lock(&sec->lock);
+	sec = sfs_late_inode_alloc_security(inode);
+	if (sec) {
+		spin_lock(&sec->lock);
+		if ((mask & (MAY_WRITE|MAY_APPEND))
+		    || (sec->sfsmask & SFS_CS_CACHEOK) == 0) {
 			sec->sfsmask &= ~SFS_CS_UPTODATE;
-			spin_unlock(&sec->lock);
 		}
+		spin_unlock(&sec->lock);
 	}
 	return 0;
 }
@@ -615,11 +642,11 @@ static int sfs_dentry_open(struct file * file)
 	inode = dentry->d_inode;
 	if (!inode)
 		return 0;
-	if (!checksum_ok(inode))
-		return 0;
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
+	if (!checksum_ok(inode))
+		return 0;
 	mask = 0;
 	if (file->f_mode & FMODE_READ)
 		mask |= MAY_READ;
@@ -647,11 +674,11 @@ int anoubis_sfs_get_csum(struct file * file, u8 * csum)
 	struct sfs_inode_sec * sec;
 	int err;
 
-	if (!checksum_ok(inode))
-		return -EINVAL;
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
+	if (!checksum_ok(inode))
+		return -EINVAL;
 	err = sfs_do_csum(file, inode, sec);
 	if (err < 0) {
 		sfs_stat_csum_recalc_fail++;
@@ -686,11 +713,11 @@ int anoubis_sfs_file_lock(struct file * file, u8 * csum)
 	struct sfs_inode_sec * sec;
 	int err;
 
-	if (!checksum_ok(inode))
-		return -EINVAL;
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
+	if (!checksum_ok(inode))
+		return -EINVAL;
 	err = anoubis_deny_write_access(inode);
 	if (err < 0)
 		return -EBUSY;
@@ -732,12 +759,11 @@ static int sfs_bprm_set_security(struct linux_binprm * bprm)
 	BUG_ON(!file);
 	BUG_ON(file->f_mode & FMODE_WRITE);
 	inode = file->f_path.dentry->d_inode;
-	if (checksum_ok(inode)) {
-		sec = sfs_late_inode_alloc_security(inode);
-		if (!sec)
-			return -ENOMEM;
+	sec = sfs_late_inode_alloc_security(inode);
+	if (!sec)
+		return -ENOMEM;
+	if (checksum_ok(inode))
 		sfs_csum(file, inode);
-	}
 	return sfs_open_checks(file, MAY_READ|MAY_EXEC);
 }
 
