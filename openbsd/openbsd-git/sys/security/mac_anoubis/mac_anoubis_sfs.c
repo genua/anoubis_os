@@ -28,6 +28,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 
+#include <sys/exec.h>
 #include <sys/file.h>
 #include <sys/malloc.h>
 #include <sys/mutex.h>
@@ -60,8 +61,18 @@ struct sfs_label {
 	u_int8_t hash[ANOUBIS_SFS_CS_LEN];
 };
 
+struct pack_label {
+	unsigned int	 flags;
+	char		 csum[ANOUBIS_CS_LEN];
+	char		*path;
+	ino_t		 ino;
+	dev_t		 dev;
+};
+
 #define SFS_LABEL(x)	\
     ((struct sfs_label *)mac_label_get((x), mac_anoubis_sfs_slot))
+#define PACK_LABEL(x)	\
+    ((struct pack_label *)mac_label_get((x), mac_anoubis_sfs_slot))
 
 #define deny_write_access(VP) vn_denywrite(VP)
 #define allow_write_access(VP) (((VP)->v_denywrite)--)
@@ -86,21 +97,32 @@ struct anoubis_internal_stat_value sfs_stats[] = {
 
 
 
-void	mac_anoubis_sfs_init(struct mac_policy_conf *);
-void	mac_anoubis_sfs_init_vnode_label(struct label *);
-void	mac_anoubis_sfs_destroy_vnode_label(struct label *);
-int	mac_anoubis_sfs_vnode_open(struct ucred *, struct vnode *,
-	    struct label *, int, struct vnode *, struct label *,
-	    struct componentname *);
-int	mac_anoubis_sfs_file_open(struct ucred * active_cred, struct file *,
-	    struct vnode * vp, struct label * l, const char * pathhint);
-void	mac_anoubis_sfs_vnode_exec(struct vnode * vp, struct label * l,
-	    struct vnode *dvp, struct label *dl, struct componentname *cnp);
-int	sfs_do_csum(struct vnode *, struct sfs_label *);
-int	sfs_csum(struct vnode *, struct sfs_label *);
-char *	sfs_d_path(struct vnode *dirvp, struct componentname *cnp, char **bufp);
-int	sfs_open_checks(struct file *, struct vnode *, struct sfs_label * sec,
-	    int, const char *);
+void			 mac_anoubis_sfs_init(struct mac_policy_conf *);
+void			 mac_anoubis_sfs_init_vnode_label(struct label *);
+void			 mac_anoubis_sfs_destroy_vnode_label(struct label *);
+int			 mac_anoubis_sfs_vnode_open(struct ucred *,
+			     struct vnode *, struct label *, int,
+			     struct vnode *, struct label *,
+			     struct componentname *);
+int			 mac_anoubis_sfs_file_open(struct ucred * active_cred,
+			     struct file *, struct vnode * vp,
+			     struct label * l, const char * pathhint);
+void			 mac_anoubis_sfs_exec_success(struct exec_package *,
+			     struct label *);
+int			 sfs_do_csum(struct vnode *, struct sfs_label *);
+int			 sfs_csum(struct vnode *, struct sfs_label *);
+char			*sfs_d_path(struct vnode *dirvp,
+			     struct componentname *cnp, char **bufp);
+int			 sfs_open_checks(struct file *, struct vnode *,
+			     struct sfs_label * sec, int, const char *);
+struct sfs_open_message	*sfs_pack_to_message(struct pack_label *pl, int *lenp);
+void			 mac_anoubis_sfs_execve_success(struct exec_package *,
+			     struct label *);
+int			 mac_anoubis_sfs_cred_internalize_label(struct label *,
+			     char *, char *, int *);
+int			 mac_anoubis_sfs_execve_prepare(struct exec_package *,
+			     struct label *);
+void			 mac_anoubis_sfs_cred_destroy_label(struct label *);
 
 void
 mac_anoubis_sfs_init_vnode_label(struct label * label)
@@ -484,46 +506,134 @@ mac_anoubis_sfs_file_open(struct ucred * active_cred, struct file * file,
 #endif
 }
 
-void mac_anoubis_sfs_vnode_exec(struct vnode * vp, struct label * l,
-    struct vnode *dvp, struct label *dl, struct componentname *cnp)
+struct sfs_open_message *
+sfs_pack_to_message(struct pack_label *pl, int *lenp)
 {
-	struct sfs_open_message * msg;
-	struct vattr va;
-	struct sfs_label * sec = SFS_LABEL(l);
-	char *buf = NULL, *path = NULL;
-	int plen = 1;
+	int			 plen = 1;
+	int			 total;
+	struct sfs_open_message	*ret;
 
-	if (dvp) {
-		path = sfs_d_path(dvp, cnp, &buf);
+	if (pl->path)
+		plen = strlen(pl->path) + 1;
+	total = sizeof(struct sfs_open_message) - 1 + plen;
+	ret = malloc(total, M_DEVBUF, M_WAITOK);
+	if (!ret)
+		return NULL;
+	bzero(ret, total);
+	ret->flags = pl->flags;
+	if (pl->path) {
+		memcpy(ret->pathhint, pl->path, plen);
+	}
+	if (pl->flags & ANOUBIS_OPEN_FLAG_STATDATA) {
+		ret->ino = pl->ino;
+		ret->dev = pl->dev;
+	}
+	if (pl->flags & ANOUBIS_OPEN_FLAG_CSUM)
+		memcpy(ret->csum, pl->csum, ANOUBIS_CS_LEN);
+	*lenp = total;
+	return ret;
+}
+
+void
+mac_anoubis_sfs_execve_success(struct exec_package *pack, struct label *l)
+{
+	struct sfs_open_message		*msg;
+	struct pack_label		*pl;
+	int				 len;
+
+	pl = PACK_LABEL(l);
+	msg = sfs_pack_to_message(pl, &len);
+	assert(msg);
+	msg->flags |= ANOUBIS_OPEN_FLAG_EXEC;
+	anoubis_notify(msg, len, ANOUBIS_SOURCE_SFSEXEC);
+}
+
+int
+mac_anoubis_sfs_cred_internalize_label(struct label *label, char *name,
+    char *value, int *claimed)
+{
+	struct pack_label	*pl;
+
+	if (strcmp(name, "anoubis") != 0)
+		return 0;
+	*claimed = 1;
+	if (strcmp(value, "true") != 0)
+		return EINVAL;
+	pl = malloc(sizeof(struct pack_label), M_MACTEMP, M_WAITOK);
+	assert(pl);
+	pl->flags = 0;
+	pl->path = NULL;
+	mac_label_set(label, mac_anoubis_sfs_slot, (caddr_t)pl);
+	return 0;
+}
+
+int
+mac_anoubis_sfs_execve_prepare(struct exec_package *pack, struct label *label)
+{
+	struct pack_label	*pl;
+	struct nameidata	*ndp = pack->ep_ndp;
+	char			*path = NULL, *buf = NULL;
+	int			 plen = 1;
+	int			 ret;
+	struct sfs_open_message	*msg;
+	struct vnode		*vp;
+	struct sfs_label	*vpsec;
+	struct vattr		 va;
+
+	pl = PACK_LABEL(label);
+	if (ndp->ni_dvp) {
+		path = sfs_d_path(ndp->ni_dvp, &ndp->ni_cnd, &buf);
 		if (path)
 			plen = 1 + strlen(path);
 	}
-	msg = malloc(sizeof(*msg) + plen - 1, M_DEVBUF, M_WAITOK);
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
-	if (CHECKSUM_OK(vp))
-		sfs_csum(vp, sec);
-	msg->flags = ANOUBIS_OPEN_FLAG_READ;
-	if (VOP_GETATTR(vp, &va, curproc->p_ucred, curproc) == 0) {
-		msg->ino = va.va_fileid;
-		msg->dev = va.va_fsid;
-		msg->flags |= ANOUBIS_OPEN_FLAG_STATDATA;
-	}
-	assert(sec);
-	mtx_enter(&sec->lock);
-	if (sec->sfsmask & SFS_CS_UPTODATE) {
-		memcpy(msg->csum, sec->hash, ANOUBIS_SFS_CS_LEN);
-		msg->flags |= ANOUBIS_OPEN_FLAG_CSUM;
-	}
-	mtx_leave(&sec->lock);
-	VOP_UNLOCK(vp, 0, curproc);
 	if (path) {
-		memcpy(msg->pathhint, path, plen);
-		free(buf, M_MACTEMP);
-		msg->flags |= ANOUBIS_OPEN_FLAG_PATHHINT;
-	} else {
-		msg->pathhint[0] = 0;
+		pl->path = malloc(plen, M_MACTEMP, M_WAITOK);
+		if (!pl->path) {
+			free(buf, M_MACTEMP);
+			return ENOMEM;
+		}
+		memcpy(pl->path, path, plen);
+		pl->flags |= ANOUBIS_OPEN_FLAG_PATHHINT;
 	}
-	anoubis_notify(msg, sizeof(*msg) + plen - 1, ANOUBIS_SOURCE_SFSEXEC);
+	if (buf)
+		free(buf, M_MACTEMP);
+	vp = pack->ep_vp;
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
+	vpsec = SFS_LABEL(vp->v_label);
+	if (CHECKSUM_OK(vp))
+		sfs_csum(vp, vpsec);
+	if (VOP_GETATTR(vp, &va, curproc->p_ucred, curproc) == 0) {
+		pl->ino = va.va_fileid;
+		pl->dev = va.va_fsid;
+		pl->flags |= ANOUBIS_OPEN_FLAG_STATDATA;
+	}
+	mtx_enter(&vpsec->lock);
+	if (vpsec->sfsmask & SFS_CS_UPTODATE) {
+		memcpy(pl->csum, vpsec->hash, ANOUBIS_SFS_CS_LEN);
+		pl->flags |= ANOUBIS_OPEN_FLAG_CSUM;
+	}
+	mtx_leave(&vpsec->lock);
+	VOP_UNLOCK(vp, 0, curproc);
+	msg = sfs_pack_to_message(pl, &plen);
+	if (!msg)
+		return ENOMEM;
+	msg->flags |= ANOUBIS_OPEN_FLAG_EXEC;
+	ret = anoubis_raise(msg, plen, ANOUBIS_SOURCE_SFS);
+	if (ret == EPIPE /* XXX && operation mode != strict */)
+		return 0;
+	return ret;
+}
+
+void
+mac_anoubis_sfs_cred_destroy_label(struct label *label)
+{
+	struct pack_label	*old = PACK_LABEL(label);
+	mac_label_set(label, mac_anoubis_sfs_slot, NULL);
+	if (old) {
+		if (old->path)
+			free(old->path, M_MACTEMP);
+		free(old, M_MACTEMP);
+	}
 }
 
 void mac_anoubis_sfs_init(struct mac_policy_conf * conf)
@@ -551,7 +661,10 @@ struct mac_policy_ops mac_anoubis_sfs_ops =
 	.mpo_vnode_destroy_label = mac_anoubis_sfs_destroy_vnode_label,
 	.mpo_vnode_check_open = mac_anoubis_sfs_vnode_open,
 	.mpo_file_check_open = NULL /* mac_anoubis_sfs_file_open */,
-	.mpo_vnode_exec = mac_anoubis_sfs_vnode_exec,
+	.mpo_execve_prepare = mac_anoubis_sfs_execve_prepare,
+	.mpo_execve_success = mac_anoubis_sfs_execve_success,
+	.mpo_cred_internalize_label = mac_anoubis_sfs_cred_internalize_label,
+	.mpo_cred_destroy_label = mac_anoubis_sfs_cred_destroy_label,
 };
 
 MAC_POLICY_SET(&mac_anoubis_sfs_ops, mac_anoubis_sfs, "Anoubis SFS",

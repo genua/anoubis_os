@@ -303,9 +303,6 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 	size_t pathbuflen;
 #endif
 	char *pathbuf = NULL;
-#ifdef ANOUBIS
-	struct vnode *dvp = NULL;
-#endif
 
 	/*
 	 * Cheap solution to complicated problems.
@@ -361,7 +358,10 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 		goto bad1;
 #endif
 #ifdef ANOUBIS
-	dvp = nid.ni_dvp;
+	error = mac_execve_prepare(&pack);
+	if (error)
+		goto bad;
+	vrele(nid.ni_dvp);
 #endif
 	
 	/* XXX -- THE FOLLOWING SECTION NEEDS MAJOR CLEANUP */
@@ -522,10 +522,7 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 	VREF(pack.ep_vp);
 	p->p_textvp = pack.ep_vp;
 #ifdef ANOUBIS
-	mac_vnode_exec(p->p_textvp, dvp, &nid.ni_cnd);
-	if (dvp)
-		vrele(dvp);
-	dvp = NULL;
+	mac_execve_success(&pack);
 #endif
 
 	atomic_setbits_int(&p->p_flag, P_EXEC);
@@ -655,10 +652,6 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
 	pool_put(&namei_pool, nid.ni_cnd.cn_pnbuf);
-#ifdef ANOUBIS
-	if (dvp)
-		vrele(dvp);
-#endif
 	vn_close(pack.ep_vp, FREAD, cred, p);
 
 	/*
@@ -756,10 +749,6 @@ bad1:
 	/* close and put the exec'd file */
 	vn_close(pack.ep_vp, FREAD, cred, p);
 	pool_put(&namei_pool, nid.ni_cnd.cn_pnbuf);
-#ifdef ANOUBIS
-	if (dvp)
-		vrele(dvp);
-#endif
 	if (argp != NULL)
 		uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
@@ -788,10 +777,6 @@ exec_abort:
 	if (pack.ep_emul_arg != NULL)
 		free(pack.ep_emul_arg, M_TEMP);
 	pool_put(&namei_pool, nid.ni_cnd.cn_pnbuf);
-#ifdef ANOUBIS
-	if (dvp)
-		vrele(dvp);
-#endif
 	vn_close(pack.ep_vp, FREAD, cred, p);
 	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 

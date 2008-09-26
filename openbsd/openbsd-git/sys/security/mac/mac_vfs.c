@@ -432,13 +432,19 @@ mac_vnode_check_open(struct ucred *cred, struct vnode *vp, int acc_mode)
 #endif
 
 #ifdef ANOUBIS
-void
-mac_vnode_exec(struct vnode *vp, struct vnode *dvp, struct componentname *cnp)
+int
+mac_execve_prepare(struct exec_package *pack)
 {
-	struct label *dpl = NULL;
-	if (dvp)
-		dpl = dvp->v_label;
-	MAC_PERFORM(vnode_exec, vp, vp->v_label, dvp, dpl, cnp);
+	int error;
+
+	MAC_CHECK(execve_prepare, pack, pack->ep_label);
+	return error;
+}
+
+void
+mac_execve_success(struct exec_package *pack)
+{
+	MAC_PERFORM(execve_success, pack, pack->ep_label);
 }
 
 int

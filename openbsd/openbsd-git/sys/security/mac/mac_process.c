@@ -232,9 +232,13 @@ mac_execve_enter(struct exec_package *epp, struct mac *mac_p)
 	char *buffer;
 	int error;
 
+#ifdef ANOUBIS
+	if (mac_p) {
+#else
 	if (mac_p == NULL)
 		return (0);
-
+#endif
+		
 	error = copyin(mac_p, &mac, sizeof(mac));
 	if (error)
 		return (error);
@@ -243,12 +247,24 @@ mac_execve_enter(struct exec_package *epp, struct mac *mac_p)
 	if (error)
 		return (error);
 
+#ifdef ANOUBIS
+	buffer = malloc(13+mac.m_buflen, M_MACTEMP, M_WAITOK);
+	memcpy(buffer, "anoubis/true,", 13);
+	error = copyinstr(mac.m_string, buffer+13, mac.m_buflen, NULL);
+#else
 	buffer = malloc(mac.m_buflen, M_MACTEMP, M_WAITOK);
 	error = copyinstr(mac.m_string, buffer, mac.m_buflen, NULL);
+#endif
 	if (error) {
 		free(buffer, M_MACTEMP);
 		return (error);
 	}
+#ifdef ANOUBIS
+	} else {
+		buffer = malloc(13, M_MACTEMP, M_WAITOK);
+		memcpy(buffer, "anoubis/true", 13);
+	}
+#endif
 
 	label = mac_cred_label_alloc();
 	error = mac_cred_internalize_label(label, buffer);

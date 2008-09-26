@@ -384,8 +384,8 @@ int	mac_vnode_check_open(struct ucred *cred, struct vnode *vp,
 	    int acc_mode);
 #endif
 #ifdef ANOUBIS
-void	mac_vnode_exec(struct vnode *vp, struct vnode *dvp,
-	    struct componentname *cnp);
+int	mac_execve_prepare(struct exec_package *pack);
+void	mac_execve_success(struct exec_package *pack);
 int	mac_file_check_open(struct ucred *cred, struct file * fp,
 	    struct vnode *vp, const char * pathhint);
 #endif
