@@ -662,6 +662,88 @@ static int sfs_dentry_open(struct file * file)
 	return sfs_open_checks(file, mask);
 }
 
+static int sfs_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
+{
+	struct path p;
+	struct hash_desc cdesc;
+	struct page * page;
+	u_int8_t csum[ANOUBIS_SFS_CS_LEN];
+	struct scatterlist sg[1];
+	int err, count, alloclen;
+	struct inode * inode;
+	const char * path;
+	struct sfs_open_message * msg;
+	mm_segment_t oldfs;
+
+	if (!dentry || !dentry->d_inode || !nd)
+		return -ENOENT;
+	inode = dentry->d_inode;
+	if (!inode->i_op || !inode->i_op->readlink)
+		return -EINVAL;
+	page = alloc_page(GFP_KERNEL);
+	oldfs = get_fs();
+	set_fs(get_ds());
+	err = inode->i_op->readlink(dentry, page_address(page), PAGE_SIZE);
+	set_fs(oldfs);
+	if (err < 0)
+		goto out;
+	count = err;
+	cdesc.flags = CRYPTO_TFM_REQ_MAY_SLEEP;
+	cdesc.tfm = crypto_alloc_hash("sha256", 0, CRYPTO_ALG_ASYNC);
+	if (IS_ERR(cdesc.tfm)) {
+		err = PTR_ERR(cdesc.tfm);
+		goto out;
+	}
+	err = crypto_hash_init(&cdesc);
+	if (err) {
+		crypto_free_hash(cdesc.tfm);
+		goto out;
+	}
+	sg_set_page(sg, page, count, 0);
+	err = crypto_hash_update(&cdesc, sg, count);
+	if (err) {
+		err = EIO;
+		crypto_free_hash(cdesc.tfm);
+		goto out;
+	}
+	err = crypto_hash_final(&cdesc, csum);
+	crypto_free_hash(cdesc.tfm);
+	if (err)
+		goto out;
+	p.mnt = nd->path.mnt;
+	p.dentry = dentry;
+	path = global_dpath(&p, page_address(page), PAGE_SIZE);
+	if (path && !IS_ERR(path)) {
+		/* page_address returns void *, hence the need for the cast */
+		count = PAGE_SIZE - (path - (char *)page_address(page));
+	} else {
+		path = NULL;
+		count = 1;
+	}
+	alloclen = sizeof(struct sfs_open_message) - 1 + count;
+	msg = kmalloc(alloclen, GFP_KERNEL);
+	msg->flags = ANOUBIS_OPEN_FLAG_FOLLOW | ANOUBIS_OPEN_FLAG_CSUM;
+	if (path) {
+		memcpy(msg->pathhint, path, count);
+		msg->flags |= ANOUBIS_OPEN_FLAG_PATHHINT;
+	} else {
+		msg->pathhint[0] = 0;
+	}
+	__free_page(page);
+	msg->ino = 0;
+	msg->dev = 0;
+	memcpy(msg->csum, csum, ANOUBIS_SFS_CS_LEN);
+	err = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
+	if (err == -EPIPE /* XXX and mode != strict */)
+		err = 0;
+	else if (err == -EOKWITHCHKSUM)
+		err = 0;
+	return err;
+out:
+	__free_page(page);
+	return err;
+}
+
 /*
  * Part of the external interface:
  * Calculate the checksum of the file and return the result in @csum.
@@ -807,6 +889,7 @@ static struct anoubis_hooks sfs_ops = {
 	.bprm_set_security = sfs_bprm_set_security,
 	.bprm_post_apply_creds = sfs_bprm_post_apply_creds,
 	.inode_permission = sfs_inode_permission,
+	.inode_follow_link = sfs_inode_follow_link,
 	.dentry_open = sfs_dentry_open,
 	.inode_setxattr = sfs_inode_setxattr,
 	.inode_removexattr = sfs_inode_removexattr,

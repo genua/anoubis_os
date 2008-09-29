@@ -752,6 +752,10 @@ static int ac_inode_removexattr(struct dentry *dentry, const char *name)
 {
 	return HOOKS(inode_removexattr, (dentry, name));
 }
+static int ac_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
+{
+	return HOOKS(inode_follow_link, (dentry, nd));
+}
 
 /* FILES and DENTRIES*/
 static int ac_file_alloc_security(struct file * file)
@@ -995,6 +999,7 @@ static struct security_operations anoubis_core_ops = {
 	.inode_permission = ac_inode_permission,
 	.inode_setxattr = ac_inode_setxattr,
 	.inode_removexattr = ac_inode_removexattr,
+	.inode_follow_link = ac_inode_follow_link,
 	.file_alloc_security = ac_file_alloc_security,
 	.file_free_security = ac_file_free_security,
 	.file_permission = ac_file_permission,

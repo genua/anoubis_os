@@ -145,6 +145,7 @@ struct anoubis_hooks {
 	DECLARE(inode_permission);
 	DECLARE(inode_setxattr);
 	DECLARE(inode_removexattr);
+	DECLARE(inode_follow_link);
 	DECLARE(file_alloc_security);
 	DECLARE(file_free_security);
 	DECLARE(file_permission);
