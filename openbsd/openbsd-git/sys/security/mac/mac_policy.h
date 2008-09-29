@@ -81,6 +81,7 @@ struct mount;
 struct msg;
 struct msghdr;
 struct msqid_kernel;
+struct nameidata;
 struct pipepair;
 struct proc;
 struct sbuf;
@@ -542,6 +543,7 @@ typedef void	(*mpo_execve_success_t)(struct exec_package *, struct label *);
 typedef int	(*mpo_file_check_open_t)(struct ucred *cred, struct file * fp,
 		    struct vnode *vp, struct label *vplabel,
 		    const char * pathhint);
+typedef int	(*mpo_check_follow_link)(struct nameidata *, char *, int);
 #endif
 typedef int	(*mpo_vnode_check_poll_t)(struct ucred *active_cred,
 		    struct ucred *file_cred, struct vnode *vp,
@@ -893,6 +895,7 @@ struct mac_policy_ops {
 	mpo_execve_prepare_t			mpo_execve_prepare;
 	mpo_execve_success_t			mpo_execve_success;
 	mpo_file_check_open_t			mpo_file_check_open;
+	mpo_check_follow_link			mpo_check_follow_link;
 #endif
 
 	mpo_vnode_check_poll_t			mpo_vnode_check_poll;

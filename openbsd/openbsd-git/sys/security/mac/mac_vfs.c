@@ -458,6 +458,16 @@ mac_file_check_open(struct ucred *cred, struct file * fp, struct vnode *vp,
 	MAC_CHECK(file_check_open, cred, fp, vp, vp->v_label, pathhint);
 	return (error);
 }
+
+int
+mac_check_follow_link(struct nameidata *ndp, char *buf, int len)
+{
+	int error;
+
+	MAC_CHECK(check_follow_link, ndp, buf, len);
+	return error;
+}
+
 #endif
 
 int

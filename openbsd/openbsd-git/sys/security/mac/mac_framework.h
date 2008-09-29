@@ -70,6 +70,7 @@ struct mount;
 struct msg;
 struct msghdr;
 struct msqid_kernel;
+struct nameidata;
 struct proc;
 struct semid_kernel;
 struct shmfd;
@@ -388,6 +389,7 @@ int	mac_execve_prepare(struct exec_package *pack);
 void	mac_execve_success(struct exec_package *pack);
 int	mac_file_check_open(struct ucred *cred, struct file * fp,
 	    struct vnode *vp, const char * pathhint);
+int	mac_check_follow_link(struct nameidata *, char *linkbuf, int linklen);
 #endif
 int	mac_vnode_check_poll(struct ucred *active_cred,
 	    struct ucred *file_cred, struct vnode *vp);

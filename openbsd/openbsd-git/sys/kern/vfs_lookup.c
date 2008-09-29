@@ -209,7 +209,11 @@ namei(struct nameidata *ndp)
 		if (error)
 			break;
 #endif
+#ifdef ANOUBIS
+		if (1)
+#else
 		if (ndp->ni_pathlen > 1)
+#endif
 			cp = pool_get(&namei_pool, PR_WAITOK);
 		else
 			cp = cnp->cn_pnbuf;
@@ -225,7 +229,11 @@ namei(struct nameidata *ndp)
 		error = VOP_READLINK(ndp->ni_vp, &auio, cnp->cn_cred);
 		if (error) {
 badlink:
+#ifdef ANOUBIS
+			if (1)
+#else
 			if (ndp->ni_pathlen > 1)
+#endif
 				pool_put(&namei_pool, cp);
 			break;
 		}
@@ -238,14 +246,30 @@ badlink:
 			error = ENAMETOOLONG;
 			goto badlink;
 		}
+#ifdef ANOUBIS
+		/*
+		 * We no longer need the link's vnode. Unlock it before
+		 * the call to mac_check_follow_link.
+		 */
+		vput(ndp->ni_vp);
+		if (1) {
+#else
 		if (ndp->ni_pathlen > 1) {
+#endif
+#ifdef ANOUBIS
+			error = mac_check_follow_link(ndp, cp, linklen);
+			if (error)
+				goto badlink;
+#endif
 			bcopy(ndp->ni_next, cp + linklen, ndp->ni_pathlen);
 			pool_put(&namei_pool, cnp->cn_pnbuf);
 			cnp->cn_pnbuf = cp;
 		} else
 			cnp->cn_pnbuf[linklen] = '\0';
 		ndp->ni_pathlen += linklen;
+#ifndef ANOUBIS
 		vput(ndp->ni_vp);
+#endif
 		dp = ndp->ni_dvp;
 		/*
 		 * Check if root directory should replace current directory.
