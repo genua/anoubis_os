@@ -583,6 +583,9 @@ mac_anoubis_sfs_execve_prepare(struct exec_package *pack, struct label *label)
 	struct vattr		 va;
 
 	pl = PACK_LABEL(label);
+	/* Return immediately if the label is already initialized. */
+	if (pl->flags)
+		return 0;
 	if (ndp->ni_dvp) {
 		path = sfs_d_path(ndp->ni_dvp, &ndp->ni_cnd, &buf);
 		if (path)
@@ -614,6 +617,7 @@ mac_anoubis_sfs_execve_prepare(struct exec_package *pack, struct label *label)
 		memcpy(pl->csum, vpsec->hash, ANOUBIS_SFS_CS_LEN);
 		pl->flags |= ANOUBIS_OPEN_FLAG_CSUM;
 	}
+	pl->flags |= ANOUBIS_OPEN_FLAG_EXEC;
 	mtx_leave(&vpsec->lock);
 	VOP_UNLOCK(vp, 0, curproc);
 	msg = sfs_pack_to_message(pl, &plen);

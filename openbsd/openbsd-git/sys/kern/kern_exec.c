@@ -121,7 +121,7 @@ check_exec(struct proc *p, struct exec_package *epp)
 	int error, i;
 	struct vnode *vp;
 #ifdef ANOUBIS
-	struct vnode *dvp;
+	struct vnode *dvp = NULL;
 #endif
 	struct nameidata *ndp;
 	size_t resid;
@@ -186,6 +186,14 @@ check_exec(struct proc *p, struct exec_package *epp)
 		goto bad2;
 	epp->ep_hdrvalid = epp->ep_hdrlen - resid;
 
+#ifdef ANOUBIS
+	error = mac_execve_prepare(epp);
+	if (error)
+		goto bad2;
+	if (dvp)
+		vrele(dvp);
+	dvp = NULL;
+#endif
 	/*
 	 * set up the vmcmds for creation of the process
 	 * address space
@@ -202,18 +210,8 @@ check_exec(struct proc *p, struct exec_package *epp)
 		/* make sure the first "interesting" error code is saved. */
 		if (!newerror || error == ENOEXEC)
 			error = newerror;
-#ifdef ANOUBIS
-		if (epp->ep_flags & EXEC_DESTR) {
-			if (dvp)
-				vrele(dvp);
-			dvp = NULL;
-			if (error)
-				return (error);
-		}
-#else
 		if (epp->ep_flags & EXEC_DESTR && error != 0)
 			return (error);
-#endif
 	}
 	if (!error) {
 		/* check that entry point is sane */
@@ -348,21 +346,15 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 	pack.ep_label = NULL;
 #endif
 
+#ifdef MAC
+	error = mac_execve_enter(&pack, mac_p);
+	if (error)
+		return error;
+#endif
 	/* see if we can run it. */
 	if ((error = check_exec(p, &pack)) != 0) {
 		goto freehdr;
 	}
-#ifdef MAC
-	error = mac_execve_enter(&pack, mac_p);
-	if (error)
-		goto bad1;
-#endif
-#ifdef ANOUBIS
-	error = mac_execve_prepare(&pack);
-	if (error)
-		goto bad;
-	vrele(nid.ni_dvp);
-#endif
 	
 	/* XXX -- THE FOLLOWING SECTION NEEDS MAJOR CLEANUP */
 
@@ -733,7 +725,6 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 bad:
 #ifdef MAC
 	mac_execve_exit(&pack);
-bad1:
 #endif
 	/* free the vmspace-creation commands, and release their references */
 	kill_vmcmds(&pack.ep_vmcmds);
@@ -753,6 +744,9 @@ bad1:
 		uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 
  freehdr:
+#ifdef MAC
+	mac_execve_exit(&pack);
+#endif
 	free(pack.ep_hdr, M_EXEC);
 #if NSYSTRACE > 0
  clrflag:

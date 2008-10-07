@@ -258,8 +258,10 @@ badlink:
 #endif
 #ifdef ANOUBIS
 			error = mac_check_follow_link(ndp, cp, linklen);
-			if (error)
+			if (error) {
+				ndp->ni_vp = NULL;
 				goto badlink;
+			}
 #endif
 			bcopy(ndp->ni_next, cp + linklen, ndp->ni_pathlen);
 			pool_put(&namei_pool, cnp->cn_pnbuf);
@@ -282,7 +284,12 @@ badlink:
 	}
 	pool_put(&namei_pool, cnp->cn_pnbuf);
 	vrele(ndp->ni_dvp);
+#ifdef ANOUBIS
+	if (ndp->ni_vp)
+		vput(ndp->ni_vp);
+#else
 	vput(ndp->ni_vp);
+#endif
 	ndp->ni_vp = NULL;
 	return (error);
 }
