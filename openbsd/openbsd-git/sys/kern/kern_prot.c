@@ -924,12 +924,13 @@ crdup(struct ucred *cr)
 	struct ucred *newcr;
 
 	newcr = crget();
+	bcopy(&cr->cr_startcopy, &newcr->cr_startcopy,
+	    (unsigned)((caddr_t)&cr->cr_endcopy -
+	        (caddr_t)&cr->cr_startcopy));
+	newcr->cr_ref = 1;
 #ifdef MAC
 	mac_cred_copy(cr, newcr);
 #endif
-	*newcr = *cr;
-	newcr->cr_label = NULL; /* don't copy the label. */
-	newcr->cr_ref = 1;
 	return (newcr);
 }
 
