@@ -59,6 +59,7 @@ mac_labelpool_init(void)
 
 	pool_init(&label_pool, sizeof(struct label), 0, 0, 0, "mlabelpl",
 	    &pool_allocator_nointr);
+	pool_setipl(&label_pool, IPL_HIGH);
 	pool_set_ctordtor(&label_pool, mac_labelpool_ctor, mac_labelpool_dtor,
 	    NULL);
 }
