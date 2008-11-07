@@ -1,4 +1,4 @@
-/*	$OpenBSD: thib $	*/
+/*	$OpenBSD: sobrado $	*/
 /*	$NetBSD: pstat.c,v 1.27 1996/10/23 22:50:06 cgd Exp $	*/
 
 /*-
@@ -40,7 +40,7 @@ static char copyright[] =
 #if 0
 from: static char sccsid[] = "@(#)pstat.c	8.9 (Berkeley) 2/16/94";
 #else
-static char *rcsid = "$OpenBSD: thib $";
+static char *rcsid = "$OpenBSD: sobrado $";
 #endif
 #endif /* not lint */
 
@@ -1199,7 +1199,7 @@ swapmode(void)
 void
 usage(void)
 {
-	(void)fprintf(stderr,
-	    "usage: pstat [-fknsTtv] [-d format] [-M core] [-N system] [symbols ...]\n");
+	(void)fprintf(stderr, "usage: "
+	    "pstat [-fknsTtv] [-d format] [-M core] [-N system] [symbols]\n");
 	exit(1);
 }

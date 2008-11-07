@@ -1,4 +1,4 @@
-/*	$OpenBSD: rainer $	*/
+/*	$OpenBSD: thib $	*/
 /*	$NetBSD: mount.h,v 1.48 1996/02/18 11:55:47 fvdl Exp $	*/
 
 /*
@@ -494,20 +494,21 @@ struct vfsconf {
 
 /* buffer cache statistics */
 struct bcachestats {
-	long numbufs; 		/* number of buffers allocated */
-	long freebufs;		/* number of free buffers */
-	long numbufpages; 	/* number of pages in buffer cache */
-	long numfreepages; 	/* number of free pages */
-	long numdirtypages; 	/* number of dirty free pages */
-	long numcleanpages; 	/* number of clean free pages */
-	long pendingwrites;	/* number of pending writes */
-	long pendingreads;	/* number of pending reads */
-	long numwrites;		/* total writes started */
-	long numreads;		/* total reads started */
-	long cachehits;		/* total reads found in cache */
+	int64_t numbufs;		/* number of buffers allocated */
+	int64_t freebufs;		/* number of free buffers */
+	int64_t numbufpages;		/* number of pages in buffer cache */
+	int64_t numfreepages; 		/* number of free pages */
+	int64_t numdirtypages; 		/* number of dirty free pages */
+	int64_t numcleanpages; 		/* number of clean free pages */
+	int64_t pendingwrites;		/* number of pending writes */
+	int64_t pendingreads;		/* number of pending reads */
+	int64_t numwrites;		/* total writes started */
+	int64_t numreads;		/* total reads started */
+	int64_t cachehits;		/* total reads found in cache */
 };
 #ifdef _KERNEL
 extern struct bcachestats bcstats;
+#define BUFPAGES_DEFICIT (bufpages - bcstats.numbufpages)
 #endif
 
 /*

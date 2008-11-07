@@ -1,4 +1,4 @@
-/*	$OpenBSD: henning $	*/
+/*	$OpenBSD: blambert $	*/
 /*	$NetBSD: if_ether.c,v 1.31 1996/05/11 12:59:58 mycroft Exp $	*/
 
 /*
@@ -124,7 +124,7 @@ arptimer(arg)
 	struct llinfo_arp *la, *nla;
 
 	s = splsoftnet();
-	timeout_add(to, arpt_prune * hz);
+	timeout_add_sec(to, arpt_prune);
 	for (la = LIST_FIRST(&llinfo_arp); la != LIST_END(&llinfo_arp);
 	    la = nla) {
 		struct rtentry *rt = la->la_rt;
@@ -164,7 +164,7 @@ arp_rtrequest(req, rt, info)
 		}
 
 		timeout_set(&arptimer_to, arptimer, &arptimer_to);
-		timeout_add(&arptimer_to, hz);
+		timeout_add_sec(&arptimer_to, 1);
 	}
 
 	if (rt->rt_flags & RTF_GATEWAY) {

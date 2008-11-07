@@ -1,4 +1,4 @@
-/*	$OpenBSD: fgsch $	*/
+/*	$OpenBSD: brad $	*/
 /*	$NetBSD: elink3.c,v 1.32 1997/05/14 00:22:00 thorpej Exp $	*/
 
 /*
@@ -1481,13 +1481,7 @@ epioctl(ifp, cmd, data)
 
 	s = splnet();
 
-	if ((error = ether_ioctl(ifp, &sc->sc_arpcom, cmd, data)) > 0) {
-		splx(s);
-		return error;
-	}
-
 	switch (cmd) {
-
 	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 
@@ -1560,8 +1554,7 @@ epioctl(ifp, cmd, data)
 		break;
 
 	default:
-		error = EINVAL;
-		break;
+		error = ether_ioctl(ifp, &sc->sc_arpcom, cmd, data);
 	}
 
 	splx(s);

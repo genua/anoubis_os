@@ -443,6 +443,10 @@ file dev/radio.c			radio	needs-flag
 device	ipmi
 file	dev/ipmi.c			ipmi	needs-flag
 
+# VMware Tools
+device	vmt
+file	dev/vmt.c			vmt	needs-flag
+
 # Software RAID
 device	softraid: scsi
 attach	softraid at root
@@ -500,6 +504,9 @@ pseudo-device pflog: ifnet
 file	net/if_pflog.c			pflog	needs-flag
 pseudo-device pfsync: ifnet
 file	net/if_pfsync.c			pfsync	needs-flag
+
+pseudo-device pflow: ifnet
+file	net/if_pflow.c			pflow	needs-flag
 
 pseudo-device bio
 file	dev/bio.c			bio needs-flag
@@ -791,6 +798,7 @@ file net/if_mpe.c			mpe			needs-count
 file net80211/ieee80211.c		wlan
 file net80211/ieee80211_amrr.c		wlan
 file net80211/ieee80211_crypto.c	wlan
+file net80211/ieee80211_crypto_bip.c	wlan
 file net80211/ieee80211_crypto_ccmp.c	wlan
 file net80211/ieee80211_crypto_tkip.c	wlan
 file net80211/ieee80211_crypto_wep.c	wlan
@@ -798,6 +806,8 @@ file net80211/ieee80211_input.c		wlan
 file net80211/ieee80211_ioctl.c		wlan
 file net80211/ieee80211_node.c		wlan
 file net80211/ieee80211_output.c	wlan
+file net80211/ieee80211_pae_input.c	wlan
+file net80211/ieee80211_pae_output.c	wlan
 file net80211/ieee80211_proto.c		wlan
 file net80211/ieee80211_rssadapt.c	wlan
 file net80211/ieee80211_regdomain.c	wlan
@@ -835,7 +845,7 @@ file crypto/rijndael.c			(inet & ipsec) | crypto | uvm_swap_encrypt | wlan
 file crypto/md5.c
 file crypto/rmd160.c			(inet & ipsec) | crypto
 file crypto/sha1.c			(inet & ipsec) | crypto | carp | wlan
-file crypto/sha2.c			(inet & ipsec) | crypto
+file crypto/sha2.c			(inet & ipsec) | crypto | wlan
 file crypto/blf.c			(inet & ipsec) | crypto | vnd
 file crypto/cast.c			(inet & ipsec) | crypto
 file crypto/skipjack.c			(inet & ipsec) | crypto
@@ -850,6 +860,9 @@ file crypto/xform.c			(inet & ipsec) | crypto
 file crypto/deflate.c			(inet & ipsec) | crypto
 file crypto/arc4.c			
 file crypto/michael.c			wlan
+file crypto/cmac.c			wlan
+file crypto/hmac.c			wlan | (softraid & crypto)
+file crypto/key_wrap.c			wlan
 file crypto/idgen.c			inet6 | nfsclient | nfsserver
 file netatalk/aarp.c			netatalk
 file netatalk/at_control.c		netatalk

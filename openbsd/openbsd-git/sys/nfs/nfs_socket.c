@@ -660,7 +660,6 @@ errout:
  * We must search through the list of received datagrams matching them
  * with outstanding requests using the xid, until ours is found.
  */
-/* ARGSUSED */
 int
 nfs_reply(myrep)
 	struct nfsreq *myrep;
@@ -700,8 +699,6 @@ nfs_reply(myrep)
 			if (NFSIGNORE_SOERROR(nmp->nm_soflags, error)) {
 				if (nmp->nm_so)
 					nmp->nm_so->so_error = 0;
-				if (myrep->r_flags & R_GETONEREP)
-					return (0);
 				continue;
 			}
 			return (error);
@@ -720,8 +717,6 @@ nfs_reply(myrep)
 			nfsstats.rpcinvalid++;
 			m_freem(mrep);
 nfsmout:
-			if (myrep->r_flags & R_GETONEREP)
-				return (0);
 			continue;
 		}
 
@@ -804,8 +799,6 @@ nfsmout:
 				panic("nfsreply nil");
 			return (0);
 		}
-		if (myrep->r_flags & R_GETONEREP)
-			return (0);
 	}
 }
 
@@ -1338,6 +1331,7 @@ nfs_rcvlock(rep)
 		slpflag = PCATCH;
 	else
 		slpflag = 0;
+
 	while (*flagp & NFSMNT_RCVLOCK) {
 		if (nfs_sigintr(rep->r_nmp, rep, rep->r_procp))
 			return (EINTR);
@@ -1602,37 +1596,6 @@ nfs_msg(p, server, msg)
 }
 
 #ifdef NFSSERVER
-int (*nfsrv3_procs[NFS_NPROCS])(struct nfsrv_descript *,
-				    struct nfssvc_sock *, struct proc *,
-				    struct mbuf **) = {
-	nfsrv_null,
-	nfsrv_getattr,
-	nfsrv_setattr,
-	nfsrv_lookup,
-	nfsrv3_access,
-	nfsrv_readlink,
-	nfsrv_read,
-	nfsrv_write,
-	nfsrv_create,
-	nfsrv_mkdir,
-	nfsrv_symlink,
-	nfsrv_mknod,
-	nfsrv_remove,
-	nfsrv_rmdir,
-	nfsrv_rename,
-	nfsrv_link,
-	nfsrv_readdir,
-	nfsrv_readdirplus,
-	nfsrv_statfs,
-	nfsrv_fsinfo,
-	nfsrv_pathconf,
-	nfsrv_commit,
-	nfsrv_noop,
-	nfsrv_noop,
-	nfsrv_noop,
-	nfsrv_noop
-};
-
 /*
  * Socket upcall routine for the nfsd sockets.
  * The caddr_t arg is a pointer to the "struct nfssvc_sock".
@@ -1934,7 +1897,7 @@ nfsrv_wakenfsd(struct nfssvc_sock *slp)
 				panic("nfsd wakeup");
 			slp->ns_sref++;
 			nfsd->nfsd_slp = slp;
-			wakeup(nfsd);
+			wakeup_one(nfsd);
 			return;
 		}
 	}

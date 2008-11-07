@@ -1,4 +1,4 @@
-/*	$OpenBSD: chl $	*/
+/*	$OpenBSD: art $	*/
 /*	$NetBSD: malloc.h,v 1.39 1998/07/12 19:52:01 augustss Exp $	*/
 
 /*
@@ -354,8 +354,7 @@ struct kmemusage {
  * Set of buckets for each size of memory block that is retained
  */
 struct kmembuckets {
-	caddr_t   kb_next;	/* list of free blocks */
-	caddr_t   kb_last;	/* last free block */
+	caddr_t   kb_dummy[2];
 	u_int64_t kb_calls;	/* total calls to allocate this size */
 	u_int64_t kb_total;	/* total number of blocks allocated */
 	u_int64_t kb_totalfree;	/* # of free elements in this bucket */

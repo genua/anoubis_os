@@ -1,4 +1,4 @@
-/*	$OpenBSD: miod $	*/
+/*	$OpenBSD: jsg $	*/
 /*	$NetBSD: sh3_machdep.c,v 1.59 2006/03/04 01:13:36 uwe Exp $	*/
 
 /*
@@ -380,7 +380,7 @@ dumpconf(void)
 	dumpextra = cpu_dumpsize();
 
 	/* Always skip the first block, in case there is a label there. */
-	if (dumplo < btodb(1));
+	if (dumplo < btodb(1))
 		dumplo = btodb(1);
 
 	/* Put dump at the end of the partition, and make it fit. */

@@ -1,4 +1,4 @@
-/*	$OpenBSD: markus $	*/
+/*	$OpenBSD: henning $	*/
 /*	$NetBSD: tcp_output.c,v 1.16 1997/06/03 16:17:09 kml Exp $	*/
 
 /*

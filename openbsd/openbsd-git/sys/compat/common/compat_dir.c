@@ -1,4 +1,4 @@
-/* 	$OpenBSD: fgsch $	*/
+/* 	$OpenBSD: pedro $	*/
 
 /*
  * Copyright (c) 2000 Constantine Sapuntzakis

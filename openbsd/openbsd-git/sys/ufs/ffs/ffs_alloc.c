@@ -212,7 +212,7 @@ ffs_realloccg(struct inode *ip, daddr64_t lbprev, daddr64_t bprev,
 		goto nospace;
 
 	if (bprev == 0) {
-		printf("dev = 0x%x, bsize = %d, bprev = %d, fs = %s\n",
+		printf("dev = 0x%x, bsize = %d, bprev = %lld, fs = %s\n",
 		    ip->i_dev, fs->fs_bsize, bprev, fs->fs_fsmnt);
 		panic("ffs_realloccg: bad bprev");
 	}
@@ -472,7 +472,7 @@ ffs1_reallocblks(void *v)
 	 */
 #ifdef DEBUG
 	if (prtrealloc)
-		printf("realloc: ino %d, lbns %d-%d\n\told:", ip->i_number,
+		printf("realloc: ino %d, lbns %lld-%lld\n\told:", ip->i_number,
 		    start_lbn, end_lbn);
 #endif
 	blkno = newblk;
@@ -554,7 +554,7 @@ ffs1_reallocblks(void *v)
 		   dbtofsb(fs, buflist->bs_children[i]->b_blkno), fs->fs_bsize))
 			panic("ffs1_reallocblks: unallocated block 3");
 		if (prtrealloc)
-			printf(" %d,", blkno);
+			printf(" %lld,", blkno);
 #endif
 	}
 #ifdef DEBUG
@@ -686,8 +686,8 @@ ffs2_reallocblks(void *v)
 	 */
 #ifdef DEBUG
 	if (prtrealloc)
-		printf("realloc: ino %d, lbns %jd-%jd\n\told:", ip->i_number,
-		    (intmax_t)start_lbn, (intmax_t)end_lbn);
+		printf("realloc: ino %d, lbns %lld-%lld\n\told:", ip->i_number,
+		    start_lbn, end_lbn);
 #endif
 
 	blkno = newblk;
@@ -706,7 +706,7 @@ ffs2_reallocblks(void *v)
 #endif
 #ifdef DEBUG
 		if (prtrealloc)
-			printf(" %jd,", (intmax_t)*bap);
+			printf(" %lld,", *bap);
 #endif
 		if (DOINGSOFTDEP(vp)) {
 			if (sbap == &ip->i_din2->di_db[0] && i < ssize)
@@ -772,7 +772,7 @@ ffs2_reallocblks(void *v)
 #endif
 #ifdef DEBUG
 		if (prtrealloc)
-			printf(" %jd,", (intmax_t)blkno);
+			printf(" %lld,", blkno);
 #endif
 	}
 #ifdef DEBUG
@@ -881,8 +881,8 @@ ffs_inode_alloc(struct inode *pip, mode_t mode, struct ucred *cred,
 	}
 
 	if (DIP(ip, blocks)) {
-		printf("free inode %s/%d had %d blocks\n",
-		    fs->fs_fsmnt, ino, DIP(ip, blocks));
+		printf("free inode %s/%d had %lld blocks\n",
+		    fs->fs_fsmnt, ino, (daddr64_t)DIP(ip, blocks));
 		DIP_ASSIGN(ip, blocks, 0);
 	}
 
@@ -1050,7 +1050,7 @@ ffs1_blkpref(struct inode *ip, daddr64_t lbn, int indx, int32_t *bap)
 	if (indx % fs->fs_maxbpg == 0 || bap[indx - 1] == 0) {
 		if (lbn < NDADDR + NINDIR(fs)) {
 			cg = ino_to_cg(fs, ip->i_number);
-			return (fs->fs_fpg * cg + fs->fs_frag);
+			return (cgbase(fs, cg) + fs->fs_frag);
 		}
 		/*
 		 * Find a cylinder with greater than average number of
@@ -1066,12 +1066,12 @@ ffs1_blkpref(struct inode *ip, daddr64_t lbn, int indx, int32_t *bap)
 		for (cg = startcg; cg < fs->fs_ncg; cg++)
 			if (fs->fs_cs(fs, cg).cs_nbfree >= avgbfree) {
 				fs->fs_cgrotor = cg;
-				return (fs->fs_fpg * cg + fs->fs_frag);
+				return (cgbase(fs, cg) + fs->fs_frag);
 			}
 		for (cg = 0; cg <= startcg; cg++)
 			if (fs->fs_cs(fs, cg).cs_nbfree >= avgbfree) {
 				fs->fs_cgrotor = cg;
-				return (fs->fs_fpg * cg + fs->fs_frag);
+				return (cgbase(fs, cg) + fs->fs_frag);
 			}
 		return (0);
 	}
@@ -1094,7 +1094,7 @@ ffs2_blkpref(struct inode *ip, daddr64_t lbn, int indx, int64_t *bap)
 	if (indx % fs->fs_maxbpg == 0 || bap[indx - 1] == 0) {
 		if (lbn < NDADDR + NINDIR(fs)) {
 			cg = ino_to_cg(fs, ip->i_number);
-			return ((int64_t)fs->fs_fpg * cg + fs->fs_frag);
+			return (cgbase(fs, cg) + fs->fs_frag);
 		}
 
 		/*
@@ -1112,13 +1112,11 @@ ffs2_blkpref(struct inode *ip, daddr64_t lbn, int indx, int64_t *bap)
 
 		for (cg = startcg; cg < fs->fs_ncg; cg++)
 			if (fs->fs_cs(fs, cg).cs_nbfree >= avgbfree)
-				return ((int64_t)fs->fs_fpg * cg +
-				    fs->fs_frag);
+				return (cgbase(fs, cg) + fs->fs_frag);
 
 		for (cg = 0; cg < startcg; cg++)
 			if (fs->fs_cs(fs, cg).cs_nbfree >= avgbfree)
-				return ((int64_t)fs->fs_fpg * cg +
-				    fs->fs_frag);
+				return (cgbase(fs, cg) + fs->fs_frag);
 
 		return (0);
 	}
@@ -1347,7 +1345,7 @@ ffs_alloccg(struct inode *ip, int cg, daddr64_t bpref, int size)
 	if (frags != allocsiz)
 		cgp->cg_frsum[allocsiz - frags]++;
 
-	blkno = (daddr64_t)cg * fs->fs_fpg + bno;
+	blkno = cgbase(fs, cg) + bno;
 	if (DOINGSOFTDEP(ITOV(ip)))
 		softdep_setup_blkmapdep(bp, fs, blkno);
 	bdwrite(bp);
@@ -1408,7 +1406,7 @@ gotit:
 	}
 
 	fs->fs_fmod = 1;
-	blkno = (daddr64_t)cgp->cg_cgx * fs->fs_fpg + bno;
+	blkno = cgbase(fs, cgp->cg_cgx) + bno;
 
 	if (DOINGSOFTDEP(ITOV(ip)))
 		softdep_setup_blkmapdep(bp, fs, blkno);
@@ -1510,7 +1508,7 @@ ffs_clusteralloc(struct inode *ip, int cg, daddr64_t bpref, int len)
 		if (!ffs_isblock(fs, cg_blksfree(cgp), got - run + i))
 			panic("ffs_clusteralloc: map mismatch");
 #endif
-	bno = cg * fs->fs_fpg + blkstofrags(fs, got - run + 1);
+	bno = cgbase(fs, cg) + blkstofrags(fs, got - run + 1);
 #ifdef DIAGNOSTIC
 	if (dtog(fs, bno) != cg)
 		panic("ffs_clusteralloc: allocated out of group");
@@ -1710,7 +1708,7 @@ ffs_blkfree(struct inode *ip, daddr64_t bno, long size)
 	}
 	cg = dtog(fs, bno);
 	if ((u_int)bno >= fs->fs_size) {
-		printf("bad block %d, ino %u\n", bno, ip->i_number);
+		printf("bad block %lld, ino %u\n", bno, ip->i_number);
 		ffs_fserr(fs, DIP(ip, uid), "bad block");
 		return;
 	}
@@ -1724,7 +1722,7 @@ ffs_blkfree(struct inode *ip, daddr64_t bno, long size)
 	if (size == fs->fs_bsize) {
 		blkno = fragstoblks(fs, bno);
 		if (!ffs_isfreeblock(fs, cg_blksfree(cgp), blkno)) {
-			printf("dev = 0x%x, block = %d, fs = %s\n",
+			printf("dev = 0x%x, block = %lld, fs = %s\n",
 			    ip->i_dev, bno, fs->fs_fsmnt);
 			panic("ffs_blkfree: freeing free block");
 		}
@@ -1753,7 +1751,7 @@ ffs_blkfree(struct inode *ip, daddr64_t bno, long size)
 		frags = numfrags(fs, size);
 		for (i = 0; i < frags; i++) {
 			if (isset(cg_blksfree(cgp), bno + i)) {
-				printf("dev = 0x%x, block = %d, fs = %s\n",
+				printf("dev = 0x%x, block = %lld, fs = %s\n",
 				    ip->i_dev, bno + i, fs->fs_fsmnt);
 				panic("ffs_blkfree: freeing free frag");
 			}
@@ -1871,7 +1869,7 @@ ffs_checkblk(struct inode *ip, daddr64_t bno, long size)
 		panic("ffs_checkblk: bad size");
 	}
 	if ((u_int)bno >= fs->fs_size)
-		panic("ffs_checkblk: bad block %d", bno);
+		panic("ffs_checkblk: bad block %lld", bno);
 
 	if (!(bp = ffs_cgread(fs, ip, dtog(fs, bno))))
 		return (0);
@@ -1950,7 +1948,7 @@ ffs_mapsearch(struct fs *fs, struct cg *cgp, daddr64_t bpref, int allocsiz)
 			subfield <<= 1;
 		}
 	}
-	printf("bno = %d, fs = %s\n", bno, fs->fs_fsmnt);
+	printf("bno = %lld, fs = %s\n", bno, fs->fs_fsmnt);
 	panic("ffs_alloccg: block not in map");
 	return (-1);
 }

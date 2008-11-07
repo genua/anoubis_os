@@ -476,7 +476,7 @@ restart:
 					mlen = MLEN;
 				}
 				if (resid >= MINCLSIZE && space >= MCLBYTES) {
-					MCLGET(m, M_WAIT);
+					MCLGET(m, M_NOWAIT);
 					if ((m->m_flags & M_EXT) == 0)
 						goto nopages;
 					mlen = MCLBYTES;

@@ -1,4 +1,4 @@
-/*	$OpenBSD: otto $	*/
+/*	$OpenBSD: pedro $	*/
 
 /*
  * Copyright (c) 2002 Networks Associates Technology, Inc.
@@ -48,7 +48,7 @@ static const char copyright[] =
 #if 0
 static const char sccsid[] = "@(#)dumpfs.c	8.5 (Berkeley) 4/29/95";
 #else
-static const char rcsid[] = "$OpenBSD: otto $";
+static const char rcsid[] = "$OpenBSD: pedro $";
 #endif
 #endif /* not lint */
 

@@ -1,4 +1,4 @@
-/*	$OpenBSD: thib $	*/
+/*	$OpenBSD: deraadt $	*/
 /*	$NetBSD: in_pcb.c,v 1.25 1996/02/13 23:41:53 christos Exp $	*/
 
 /*
@@ -161,28 +161,17 @@ struct baddynamicports baddynamicports;
  * Check if the specified port is invalid for dynamic allocation.
  */
 int
-in_baddynamic(port, proto)
-	u_int16_t port;
-	u_int16_t proto;
+in_baddynamic(u_int16_t port, u_int16_t proto)
 {
-
-
 	switch (proto) {
 	case IPPROTO_TCP:
-		if (port == NFS_PORT)
-			return (1);
-		if (port < IPPORT_RESERVED/2 || port >= IPPORT_RESERVED)
-			return (0);
 		return (DP_ISSET(baddynamicports.tcp, port));
 	case IPPROTO_UDP:
 #ifdef IPSEC
+		/* Cannot preset this as it is a sysctl */
 		if (port == udpencap_port)
 			return (1);
 #endif
-		if (port == NFS_PORT)
-			return (1);
-		if (port < IPPORT_RESERVED/2 || port >= IPPORT_RESERVED)
-			return (0);
 		return (DP_ISSET(baddynamicports.udp, port));
 	default:
 		return (0);
@@ -513,9 +502,10 @@ in_pcbdetach(v)
 	if (inp->inp_route.ro_rt)
 		rtfree(inp->inp_route.ro_rt);
 #ifdef INET6
-	if (inp->inp_flags & INP_IPV6)
+	if (inp->inp_flags & INP_IPV6) {
+		ip6_freepcbopts(inp->inp_outputopts6);
 		ip6_freemoptions(inp->inp_moptions6);
-	else
+	} else
 #endif
 		ip_freemoptions(inp->inp_moptions);
 #ifdef IPSEC
@@ -534,6 +524,10 @@ in_pcbdetach(v)
 	if (inp->inp_ipo)
 		ipsec_delete_policy(inp->inp_ipo);
 	splx(s);
+#endif
+#if NPF > 0
+	if (inp->inp_pf_sk)
+		((struct pf_state_key *)inp->inp_pf_sk)->inp = NULL;
 #endif
 	s = splnet();
 	LIST_REMOVE(inp, inp_lhash);

@@ -154,7 +154,7 @@ sfs_do_csum(struct vnode * vp, struct sfs_label * sec)
 	char * ptr;
 	struct vattr va;
 	struct proc * p = curproc;
-	SHA256_CTX ctx;
+	SHA2_CTX ctx;
 	size_t size, done;
 	struct iovec iov;
 	struct uio uio;
@@ -182,7 +182,7 @@ sfs_do_csum(struct vnode * vp, struct sfs_label * sec)
 	uio.uio_rw = UIO_READ;
 	uio.uio_procp = p;
 	size = va.va_size;
-	SHA256_Init(&ctx);
+	SHA256Init(&ctx);
 	done = 0;
 	while (done < size) {
 		size_t this = size - done;
@@ -199,11 +199,11 @@ sfs_do_csum(struct vnode * vp, struct sfs_label * sec)
 			err = EIO;
 			goto out_free;
 		}
-		SHA256_Update(&ctx, ptr, this);
+		SHA256Update(&ctx, ptr, this);
 		done += this;
 	}
 	mtx_enter(&sec->lock);
-	SHA256_Final(sec->hash, &ctx);
+	SHA256Final(sec->hash, &ctx);
 	sec->sfsmask |= SFS_CS_UPTODATE;
 	mtx_leave(&sec->lock);
 	err = 0;
@@ -648,7 +648,7 @@ mac_anoubis_sfs_cred_destroy_label(struct label *label)
 int
 mac_anoubis_sfs_check_follow_link(struct nameidata *ndp, char *buf, int buflen)
 {
-	SHA256_CTX		 ctx;
+	SHA2_CTX		 ctx;
 	size_t			 pathlen = 1;
 	int			 alloclen, ret;
 	struct sfs_open_message	*msg;
@@ -675,9 +675,9 @@ mac_anoubis_sfs_check_follow_link(struct nameidata *ndp, char *buf, int buflen)
 	msg->flags |= ANOUBIS_OPEN_FLAG_FOLLOW;
 	msg->ino = 0;
 	msg->dev = 0;
-	SHA256_Init(&ctx);
-	SHA256_Update(&ctx, buf, buflen);
-	SHA256_Final(msg->csum, &ctx);
+	SHA256Init(&ctx);
+	SHA256Update(&ctx, buf, buflen);
+	SHA256Final(msg->csum, &ctx);
 	msg->flags |= ANOUBIS_OPEN_FLAG_CSUM;
 	sfs_stat_ev++;
 	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
