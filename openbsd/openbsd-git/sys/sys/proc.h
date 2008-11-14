@@ -1,4 +1,4 @@
-/*	$OpenBSD: guenther $	*/
+/*	$OpenBSD: deraadt $	*/
 /*	$NetBSD: proc.h,v 1.44 1996/04/22 01:23:21 christos Exp $	*/
 
 /*-
@@ -148,6 +148,7 @@ struct process {
 	struct	plimit *ps_limit;	/* Process limits. */
 
 	TAILQ_HEAD(,proc) ps_threads;	/* Threads in this process. */
+	int	ps_refcnt;		/* Number of references. */
 };
 #else
 struct process;
@@ -366,10 +367,10 @@ struct uidinfo *uid_find(uid_t);
 
 #define SESS_LEADER(p)	((p)->p_session->s_leader == (p))
 #define	SESSHOLD(s)	((s)->s_count++)
-#define	SESSRELE(s) {							\
+#define	SESSRELE(s) do {						\
 	if (--(s)->s_count == 0)					\
-		pool_put(&session_pool, s);				\
-}
+		pool_put(&session_pool, (s));				\
+} while (/* CONSTCOND */ 0)
 
 /*
  * Flags to fork1().
@@ -413,6 +414,7 @@ extern struct pool proc_pool;		/* memory pool for procs */
 extern struct pool rusage_pool;		/* memory pool for zombies */
 extern struct pool ucred_pool;		/* memory pool for ucreds */
 extern struct pool session_pool;	/* memory pool for sessions */
+extern struct pool pgrp_pool;		/* memory pool for pgrps */
 extern struct pool pcred_pool;		/* memory pool for pcreds */
 
 extern struct mutex task_cookie_mutex;	/* Task cookie Mutex */
@@ -425,7 +427,8 @@ void	proc_printit(struct proc *p, const char *modif,
     int (*pr)(const char *, ...));
 
 int	chgproccnt(uid_t uid, int diff);
-int	enterpgrp(struct proc *p, pid_t pgid, int mksess);
+int	enterpgrp(struct proc *p, pid_t pgid, struct pgrp *newpgrp,
+	    struct session *newsess);
 void	fixjobc(struct proc *p, struct pgrp *pgrp, int entering);
 int	inferior(struct proc *p);
 int	leavepgrp(struct proc *p);

@@ -1,4 +1,4 @@
-/*	$OpenBSD: thib $	*/
+/*	$OpenBSD: deraadt $	*/
 /*	$NetBSD: systm.h,v 1.50 1996/06/09 04:55:09 briggs Exp $	*/
 
 /*-
@@ -267,7 +267,7 @@ void	dohooks(struct hook_desc_head *, int);
 #define doshutdownhooks() dohooks(&shutdownhook_list, HOOK_REMOVE)
 
 #define mountroothook_establish(fn, arg) \
-	hook_establish(&mountroothook_list, 0, (fn), (arg))
+	hook_establish(&mountroothook_list, 1, (fn), (arg))
 #define mountroothook_disestablish(vhook) \
 	hook_disestablish(&mountroothook_list, (vhook))
 #define domountroothooks() dohooks(&mountroothook_list, HOOK_REMOVE|HOOK_FREE)

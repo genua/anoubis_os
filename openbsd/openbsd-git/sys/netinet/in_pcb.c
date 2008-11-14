@@ -1037,7 +1037,7 @@ in_pcblookup_listen(struct inpcbtable *table, struct in_addr laddr,
 	struct inpcb *inp;
 	u_int16_t lport = lport_arg;
 
-#if NPF
+#if NPF > 0
 	if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
 		struct pf_divert *divert;
 
@@ -1107,7 +1107,7 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 	struct inpcb *inp;
 	u_int16_t lport = lport_arg;
 
-#if NPF
+#if NPF > 0
 	if (m && m->m_pkthdr.pf.flags & PF_TAG_DIVERTED) {
 		struct pf_divert *divert;
 

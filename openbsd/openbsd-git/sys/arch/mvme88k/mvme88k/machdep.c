@@ -159,10 +159,6 @@ int bufcachepercent = BUFCACHEPERCENT;
 char  machine[] = MACHINE;	 /* cpu "architecture" */
 char  cpu_model[120];
 
-#if defined(DDB) || NKSYMS > 0
-extern char *esym;
-#endif
-
 int boothowto;					/* set in locore.S */
 int bootdev;					/* set in locore.S */
 int cputyp;					/* set in locore.S */
@@ -738,6 +734,7 @@ secondary_main()
 
 	microuptime(&ci->ci_schedstate.spc_runtime);
 	ci->ci_curproc = NULL;
+	ci->ci_randseed = random();
 	SET(ci->ci_flags, CIF_ALIVE);
 
 	set_psr(get_psr() & ~PSR_IND);

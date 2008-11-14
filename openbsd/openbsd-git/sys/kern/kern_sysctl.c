@@ -356,7 +356,7 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		     p));
 #endif
 	case KERN_FILE:
-		return (sysctl_file(oldp, oldlenp));
+		return (sysctl_file(oldp, oldlenp, p));
 	case KERN_MBSTAT:
 		return (sysctl_rdstruct(oldp, oldlenp, newp, &mbstat,
 		    sizeof(mbstat)));
@@ -932,11 +932,12 @@ sysctl_rdstruct(void *oldp, size_t *oldlenp, void *newp, const void *sp,
  * Get file structures.
  */
 int
-sysctl_file(char *where, size_t *sizep)
+sysctl_file(char *where, size_t *sizep, struct proc *p)
 {
 	int buflen, error;
-	struct file *fp;
+	struct file *fp, cfile;
 	char *start = where;
+	struct ucred *cred = p->p_ucred;
 
 	buflen = *sizep;
 	if (where == NULL) {
@@ -973,7 +974,17 @@ sysctl_file(char *where, size_t *sizep)
 			*sizep = where - start;
 			return (ENOMEM);
 		}
-		error = copyout((caddr_t)fp, where, sizeof (struct file));
+
+		/* Only let the superuser or the owner see some information */
+		bcopy(fp, &cfile, sizeof (struct file));
+		if (suser(p, 0) != 0 && cred->cr_uid != fp->f_cred->cr_uid) {
+			cfile.f_offset = (off_t)-1;
+			cfile.f_rxfer = 0;
+			cfile.f_wxfer = 0;
+			cfile.f_rbytes = 0;
+			cfile.f_wbytes = 0;
+		}
+		error = copyout(&cfile, where, sizeof (struct file));
 		if (error)
 			return (error);
 		buflen -= sizeof(struct file);
@@ -1338,7 +1349,7 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 		ki->p_ustart_sec = p->p_stats->p_start.tv_sec;
 		ki->p_ustart_usec = p->p_stats->p_start.tv_usec;
 
-		calcru(p, &ut, &st, 0);
+		calcru(p, &ut, &st, NULL);
 		ki->p_uutime_sec = ut.tv_sec;
 		ki->p_uutime_usec = ut.tv_usec;
 		ki->p_ustime_sec = st.tv_sec;
@@ -1377,16 +1388,14 @@ sysctl_proc_args(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 {
 	struct proc *vp;
 	pid_t pid;
-	int op;
 	struct ps_strings pss;
 	struct iovec iov;
 	struct uio uio;
-	int error;
+	int error, cnt, op;
 	size_t limit;
-	int cnt;
 	char **rargv, **vargv;		/* reader vs. victim */
-	char *rarg, *varg;
-	char *buf;
+	char *rarg, *varg, *buf;
+	struct vmspace *vm;
 
 	if (namelen > 2)
 		return (ENOTDIR);
@@ -1434,7 +1443,10 @@ sysctl_proc_args(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	if ((vp->p_flag & P_INEXEC))
 		return (EBUSY);
 
-	vp->p_vmspace->vm_refcnt++;	/* XXX */
+	vm = vp->p_vmspace;
+	vm->vm_refcnt++;
+	vp = NULL;
+
 	buf = malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
 
 	iov.iov_base = &pss;
@@ -1447,7 +1459,7 @@ sysctl_proc_args(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	uio.uio_rw = UIO_READ;
 	uio.uio_procp = cp;
 
-	if ((error = uvm_io(&vp->p_vmspace->vm_map, &uio, 0)) != 0)
+	if ((error = uvm_io(&vm->vm_map, &uio, 0)) != 0)
 		goto out;
 
 	if (op == KERN_PROC_NARGV) {
@@ -1504,7 +1516,7 @@ sysctl_proc_args(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		uio.uio_segflg = UIO_SYSSPACE;
 		uio.uio_rw = UIO_READ;
 		uio.uio_procp = cp;
-		if ((error = uvm_io(&vp->p_vmspace->vm_map, &uio, 0)) != 0)
+		if ((error = uvm_io(&vm->vm_map, &uio, 0)) != 0)
 			goto out;
 
 		if (varg == NULL)
@@ -1526,7 +1538,7 @@ more:
 		uio.uio_segflg = UIO_SYSSPACE;
 		uio.uio_rw = UIO_READ;
 		uio.uio_procp = cp;
-		if ((error = uvm_io(&vp->p_vmspace->vm_map, &uio, 0)) != 0)
+		if ((error = uvm_io(&vm->vm_map, &uio, 0)) != 0)
 			goto out;
 
 		for (vstrlen = 0; vstrlen < len; vstrlen++) {
@@ -1574,7 +1586,7 @@ more:
 	error = copyout(&rarg, rargv, sizeof(rarg));
 
 out:
-	uvmspace_free(vp->p_vmspace);
+	uvmspace_free(vm);
 	free(buf, M_TEMP);
 	return (error);
 }

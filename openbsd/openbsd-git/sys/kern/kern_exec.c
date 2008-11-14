@@ -1,4 +1,4 @@
-/*	$OpenBSD: kettenis $	*/
+/*	$OpenBSD: deraadt $	*/
 /*	$NetBSD: kern_exec.c,v 1.75 1996/02/09 18:59:28 christos Exp $	*/
 
 /*-

@@ -549,7 +549,7 @@ delivery_denied:
 	/*
 	 * Locate pcb for datagram.
 	 */
-#if NPF > 0
+#if 0
 	if (m->m_pkthdr.pf.statekey)
 		inp = ((struct pf_state_key *)m->m_pkthdr.pf.statekey)->inp;
 #endif

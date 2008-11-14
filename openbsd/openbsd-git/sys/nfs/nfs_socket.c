@@ -1,4 +1,4 @@
-/*	$OpenBSD: thib $	*/
+/*	$OpenBSD: blambert $	*/
 /*	$NetBSD: nfs_socket.c,v 1.27 1996/04/15 20:20:00 thorpej Exp $	*/
 
 /*

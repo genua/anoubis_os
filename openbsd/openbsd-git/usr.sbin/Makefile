@@ -15,7 +15,7 @@ SUBDIR=	ac accton acpidump adduser amd apm apmd arp \
 	slstats snmpctl snmpd spamdb spray syslogc syslogd sysmerge \
 	tcpdrop tcpdump timed tokenadm tokeninit traceroute traceroute6 \
 	trpt usbdevs user vipw watchdogd wsconscfg wsfontload wsmoused \
-	zdump zic ztsscale
+	ypldap zdump zic ztsscale
 
 .if (${AFS:L} == "yes")
 SUBDIR+=afs

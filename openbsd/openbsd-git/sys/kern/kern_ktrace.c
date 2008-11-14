@@ -1,4 +1,4 @@
-/*	$OpenBSD: thib $	*/
+/*	$OpenBSD: pedro $	*/
 /*	$NetBSD: kern_ktrace.c,v 1.23 1996/02/09 18:59:36 christos Exp $	*/
 
 /*
@@ -481,11 +481,12 @@ ktrwrite(struct proc *p, struct ktr_header *kth)
 		aiov[1].iov_len = kth->ktr_len;
 		auio.uio_resid += kth->ktr_len;
 	}
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
+	vget(vp, LK_EXCLUSIVE | LK_RETRY, p);
 	error = VOP_WRITE(vp, &auio, IO_UNIT|IO_APPEND, p->p_ucred);
-	VOP_UNLOCK(vp, 0, p);
-	if (!error)
-		return 0;
+	if (!error) {
+		vput(vp);
+		return (0);
+	}
 	/*
 	 * If error encountered, give up tracing on this vnode.
 	 */
@@ -498,7 +499,8 @@ ktrwrite(struct proc *p, struct ktr_header *kth)
 		}
 	}
 
-	return error;
+	vput(vp);
+	return (error);
 }
 
 /*

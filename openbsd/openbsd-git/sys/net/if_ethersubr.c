@@ -1,4 +1,4 @@
-/*	$OpenBSD: brad $	*/
+/*	$OpenBSD: naddy $	*/
 /*	$NetBSD: if_ethersubr.c,v 1.19 1996/05/07 02:40:30 thorpej Exp $	*/
 
 /*
@@ -166,14 +166,11 @@ u_char etherbroadcastaddr[ETHER_ADDR_LEN] =
 
 
 int
-ether_ioctl(ifp, arp, cmd, data)
-	struct ifnet *ifp;
-	struct arpcom *arp;
-	u_long cmd;
-	caddr_t data;
+ether_ioctl(struct ifnet *ifp, struct arpcom *arp, u_long cmd, caddr_t data)
 {
 	struct ifaddr *ifa = (struct ifaddr *)data;
-	int	error = 0;
+	struct ifreq *ifr = (struct ifreq *)data;
+	int error = 0;
 
 	switch (cmd) {
 	case SIOCSIFADDR:
@@ -185,11 +182,29 @@ ether_ioctl(ifp, arp, cmd, data)
 #endif /* NETATALK */
 		}
 		break;
+
+	case SIOCSIFMTU:
+		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > ifp->if_hardmtu)
+			error = EINVAL;
+		else
+			ifp->if_mtu = ifr->ifr_mtu;
+		break;
+
+	case SIOCADDMULTI:
+	case SIOCDELMULTI:
+		if (ifp->if_flags & IFF_MULTICAST) {
+			error = (cmd == SIOCADDMULTI) ?
+			    ether_addmulti(ifr, arp) :
+			    ether_delmulti(ifr, arp);
+		} else
+			error = ENOTTY;
+		break;
+
 	default:
 		error = ENOTTY;
 	}
 
-	return error;
+	return (error);
 }
 
 /*
@@ -584,7 +599,8 @@ ether_input(ifp0, eh, m)
 	}
 
 #if NVLAN > 0
-	if (etype == ETHERTYPE_VLAN && (vlan_input(eh, m) == 0))
+	if (((m->m_flags & M_VLANTAG) || etype == ETHERTYPE_VLAN)
+	    && (vlan_input(eh, m) == 0))
 		return;
 #endif
 
@@ -609,7 +625,7 @@ ether_input(ifp0, eh, m)
 #endif
 
 #if NVLAN > 0
-	if (etype == ETHERTYPE_VLAN) {
+	if ((m->m_flags & M_VLANTAG) || etype == ETHERTYPE_VLAN) {
 		/* The bridge did not want the vlan frame either, drop it. */
 		ifp->if_noproto++;
 		m_freem(m);

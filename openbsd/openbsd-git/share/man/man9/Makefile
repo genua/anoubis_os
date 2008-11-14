@@ -1,4 +1,4 @@
-#	$OpenBSD: chl $
+#	$OpenBSD: deraadt $
 #	$NetBSD: Makefile,v 1.4 1996/01/09 03:23:01 thorpej Exp $
 
 #	Makefile for section 9 (kernel function and variable) manual pages.
@@ -239,7 +239,7 @@ MLINKS+=pmap.9 pmap_init.9 pmap.9 pmap_enter.9 pmap.9 pmap_remove.9 \
 	pmap.9 pmap_copy.9 pmap.9 pmap_kenter_pa.9 pmap.9 pmap_kremove.9
 MLINKS+=pool.9 pool_init.9 pool.9 pool_destroy.9 \
 	pool.9 pool_get.9 pool.9 pool_put.9 pool.9 pool_prime.9 \
-	pool.9 pool_sethiwat.9 pool.9 pool_setlowat.9 \
+	pool.9 pool_sethiwat.9 pool.9 pool_setipl.9 pool.9 pool_setlowat.9 \
 	pool.9 pool_sethardlimit.9 pool.9 pool_cache_init.9 \
 	pool.9 pool_cache_destroy.9 pool.9 pool_cache_get.9 \
 	pool.9 pool_cache_put.9 pool.9 pool_cache_destruct_object.9 \
@@ -323,8 +323,7 @@ MLINKS+=uvm.9 uvm_init.9 uvm.9 uvm_init_limits.9 uvm.9 uvm_setpagesize.9 \
 	uvm.9 uvm_map_pageable_all.9 uvm.9 uvm_map_checkprot.9 \
 	uvm.9 uvm_map_protect.9 uvm.9 uvm_deallocate.9 uvm.9 uvmspace_alloc.9 \
 	uvm.9 uvmspace_exec.9 uvm.9 uvmspace_fork.9 uvm.9 uvmspace_free.9 \
-	uvm.9 uvmspace_share.9 uvm.9 uvmspace_unshare.9 uvm.9 UVM_MAPFLAG.9 \
-	uvm.9 uvm_fault.9 \
+	uvm.9 uvmspace_share.9 uvm.9 UVM_MAPFLAG.9 uvm.9 uvm_fault.9 \
 	uvm.9 uvn_attach.9 uvm.9 uvm_vnp_setsize.9 uvm.9 uvm_vnp_sync.9 \
 	uvm.9 uvm_vnp_terminate.9 uvm.9 uvm_vnp_uncache.9 uvm.9 uvm_io.9 \
 	uvm.9 uvm_km_alloc.9 uvm.9 uvm_km_zalloc.9 uvm.9 uvm_km_alloc1.9 \

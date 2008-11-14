@@ -1,4 +1,4 @@
-/*	$OpenBSD: millert $	*/
+/*	$OpenBSD: deraadt $	*/
 /*	$NetBSD: vnode.h,v 1.38 1996/02/29 20:59:05 cgd Exp $	*/
 
 /*
@@ -376,7 +376,7 @@ int	vwaitforio(struct vnode *, int, char *, int);
 void	vwakeup(struct vnode *);
 void	vput(struct vnode *);
 int	vrecycle(struct vnode *, struct proc *);
-void	vrele(struct vnode *);
+int	vrele(struct vnode *);
 void	vref(struct vnode *);
 void	vprint(char *, struct vnode *);
 void	copy_statfs_info(struct statfs *, const struct mount *);

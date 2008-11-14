@@ -99,16 +99,15 @@ file	dev/ic/pcdisplay_chars.c	pcdisplayops
 define	mk48txx
 file	dev/ic/mk48txx.c		mk48txx
 
-# AGP
-define agpbus {}
-include "dev/pci/files.agp"
+# agp integrated graphics attaches at vga. defines are in dev/pci/files.agp
+define agpint {}
 
 # DRM - Direct Rendering Manager: /dev/drm
 define drm {}
 include "dev/pci/drm/files.drm"
 
 # VGA graphics
-device	vga: wsemuldisplaydev, pcdisplayops, drm, agpbus
+device	vga: wsemuldisplaydev, pcdisplayops, drm, agpint
 file	dev/ic/vga.c			vga & (vga_pci | vga_isa) needs-flag
 file	dev/ic/vga_subr.c		vga & (vga_pci | vga_isa) needs-flag
 
@@ -417,6 +416,7 @@ define	cbbus {[slot = -1]}		# CardBus attachment
 define	pcmciaslot {[slot = -1]}	# PCMCIA slot itself
 define	sdmmcbus {}			# SD/MMC attachment
 define	btbus {}			# Bluetooth host controller
+define	agpbus {}			# AGP bridge
 
 # UHCI USB controller
 device	uhci: usbus
@@ -1043,8 +1043,7 @@ file compat/common/vm_43.c		!small_kernel
 # libkern MI components
 file lib/libkern/mcount.c		gprof
 file lib/libkern/getsn.c
-file lib/libkern/arch/${MACHINE_ARCH}/random.S | lib/libkern/random.c
-file lib/libkern/arch/${MACHINE_ARCH}/srandom.S | lib/libkern/srandom.c
+file lib/libkern/random.c
 file lib/libkern/arch/${MACHINE_ARCH}/strchr.S | lib/libkern/strchr.c
 file lib/libkern/arch/${MACHINE_ARCH}/strrchr.S | lib/libkern/strrchr.c
 file lib/libkern/arch/${MACHINE_ARCH}/__main.S | lib/libkern/__main.c

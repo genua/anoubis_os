@@ -1,4 +1,4 @@
-/*	$OpenBSD: sobrado $	*/
+/*	$OpenBSD: deraadt $	*/
 /*	$NetBSD: pstat.c,v 1.27 1996/10/23 22:50:06 cgd Exp $	*/
 
 /*-
@@ -40,7 +40,7 @@ static char copyright[] =
 #if 0
 from: static char sccsid[] = "@(#)pstat.c	8.9 (Berkeley) 2/16/94";
 #else
-static char *rcsid = "$OpenBSD: sobrado $";
+static char *rcsid = "$OpenBSD: deraadt $";
 #endif
 #endif /* not lint */
 
@@ -1063,7 +1063,9 @@ filemode(void)
 		(void)printf("  %3ld", fp.f_msgcount);
 		(void)printf("  %0*lx", 2 * (int)sizeof(long), (long)fp.f_data);
 
-		if (fp.f_offset < 0)
+		if (fp.f_offset == (off_t)-1)
+			(void)printf("  *\n");
+		else if (fp.f_offset < 0)
 			(void)printf("  %llx\n", (long long)fp.f_offset);
 		else
 			(void)printf("  %lld\n", (long long)fp.f_offset);

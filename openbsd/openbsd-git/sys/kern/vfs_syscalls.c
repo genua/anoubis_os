@@ -1,4 +1,4 @@
-/*	$OpenBSD: thib $	*/
+/*	$OpenBSD: deraadt $	*/
 /*	$NetBSD: vfs_syscalls.c,v 1.71 1996/04/23 10:29:02 mycroft Exp $	*/
 
 /*
@@ -340,22 +340,28 @@ checkdirs(struct vnode *olddp)
 	struct filedesc *fdp;
 	struct vnode *newdp;
 	struct proc *p;
+	int slept;
 
 	if (olddp->v_usecount == 1)
 		return;
 	if (VFS_ROOT(olddp->v_mountedhere, &newdp))
 		panic("mount: lost mount");
+again:
 	LIST_FOREACH(p, &allproc, p_list) {
 		fdp = p->p_fd;
 		if (fdp->fd_cdir == olddp) {
-			vrele(fdp->fd_cdir);
+			slept = vrele(fdp->fd_cdir);
 			VREF(newdp);
 			fdp->fd_cdir = newdp;
+			if (slept)
+				goto again;
 		}
 		if (fdp->fd_rdir == olddp) {
-			vrele(fdp->fd_rdir);
+			slept = vrele(fdp->fd_rdir);
 			VREF(newdp);
 			fdp->fd_rdir = newdp;
+			if (slept)
+				goto again;
 		}
 	}
 	if (rootvnode == olddp) {

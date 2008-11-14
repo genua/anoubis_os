@@ -1,4 +1,4 @@
-/*	$OpenBSD: mpf $	*/
+/*	$OpenBSD: claudio $	*/
 /*	$NetBSD: tcp_input.c,v 1.23 1996/02/13 23:43:44 christos Exp $	*/
 
 /*
@@ -345,21 +345,6 @@ tcp6_input(struct mbuf **mp, int *offp, int proto)
 		}
 	}
 #endif
-
-	/*
-	 * draft-itojun-ipv6-tcp-to-anycast
-	 * better place to put this in?
-	 */
-	if (m->m_flags & M_ANYCAST6) {
-		if (m->m_len >= sizeof(struct ip6_hdr)) {
-			struct ip6_hdr *ip6 = mtod(m, struct ip6_hdr *);
-			icmp6_error(m, ICMP6_DST_UNREACH,
-				ICMP6_DST_UNREACH_ADDR,
-				(caddr_t)&ip6->ip6_dst - (caddr_t)ip6);
-		} else
-			m_freem(m);
-		return IPPROTO_DONE;
-	}
 
 	tcp_input(m, *offp, proto);
 	return IPPROTO_DONE;
