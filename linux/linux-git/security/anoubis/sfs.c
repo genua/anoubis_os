@@ -107,6 +107,7 @@ static inline void anoubis_allow_write_access(struct inode * inode)
 #define SFS_SYSSIG_CHECKED	0x08UL	/* presence of syssig checked */
 #define SFS_CS_OK		0x10UL	/* Checksum calculation possible */
 #define SFS_CS_CACHEOK		0x20UL	/* Checksum caching possible */
+#define SFS_ALWAYSFOLLOW	0x40UL	/* Always follow this link */
 
 /* Inode security label */
 struct sfs_inode_sec {
@@ -155,6 +156,14 @@ static const char * csnodev[]  = {
 };
 
 /*
+ * Allow follow link on these file systems.
+ */
+static const char * alwaysfollow[] = {
+	"proc",
+	NULL,
+};
+
+/*
  * Allocate a new inode security structure. This is might be called with
  * spinlocks held. In this case gfp must be make sure that the memory
  * allocation does not sleep. However, this also means that any other
@@ -181,6 +190,10 @@ __sfs_inode_alloc_security_common(struct inode * inode, gfp_t gfp)
 		for (i=0; csnodev[i]; ++i) {
 			if (strcmp(ftype, csnodev[i]) == 0)
 				sec->sfsmask |= (SFS_CS_OK|SFS_CS_CACHEOK);
+		}
+		for (i=0; alwaysfollow[i]; ++i) {
+			if (strcmp(ftype, alwaysfollow[i]) == 0)
+				sec->sfsmask |= SFS_ALWAYSFOLLOW;
 		}
 	}
 	old = SETISEC(inode, sec);
@@ -665,6 +678,7 @@ static int sfs_dentry_open(struct file * file)
 static int sfs_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	struct path p;
+	struct sfs_inode_sec * sec;
 	struct hash_desc cdesc;
 	struct page * page;
 	u_int8_t csum[ANOUBIS_SFS_CS_LEN];
@@ -680,6 +694,15 @@ static int sfs_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 	inode = dentry->d_inode;
 	if (!inode->i_op || !inode->i_op->readlink)
 		return -EINVAL;
+	sec = sfs_late_inode_alloc_security(inode);
+	if (sec) {
+		int ret;
+		spin_lock(&sec->lock);
+		ret = sec->sfsmask & SFS_ALWAYSFOLLOW;
+		spin_unlock(&sec->lock);
+		if (ret)
+			return 0;
+	}
 	page = alloc_page(GFP_KERNEL);
 	oldfs = get_fs();
 	set_fs(get_ds());
