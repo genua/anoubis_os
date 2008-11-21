@@ -38,6 +38,7 @@
 #include <linux/types.h>
 #include <linux/time.h>
 #include <linux/anoubis.h>
+#include <net/sock.h>
 #include <asm/uaccess.h>
 
 /*
@@ -459,21 +460,22 @@ void * anoubis_get_sublabel(void ** lp, int idx)
 	void * ret = NULL;
 	struct anoubis_label * l = (*lp);
 	struct anoubis_hooks * h;
+	unsigned long flags;
 
 	if (unlikely(!l)) {
 		l = ac_alloc_label(GFP_ATOMIC);
 		if (unlikely(!l))
 			return NULL;
-		spin_lock(&late_alloc_lock);
+		spin_lock_irqsave(&late_alloc_lock, flags);
 		if (unlikely(*lp)) {
 			kfree(l);
 			l = (*lp);
 		} else {
 			(*lp) = l;
 		}
-		spin_unlock(&late_alloc_lock);
+		spin_unlock_irqrestore(&late_alloc_lock, flags);
 	}
-	spin_lock(&l->label_lock);
+	spin_lock_irqsave(&l->label_lock, flags);
 	if (l->labels[idx] == NULL)
 		goto out;
 
@@ -486,7 +488,7 @@ void * anoubis_get_sublabel(void ** lp, int idx)
 	rcu_read_unlock();
 	ret = l->labels[idx];
 out:
-	spin_unlock(&l->label_lock);
+	spin_unlock_irqrestore(&l->label_lock, flags);
 	return ret;
 }
 
@@ -495,17 +497,19 @@ void * anoubis_set_sublabel(void ** lp, int idx, void * subl)
 	void * old = NULL;
 	struct anoubis_label * l = (*lp);
 	struct anoubis_hooks * h;
+	unsigned long flags;
+
 	if (unlikely(!l)) {
 		l = ac_alloc_label(GFP_ATOMIC);
 		BUG_ON(!l);
-		spin_lock(&late_alloc_lock);
+		spin_lock_irqsave(&late_alloc_lock, flags);
 		if (unlikely(*lp)) {
 			kfree(l);
 			l = (*lp);
 		} else {
 			(*lp) = l;
 		}
-		spin_unlock(&late_alloc_lock);
+		spin_unlock_irqrestore(&late_alloc_lock, flags);
 	}
 	rcu_read_lock();
 	h = rcu_dereference(hooks[idx]);
@@ -518,13 +522,13 @@ void * anoubis_set_sublabel(void ** lp, int idx, void * subl)
 		rcu_read_unlock();
 		return NULL;
 	}
-	spin_lock(&l->label_lock);
+	spin_lock_irqsave(&l->label_lock, flags);
 	if (l->magic[idx] == h->magic)
 		old = l->labels[idx];
 	else
 		l->magic[idx] = h->magic;
 	l->labels[idx] = subl;
-	spin_unlock(&l->label_lock);
+	spin_unlock_irqrestore(&l->label_lock, flags);
 	rcu_read_unlock();
 	return old;
 }
@@ -727,11 +731,17 @@ static int ac_socket_skb_recv_datagram(struct sock * sk, struct sk_buff * skb)
 }
 static int ac_sk_alloc(struct sock *sk, int family, gfp_t priority)
 {
+	if ((sk->sk_security = ac_alloc_label(GFP_KERNEL)) == NULL)
+		return -ENOMEM;
 	return HOOKS(sk_alloc_security, (sk, family, priority));
 }
 static void ac_sk_free(struct sock *sk)
 {
-	return VOIDHOOKS(sk_free_security, (sk));
+	if (!sk->sk_security)
+		return;
+	VOIDHOOKS(sk_free_security, (sk));
+	kfree(sk->sk_security);
+	sk->sk_security = NULL;
 }
 
 /* INODE */

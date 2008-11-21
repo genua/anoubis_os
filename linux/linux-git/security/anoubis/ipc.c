@@ -38,20 +38,28 @@ struct anoubis_sock_label {
 	anoubis_cookie_t	peer_cookie;
 };
 
+/* Makros to acces the label. */
+#define SKSEC(X) \
+    ((struct anoubis_sock_label *)anoubis_get_sublabel(&(X)->sk_security, \
+    ac_index))
+#define SETSKSEC(X,V) \
+    ((struct anoubis_sock_label *)anoubis_set_sublabel(&((X)->sk_security), \
+    ac_index, (V)))
+
 static int ipc_unix_stream_connect(struct socket *sock, struct socket *other,
     struct sock *newsk)
 {
-	struct anoubis_sock_label *newl;
+	struct anoubis_sock_label *newl, *old;
 	struct anoubis_sock_label *sockl, *otherl;
 	struct ac_ipc_message *msg;
 
-	sockl = sock->sk->sk_security;
-	otherl = other->sk->sk_security;
+	sockl = SKSEC(sock->sk);
+	otherl = SKSEC(other->sk);
 
 	if (sockl == NULL || otherl == NULL)
 		return -EINVAL;
 
-	newl = kmalloc(sizeof(struct anoubis_sock_label), GFP_KERNEL);
+	newl = kmalloc(sizeof(struct anoubis_sock_label), GFP_ATOMIC);
 	if (!newl)
 		return -ENOMEM;
 
@@ -59,7 +67,8 @@ static int ipc_unix_stream_connect(struct socket *sock, struct socket *other,
 	newl->task_cookie = otherl->task_cookie;
 	newl->peer_cookie = sockl->task_cookie;
 
-	newsk->sk_security = newl;
+	old = SETSKSEC(newsk, newl);
+	BUG_ON(old);
 
 	msg = kmalloc(sizeof(struct ac_process_message), GFP_NOWAIT);
 	if (msg) {
@@ -76,13 +85,13 @@ static int ipc_unix_stream_connect(struct socket *sock, struct socket *other,
 static int ipc_socket_post_create(struct socket *sock, int family, int type,
     int protocol, int kern)
 {
-	struct anoubis_sock_label *sl;
+	struct anoubis_sock_label *sl, *old;
 	struct anoubis_task_label *tl = current->security;
 
 	if (family != AF_UNIX)
 		return 0;
 
-	sl = kmalloc(sizeof(struct anoubis_sock_label), GFP_KERNEL);
+	sl = kmalloc(sizeof(struct anoubis_sock_label), GFP_ATOMIC);
 	if (!sl)
 		return -ENOMEM;
 
@@ -92,14 +101,18 @@ static int ipc_socket_post_create(struct socket *sock, int family, int type,
 		sl->task_cookie = 0;
 	sl->peer_cookie = 0;
 
-	sock->sk->sk_security = sl;
+	old = SETSKSEC(sock->sk, sl);
+	BUG_ON(old);
 
 	return 0;
 }
 
 static int ipc_sk_alloc_security(struct sock *sk, int family, gfp_t priority)
 {
-	sk->sk_security = NULL;
+	struct anoubis_sock_label *old;
+
+	old = SETSKSEC(sk, NULL);
+	BUG_ON(old);
 
 	return 0;
 }
@@ -107,12 +120,11 @@ static int ipc_sk_alloc_security(struct sock *sk, int family, gfp_t priority)
 static void ipc_sk_free_security(struct sock *sk)
 {
 	struct ac_ipc_message		*msg;
-	struct anoubis_sock_label	*l;
+	struct anoubis_sock_label	*l = SETSKSEC(sk, NULL);
 
-	if (sk->sk_security == NULL)
+	if (!l)
 		return;
 
-	l = sk->sk_security;
 	if (l->peer_cookie != 0) {
 		msg = kmalloc(sizeof(struct ac_process_message), GFP_NOWAIT);
 		if (msg) {
@@ -124,8 +136,7 @@ static void ipc_sk_free_security(struct sock *sk)
 		}
 	}
 
-	kfree(sk->sk_security);
-	sk->sk_security = NULL;
+	kfree(l);
 }
 
 /* Security operations. */
