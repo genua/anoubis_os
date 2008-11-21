@@ -133,6 +133,7 @@ struct mac_policy_conf * const mac_policies[] = {
 #ifdef ANOUBIS
 	&mac_anoubis_alf_mac_policy_conf,
 	&mac_anoubis_sfs_mac_policy_conf,
+	&mac_anoubis_ipc_mac_policy_conf,
 	&mac_anoubis_test_mac_policy_conf,
 #endif
 	0

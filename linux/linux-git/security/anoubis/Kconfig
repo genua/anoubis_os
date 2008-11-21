@@ -16,6 +16,12 @@ config SECURITY_ANOUBIS_ALF
 	help
 	  This option provides support for the Anoubis ALF module
 
+config SECURITY_ANOUBIS_IPC
+	tristate "Anoubis IPC Module"
+	depends on SECURITY_ANOUBIS && SECURITY_NETWORK
+	help
+	  This option provides initial support for the Anoubis IPC module.
+
 config SECURITY_ANOUBIS_SFS
 	tristate "Secure Filesystem Module"
 	depends on SECURITY_ANOUBIS && CRYPTO && CRYPTO_SHA256

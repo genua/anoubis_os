@@ -1101,4 +1101,5 @@ file	security/mac_test/mac_test.c	mac_test needs-flag
 file	security/mac_anoubis/mac_anoubis.c	anoubis	needs-flag
 file	security/mac_anoubis/mac_anoubis_alf.c	anoubis needs-flag
 file	security/mac_anoubis/mac_anoubis_sfs.c	anoubis needs-flag
+file	security/mac_anoubis/mac_anoubis_ipc.c	anoubis needs-flag
 file	security/mac_anoubis/mac_anoubis_test.c	anoubis needs-flag

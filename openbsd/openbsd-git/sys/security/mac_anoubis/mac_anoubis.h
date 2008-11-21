@@ -32,6 +32,7 @@
 
 extern struct mac_policy_conf mac_anoubis_alf_mac_policy_conf;
 extern struct mac_policy_conf mac_anoubis_sfs_mac_policy_conf;
+extern struct mac_policy_conf mac_anoubis_ipc_mac_policy_conf;
 extern struct mac_policy_conf mac_anoubis_test_mac_policy_conf;
 
 extern void anoubis_sfs_getstats(struct anoubis_internal_stat_value **, int *);

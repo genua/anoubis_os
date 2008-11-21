@@ -66,13 +66,6 @@ extern struct security_operations * security_ops;
 static struct security_operations * original_ops;
 static struct security_operations * secondary_ops;
 
-struct anoubis_task_label {
-	anoubis_cookie_t task_cookie;
-	int listener; /* Only accessed by the task itself. */
-	struct anoubis_kernel_policy *policy;
-	rwlock_t policy_lock;
-};
-
 /*
  * Wrapper around eventdev_enqueue. Removes the queue if it turns out
  * to be dead.
@@ -699,6 +692,16 @@ struct anoubis_kernel_policy * anoubis_match_policy(void *data, int datalen,
 })
 
 /* NETWORK */
+static int ac_unix_stream_connect(struct socket *sock, struct socket *other,
+    struct sock *newsk)
+{
+	return HOOKS(unix_stream_connect, (sock, other, newsk));
+}
+static int ac_socket_post_create(struct socket *sock, int family, int type,
+    int protocol, int kern)
+{
+	return HOOKS(socket_post_create, (sock, family, type, protocol, kern));
+}
 static int ac_socket_connect(struct socket * sock, struct sockaddr * address,
     int addrlen)
 {
@@ -721,6 +724,14 @@ static int ac_socket_recvmsg(struct socket * sock, struct msghdr * msg,
 static int ac_socket_skb_recv_datagram(struct sock * sk, struct sk_buff * skb)
 {
 	return HOOKS(socket_skb_recv_datagram, (sk, skb));
+}
+static int ac_sk_alloc(struct sock *sk, int family, gfp_t priority)
+{
+	return HOOKS(sk_alloc_security, (sk, family, priority));
+}
+static void ac_sk_free(struct sock *sk)
+{
+	return VOIDHOOKS(sk_free_security, (sk));
 }
 
 /* INODE */
@@ -989,11 +1000,15 @@ static int ac_vm_enough_memory(struct mm_struct *mm, long pages)
 }
 
 static struct security_operations anoubis_core_ops = {
+	.unix_stream_connect = ac_unix_stream_connect,
+	.socket_post_create = ac_socket_post_create,
 	.socket_connect = ac_socket_connect,
 	.socket_accepted = ac_socket_accepted,
 	.socket_sendmsg = ac_socket_sendmsg,
 	.socket_recvmsg = ac_socket_recvmsg,
 	.socket_skb_recv_datagram = ac_socket_skb_recv_datagram,
+	.sk_alloc_security = ac_sk_alloc,
+	.sk_free_security = ac_sk_free,
 	.inode_alloc_security = ac_inode_alloc_security,
 	.inode_free_security = ac_inode_free_security,
 	.inode_permission = ac_inode_permission,

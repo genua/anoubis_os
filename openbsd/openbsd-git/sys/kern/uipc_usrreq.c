@@ -538,6 +538,11 @@ unp_connect(struct socket *so, struct mbuf *nam, struct proc *p)
 			unp->unp_connid.unp_egid = unp2->unp_connid.unp_egid;
 			unp->unp_flags |= UNP_FEIDS;
 		}
+#ifdef MAC
+	mac_socketpeer_set_from_socket(so, so3);
+	mac_socketpeer_set_from_socket(so3, so);
+#endif
+
 	}
 	error = unp_connect2(so, so2);
 bad:

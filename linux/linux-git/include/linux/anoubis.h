@@ -54,6 +54,7 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_SOURCE_SFSEXEC	31
 #define ANOUBIS_SOURCE_PROCESS	40
 #define ANOUBIS_SOURCE_STAT	50
+#define ANOUBIS_SOURCE_IPC	60
 
 typedef u_int64_t anoubis_cookie_t;
 
@@ -68,6 +69,16 @@ struct ac_process_message {
 	struct anoubis_event_common common;
 	anoubis_cookie_t task_cookie;
 	unsigned long op;
+};
+
+#define ANOUBIS_SOCKET_OP_CONNECT 0x0001UL
+#define ANOUBIS_SOCKET_OP_DESTROY 0x0002UL
+
+struct ac_ipc_message {
+	struct anoubis_event_common common;
+	u_int32_t		op;
+	anoubis_cookie_t	source;
+	anoubis_cookie_t	dest;
 };
 
 struct anoubis_stat_value {
@@ -114,6 +125,13 @@ struct anoubis_internal_stat_value {
 	u_int64_t * valuep;
 };
 
+struct anoubis_task_label {
+	anoubis_cookie_t task_cookie;
+	int listener; /* Only accessed by the task itself. */
+	struct anoubis_kernel_policy *policy;
+	rwlock_t policy_lock;
+};
+
 /*
  * Wrappers around eventdev_enqueue. Removes the queue if it turns out
  * to be dead.
@@ -135,11 +153,15 @@ struct anoubis_hooks {
 	/* Hooks */
 	void (*anoubis_stats)(struct anoubis_internal_stat_value**, int *);
 	int (*anoubis_getcsum)(struct file *, u_int8_t *);
+	DECLARE(unix_stream_connect);
+	DECLARE(socket_post_create);
 	DECLARE(socket_connect);
 	DECLARE(socket_accepted);
 	DECLARE(socket_sendmsg);
 	DECLARE(socket_recvmsg);
 	DECLARE(socket_skb_recv_datagram);
+	DECLARE(sk_alloc_security);
+	DECLARE(sk_free_security);
 	DECLARE(inode_alloc_security);
 	DECLARE(inode_free_security);
 	DECLARE(inode_permission);

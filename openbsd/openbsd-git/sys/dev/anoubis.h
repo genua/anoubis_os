@@ -55,6 +55,7 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_SOURCE_SFSEXEC	31
 #define ANOUBIS_SOURCE_PROCESS	40
 #define ANOUBIS_SOURCE_STAT	50
+#define ANOUBIS_SOURCE_IPC	60
 
 typedef u_int64_t anoubis_cookie_t;
 
@@ -100,6 +101,16 @@ struct ac_process_message {
 	struct anoubis_event_common common;
 	anoubis_cookie_t task_cookie;
 	unsigned long op;
+};
+
+#define ANOUBIS_SOCKET_OP_CONNECT	0x0001UL
+#define ANOUBIS_SOCKET_OP_DESTROY	0x0002UL
+
+struct ac_ipc_message {
+	struct anoubis_event_common common;
+	u_int32_t		op;
+	anoubis_cookie_t	source;
+	anoubis_cookie_t	dest;
 };
 
 #ifdef _KERNEL
