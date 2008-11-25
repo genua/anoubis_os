@@ -171,8 +171,8 @@ static void __exit ipc_exit(void)
 	printk(KERN_INFO "Anoubis IPC security module removed\n");
 }
 
-security_initcall (ipc_init);
-module_exit (ipc_exit);
+module_init(ipc_init);
+module_exit(ipc_exit);
 
 MODULE_DESCRIPTION("Anoubis IPC module");
 MODULE_LICENSE("GPL"); /* XXX */

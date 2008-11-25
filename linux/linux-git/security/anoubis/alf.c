@@ -420,14 +420,14 @@ static void __exit alf_exit(void)
 	printk(KERN_INFO "Anoubis ALF security module removed\n");
 }
 
-security_initcall (alf_init);
+module_init(alf_init);
 module_param(allow_ports_min, int, 0444);
 MODULE_PARM_DESC(allow_ports_min,
     "Start of port range that is excluded from filtering");
 module_param(allow_ports_max, int, 0444);
 MODULE_PARM_DESC(allow_ports_min,
     "End of port range that is excluded from filtering");
-module_exit (alf_exit);
+module_exit(alf_exit);
 
 MODULE_DESCRIPTION("Anoubis ALF module");
 MODULE_LICENSE("GPL"); /* XXX */
