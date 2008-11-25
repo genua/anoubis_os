@@ -57,7 +57,7 @@ static int ipc_unix_stream_connect(struct socket *sock, struct socket *other,
 	otherl = SKSEC(other->sk);
 
 	if (sockl == NULL || otherl == NULL)
-		return -EINVAL;
+		return 0;
 
 	newl = kmalloc(sizeof(struct anoubis_sock_label), GFP_ATOMIC);
 	if (!newl)
@@ -88,7 +88,7 @@ static int ipc_socket_post_create(struct socket *sock, int family, int type,
 	struct anoubis_sock_label *sl, *old;
 	struct anoubis_task_label *tl = current->security;
 
-	if (family != AF_UNIX)
+	if (family != AF_UNIX || tl == NULL)
 		return 0;
 
 	sl = kmalloc(sizeof(struct anoubis_sock_label), GFP_ATOMIC);
