@@ -289,6 +289,8 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 	}
 
 	if (vp->v_flag & VCLONED) {
+		if (fmode & FWRITE)
+			vp->v_writecount--;
 		cip = (struct cloneinfo *)vp->v_data;
 
 		vp->v_flag &= ~VCLONED;
@@ -299,6 +301,8 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 		vp = ndp->ni_vp;		/* for the increment below */
 
 		free(cip, M_TEMP);
+		if (vn_writecount(vp))
+			panic("vn_open: Cannot increment write count of clone");
 	}
 
 	return (0);
