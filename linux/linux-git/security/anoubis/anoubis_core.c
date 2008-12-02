@@ -731,7 +731,7 @@ static int ac_socket_skb_recv_datagram(struct sock * sk, struct sk_buff * skb)
 }
 static int ac_sk_alloc(struct sock *sk, int family, gfp_t priority)
 {
-	if ((sk->sk_security = ac_alloc_label(GFP_KERNEL)) == NULL)
+	if ((sk->sk_security = ac_alloc_label(priority)) == NULL)
 		return -ENOMEM;
 	return HOOKS(sk_alloc_security, (sk, family, priority));
 }
