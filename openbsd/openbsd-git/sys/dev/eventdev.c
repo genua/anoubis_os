@@ -159,8 +159,15 @@ int
 eventdev_wait(struct eventdev_queue * q, struct eventdev_msg * m)
 {
 	int ret;
+	struct proc *p = curproc;
 
 	while(!consume_reply(q,m)) {
+		if (p->p_siglist & sigmask(SIGKILL)) {
+			mtx_enter(&q->lock);
+			m->msg_reply = EINTR;
+			mtx_leave(&q->lock);
+			continue;
+		}
 		tsleep(m, PWAIT, "Eventdev reply pending", hz);
 	}
 	ret = m->msg_reply;

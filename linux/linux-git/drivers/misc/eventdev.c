@@ -104,8 +104,16 @@ static int eventdev_wait(struct eventdev_queue * q, struct eventdev_msg * m)
 
 	might_sleep();
 
-	wait_event(m->wait, consume_reply(q, m));
-	ret = m->msg_reply;
+	if (wait_event_killable(m->wait, consume_reply(q, m)) == 0) {
+		ret = m->msg_reply;
+	} else {
+		/* SIGKILL is pending. Clean up and let the process die. */
+		spin_lock_bh(&q->lock);
+		list_del(&m->link);
+		q->waiters--;
+		ret = -EINTR;
+		spin_unlock_bh(&q->lock);
+	}
 	free_eventdev_msg(m);
 	wake_up(&die_wait);
 	return -ret;
