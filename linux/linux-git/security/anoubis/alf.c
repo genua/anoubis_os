@@ -135,8 +135,12 @@ static int alf_check_policy(int op, struct socket *sock,
 		return -EBADF;
 
 	alf_stat_processed++;
-	if (sock->sk->sk_family == AF_UNIX || sock->sk->sk_family == AF_NETLINK)
+	switch(sock->sk->sk_family) {
+	case AF_UNIX:
+	case AF_NETLINK:
+	case AF_KEY:
 		return 0;
+	}
 
 	if (sock->ops->getname(sock, (struct sockaddr *)myaddress,
 	    &mylen, 0) < 0)
