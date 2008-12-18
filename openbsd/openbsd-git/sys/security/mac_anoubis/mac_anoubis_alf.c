@@ -160,7 +160,10 @@ alf_check_policy(int op, struct socket *sock, const struct sockaddr *address,
 
 	s = splsoftnet();
 
-	if (sotopf(sock) == PF_UNIX || sotopf(sock) == PF_ROUTE) {
+	switch (sotopf(sock)) {
+	case PF_UNIX:
+	case PF_ROUTE:
+	case PF_KEY:
 		splx(s);
 		free(event, M_DEVBUF);
 		return 0;
