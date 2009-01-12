@@ -969,4 +969,4 @@ module_exit(sfs_exit);
 
 MODULE_AUTHOR("Christian Ehrhardt <ehrhardt@genua.de>");
 MODULE_DESCRIPTION("LSM Module for ANOUBIS");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("Dual BSD/GPL");

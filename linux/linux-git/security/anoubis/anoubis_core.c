@@ -1112,4 +1112,4 @@ module_init(anoubis_core_init_late);
 
 MODULE_AUTHOR("Christian Ehrhardt <ehrhardt@genua.de>");
 MODULE_DESCRIPTION("ANOUBIS core module");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("Dual BSD/GPL");

@@ -434,4 +434,4 @@ MODULE_PARM_DESC(allow_ports_min,
 module_exit(alf_exit);
 
 MODULE_DESCRIPTION("Anoubis ALF module");
-MODULE_LICENSE("GPL"); /* XXX */
+MODULE_LICENSE("Dual BSD/GPL");

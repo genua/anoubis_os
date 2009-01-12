@@ -175,4 +175,4 @@ module_init(ipc_init);
 module_exit(ipc_exit);
 
 MODULE_DESCRIPTION("Anoubis IPC module");
-MODULE_LICENSE("GPL"); /* XXX */
+MODULE_LICENSE("Dual BSD/GPL");
