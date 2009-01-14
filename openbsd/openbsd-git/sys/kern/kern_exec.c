@@ -699,6 +699,8 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 	/* update p_emul, the old value is no longer needed */
 	p->p_emul = pack.ep_emul;
 
+	vfs_mark_atime(pack.ep_vp, p->p_ucred);
+
 #ifdef MAC
 	mac_execve_exit(&pack);
 #endif

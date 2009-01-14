@@ -453,6 +453,7 @@ struct mount {
 #define MNT_SOFTDEP     0x04000000      /* soft dependencies being done */
 #define MNT_DOOMED	0x08000000	/* device behind filesystem is gone */
 #define	MNT_ACLS	0x10000000	/* ACL support enabled */
+#define	MNT_MULTILABEL	0x20000000	/* MAC support for individual objects */
 
 /*
  * Sysctl CTL_VFS definitions.

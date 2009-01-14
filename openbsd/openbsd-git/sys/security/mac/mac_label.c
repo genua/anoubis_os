@@ -1,4 +1,4 @@
-/*-
+/*
  * Copyright (c) 2003-2004 Networks Associates Technology, Inc.
  * Copyright (c) 2007 Robert N. M. Watson
  * All rights reserved.
@@ -29,11 +29,12 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: src/sys/security/mac/mac_label.c,v 1.8 2007/02/06 14:19:24 rwatson Exp $;
+ * $FreeBSD: mac_label.c,v 1.8 2007/02/06 14:19:24 rwatson Exp $;
  */
 
 #include <sys/cdefs.h>
 #include <sys/param.h>
+#include <sys/malloc.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
 #include <sys/pool.h>
@@ -111,8 +112,12 @@ mac_labelpool_dtor(void *arg, void *object)
 struct label *
 mac_labelpool_alloc(int flags)
 {
-
-	return (pool_get(&label_pool, flags));
+#ifdef DIAGNOSTIC
+	KASSERT(flags == M_WAITOK || flags == M_NOWAIT);
+#endif
+	/* XXX PM: We use M_* throughout the MAC code (like FreeBSD). */
+	return (pool_get(&label_pool,
+	    (flags == M_WAITOK ? PR_WAITOK : PR_NOWAIT)));
 }
 
 void

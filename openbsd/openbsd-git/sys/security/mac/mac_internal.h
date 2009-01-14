@@ -1,4 +1,4 @@
-/*-
+/*
  * Copyright (c) 1999-2002, 2006 Robert N. M. Watson
  * Copyright (c) 2001 Ilmar S. Habibulin
  * Copyright (c) 2001-2004 Networks Associates Technology, Inc.
@@ -41,7 +41,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: src/sys/security/mac/mac_internal.h,v 1.124 2008/04/13 21:45:52 rwatson Exp $
+ * $FreeBSD: mac_internal.h,v 1.125 2008/08/23 15:26:36 rwatson Exp $
  */
 
 #ifndef _SECURITY_MAC_MAC_INTERNAL_H_
@@ -67,35 +67,15 @@ MALLOC_DECLARE(M_MACTEMP);
 #endif
 
 /*
- * XXXRW: struct ifnet locking is incomplete in the network code, so we use
- * our own global mutex for struct ifnet.  Non-ideal, but should help in the
- * SMP environment.
- */
-extern struct rwlock mac_ifnet_lock;
-#define	MAC_IFNET_LOCK(s)						\
-do {									\
-	rw_enter_write(&mac_ifnet_lock);				\
-	s = splnet();							\
-} while (/* CONSTCOND */ 0)
-
-#define	MAC_IFNET_UNLOCK(s)						\
-do {									\
-	splx(s);							\
-	rw_exit_write(&mac_ifnet_lock);					\
-} while (/* CONSTCOND */ 0)
-
-/* XXX HSH */
-#define M_ASSERTPKTHDR(m)	KASSERT(m != NULL && m->m_flags & M_PKTHDR);
-#define BPFD_LOCK_ASSERT(bd)
-
-/*
  * MAC labels -- in-kernel storage format.
  *
  * In general, struct label pointers are embedded in kernel data structures
  * representing objects that may be labeled (and protected).  Struct label is
  * opaque to both kernel services that invoke the MAC Framework and MAC
  * policy modules.  In particular, we do not wish to encode the layout of the
- * label structure into any ABIs.
+ * label structure into any ABIs.  Historically, the slot array contained
+ * unions of {long, void} but now contains uintptr_t. XXX PM: Not really in
+ * OpenBSD. :-) See below.
  */
 #define	MAC_MAX_SLOTS	4
 #define	MAC_FLAG_INITIALIZED	0x0000001	/* Is initialized for use. */
@@ -109,8 +89,9 @@ struct label {
  */
 extern struct mac_policy_list_head	mac_policy_list;
 extern struct mac_policy_list_head	mac_static_policy_list;
-#ifndef MAC_ALWAYS_LABEL_MBUF
-extern int				mac_labelmbufs;
+extern uint64_t				mac_labeled;
+#if 0 /* XXX PM: Disabled for now. */
+extern struct mtx			mac_ifnet_mtx;
 #endif
 
 /*
@@ -134,14 +115,26 @@ void	mac_destroy_label(struct label *label);
 int	mac_check_structmac_consistent(struct mac *mac);
 int	mac_allocate_slot(void);
 
+#if 0 /* XXX PM: Disabled for now. */
+#define MAC_IFNET_LOCK(ifp)	mtx_lock(&mac_ifnet_mtx)
+#define MAC_IFNET_UNLOCK(ifp)	mtx_unlock(&mac_ifnet_mtx)
+#else
+#define MAC_IFNET_LOCK(ifp)	(void)ifp
+#define MAC_IFNET_UNLOCK(ifp)	(void)ifp
+#endif
+
 /*
  * MAC Framework per-object type functions.  It's not yet clear how the
  * namespaces, etc, should work for these, so for now, sort by object type.
  */
+struct label	*mac_cred_label_alloc(void);
+void		 mac_cred_label_free(struct label *label);
 struct label	*mac_pipe_label_alloc(void);
 void		 mac_pipe_label_free(struct label *label);
 struct label	*mac_socket_label_alloc(int flag);
 void		 mac_socket_label_free(struct label *label);
+struct label	*mac_vnode_label_alloc(void);
+void		 mac_vnode_label_free(struct label *label);
 
 int	mac_cred_check_relabel(struct ucred *cred, struct label *newlabel);
 int	mac_cred_externalize_label(struct label *label, char *elements,
@@ -356,5 +349,9 @@ int	vn_setlabel(struct vnode *vp, struct label *intlabel,
 		mac_policy_list_unbusy();				\
 	}								\
 } while (0)
+
+/* XXX PM: These are needed in OpenBSD. */
+#define	M_ASSERTPKTHDR(m)	KASSERT(m != NULL && m->m_flags & M_PKTHDR);
+#define	BPFD_LOCK_ASSERT(d)
 
 #endif /* !_SECURITY_MAC_MAC_INTERNAL_H_ */

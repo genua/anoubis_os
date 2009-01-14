@@ -511,3 +511,12 @@ vop_aclcheck {
 	IN struct ucred *cred;
 	IN struct proc *p;
 }
+
+#% setlabel	vp	L L L
+
+vop_setlabel {
+	IN struct vnode *vp;
+	IN struct label *label;
+	IN struct ucred *cred;
+	IN struct proc *p;
+};

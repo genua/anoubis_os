@@ -1235,6 +1235,9 @@ after_listen:
 		if (tiflags & TH_ACK && SEQ_GT(tp->snd_una, tp->iss)) {
 			tcpstat.tcps_connects++;
 			soisconnected(so);
+#ifdef MAC
+			mac_socketpeer_set_from_mbuf(m, so);
+#endif
 			tp->t_state = TCPS_ESTABLISHED;
 			TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
 			/* Do window scaling on this connection? */
@@ -3652,6 +3655,10 @@ syn_cache_get(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 	so = sonewconn(so, SS_ISCONNECTED);
 	if (so == NULL)
 		goto resetandabort;
+
+#ifdef MAC
+	mac_socketpeer_set_from_mbuf(m, so);
+#endif
 
 	inp = sotoinpcb(oso);
 #ifdef IPSEC

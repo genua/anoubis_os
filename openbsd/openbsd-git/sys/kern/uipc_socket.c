@@ -109,7 +109,7 @@ socreate(int dom, struct socket **aso, int type, int proto)
 	s = splsoftnet();
 	so = pool_get(&socket_pool, PR_WAITOK | PR_ZERO);
 #ifdef MAC
-	if ((error = mac_socket_init(so, PR_WAITOK)) != 0) {
+	if ((error = mac_socket_init(so, M_WAITOK)) != 0) {
 		pool_put(&socket_pool, so);
 		splx(s);
 		return (error);

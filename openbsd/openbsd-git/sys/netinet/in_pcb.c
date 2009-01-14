@@ -206,7 +206,7 @@ in_pcballoc(so, v)
 	inp->inp_seclevel[SL_ESP_NETWORK] = ipsec_esp_network_default_level;
 	inp->inp_seclevel[SL_IPCOMP] = ipsec_ipcomp_default_level;
 #ifdef MAC
-	error = mac_inpcb_init(inp, PR_NOWAIT);
+	error = mac_inpcb_init(inp, M_NOWAIT);
 	if (error) {
 		pool_put(&inpcb_pool, inp);
 		return (error);

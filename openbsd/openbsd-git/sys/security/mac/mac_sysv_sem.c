@@ -65,7 +65,7 @@ mac_sysv_sem_label_alloc(void)
 {
 	struct label *label;
 
-	label = mac_labelpool_alloc(PR_WAITOK);
+	label = mac_labelpool_alloc(M_WAITOK);
 	MAC_PERFORM(sysvsem_init_label, label);
 	return (label);
 }

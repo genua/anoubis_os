@@ -1,4 +1,4 @@
-/*	\$OpenBSD\$	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call switch table.
@@ -942,6 +942,49 @@ struct sysent sysent[] = {
 	{ 0, 0, 0,
 	    sys_nosys },			/* 334 = unimplemented */
 #endif
-	/* NUMBER OF SYSCALLS: 334 */
+#ifdef MAC
+	{ 2, s(struct sys___mac_get_pid_args), 0,
+	    sys___mac_get_pid },		/* 335 = __mac_get_pid */
+	{ 1, s(struct sys___mac_get_proc_args), 0,
+	    sys___mac_get_proc },		/* 336 = __mac_get_proc */
+	{ 1, s(struct sys___mac_set_proc_args), 0,
+	    sys___mac_set_proc },		/* 337 = __mac_set_proc */
+	{ 2, s(struct sys___mac_get_fd_args), 0,
+	    sys___mac_get_fd },			/* 338 = __mac_get_fd */
+	{ 2, s(struct sys___mac_get_file_args), 0,
+	    sys___mac_get_file },		/* 339 = __mac_get_file */
+	{ 2, s(struct sys___mac_get_link_args), 0,
+	    sys___mac_get_link },		/* 340 = __mac_get_link */
+	{ 2, s(struct sys___mac_set_fd_args), 0,
+	    sys___mac_set_fd },			/* 341 = __mac_set_fd */
+	{ 2, s(struct sys___mac_set_file_args), 0,
+	    sys___mac_set_file },		/* 342 = __mac_set_file */
+	{ 2, s(struct sys___mac_set_link_args), 0,
+	    sys___mac_set_link },		/* 343 = __mac_set_link */
+	{ 3, s(struct sys_mac_syscall_args), 0,
+	    sys_mac_syscall },			/* 344 = mac_syscall */
+#else
+	{ 0, 0, 0,
+	    sys_nosys },			/* 335 = unimplemented */
+	{ 0, 0, 0,
+	    sys_nosys },			/* 336 = unimplemented */
+	{ 0, 0, 0,
+	    sys_nosys },			/* 337 = unimplemented */
+	{ 0, 0, 0,
+	    sys_nosys },			/* 338 = unimplemented */
+	{ 0, 0, 0,
+	    sys_nosys },			/* 339 = unimplemented */
+	{ 0, 0, 0,
+	    sys_nosys },			/* 340 = unimplemented */
+	{ 0, 0, 0,
+	    sys_nosys },			/* 341 = unimplemented */
+	{ 0, 0, 0,
+	    sys_nosys },			/* 342 = unimplemented */
+	{ 0, 0, 0,
+	    sys_nosys },			/* 343 = unimplemented */
+	{ 0, 0, 0,
+	    sys_nosys },			/* 344 = unimplemented */
+#endif
+	/* NUMBER OF SYSCALLS: 344 */
 };
 

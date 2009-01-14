@@ -1,9 +1,10 @@
 /*
- * Copyright (c) 1999-2002 Robert N. M. Watson
+ * Copyright (c) 1999-2002, 2008 Robert N. M. Watson
  * Copyright (c) 2001 Ilmar S. Habibulin
  * Copyright (c) 2001-2003 Networks Associates Technology, Inc.
  * Copyright (c) 2005 Samy Al Bahra
  * Copyright (c) 2006 SPARTA, Inc.
+ * Copyright (c) 2008 Apple Inc.
  * All rights reserved.
  *
  * This software was developed by Robert Watson and Ilmar Habibulin for the
@@ -38,18 +39,19 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: mac_process.c,v 1.122 2008/01/13 14:44:13 attilio Exp $
+ * $FreeBSD: mac_process.c,v 1.126 2008/10/28 21:53:10 rwatson Exp $
  */
 
 #include <sys/param.h>
-#include <sys/exec.h>
 #include <sys/kernel.h>
+#include <sys/exec.h>
 #include <sys/lock.h>
 #include <sys/malloc.h>
 #include <sys/mutex.h>
 #include <sys/mac.h>
-#include <sys/proc.h>
 #include <sys/pool.h>
+#include <sys/proc.h>
+#include <sys/sbuf.h>
 #include <sys/systm.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
@@ -57,50 +59,55 @@
 #include <sys/namei.h>
 #include <sys/sysctl.h>
 
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
+#include <vm/vm.h>
+#include <vm/pmap.h>
+#include <vm/vm_map.h>
+#include <vm/vm_object.h>
+#endif
+
 #include <security/mac/mac_framework.h>
 #include <security/mac/mac_internal.h>
 #include <security/mac/mac_policy.h>
 
-/*
- * Local parameters.
- */
-int	mac_mmap_revocation = 1;
-int	mac_mmap_revocation_via_cow = 0;
+/* XXX PM: No process locks in OpenBSD. */
+#define PROC_LOCK_ASSERT(p, t)
 
-/*
- * Local functions.
- */
-const char     *prot2str(vm_prot_t);
-struct label   *mac_cred_label_alloc(void);
+/* XXX PM: These need to be prototyped here in OpenBSD. */
 struct label   *mac_proc_label_alloc(void);
-void		mac_proc_label_free(struct label *);
-void		mac_cred_label_free(struct label *);
-void		mac_cred_mmapped_drop_perms_recurse(struct proc *,
-		    struct ucred *, struct vm_map *);
+void		mac_proc_label_free(struct label *label);
+const char     *prot2str(vm_prot_t prot);
 
-struct label *
-mac_cred_label_alloc(void)
-{
-	struct label *label;
+/*
+ * XXX PM: The OpenBSD kernel only operates at the process level. Therefore,
+ * much of the changes in this file are essentially 'thread -> proc'.
+ */
 
-	label = mac_labelpool_alloc(PR_WAITOK);
-	MAC_PERFORM(cred_init_label, label);
-	return (label);
-}
+/* XXX PM: Global and untoggable in OpenBSD. */
+int	mac_mmap_revocation = 1;
+#if 0
+SYSCTL_INT(_security_mac, OID_AUTO, mmap_revocation, CTLFLAG_RW,
+    &mac_mmap_revocation, 0, "Revoke mmap access to files on subject "
+    "relabel");
+#endif
 
-void
-mac_cred_init(struct ucred *cred)
-{
+/* XXX PM: Global and untoggable in OpenBSD. */
+int	mac_mmap_revocation_via_cow = 0;
+#if 0
+SYSCTL_INT(_security_mac, OID_AUTO, mmap_revocation_via_cow, CTLFLAG_RW,
+    &mac_mmap_revocation_via_cow, 0, "Revoke mmap access to files via "
+    "copy-on-write semantics, or by removing all write access");
+#endif
 
-	cred->cr_label = mac_cred_label_alloc();
-}
+void	mac_proc_vm_revoke_recurse(struct proc *p, struct ucred *cred,
+	    struct vm_map *map);
 
 struct label *
 mac_proc_label_alloc(void)
 {
 	struct label *label;
 
-	label = mac_labelpool_alloc(PR_WAITOK);
+	label = mac_labelpool_alloc(M_WAITOK);
 	MAC_PERFORM(proc_init_label, label);
 	return (label);
 }
@@ -109,23 +116,10 @@ void
 mac_proc_init(struct proc *p)
 {
 
-	p->p_label = mac_proc_label_alloc();
-}
-
-void
-mac_cred_label_free(struct label *label)
-{
-
-	MAC_PERFORM(cred_destroy_label, label);
-	mac_labelpool_free(label);
-}
-
-void
-mac_cred_destroy(struct ucred *cred)
-{
-
-	mac_cred_label_free(cred->cr_label);
-	cred->cr_label = NULL;
+	if (mac_labeled & MPC_OBJECT_PROC)
+		p->p_label = mac_proc_label_alloc();
+	else
+		p->p_label = NULL;
 }
 
 void
@@ -140,69 +134,10 @@ void
 mac_proc_destroy(struct proc *p)
 {
 
-	mac_proc_label_free(p->p_label);
-	p->p_label = NULL;
-}
-
-#ifdef notyet /* XXX PM: This will be used by the MAC system calls. */
-int
-mac_cred_externalize_label(struct label *label, char *elements,
-    char *outbuf, size_t outbuflen)
-{
-	int error;
-
-	MAC_EXTERNALIZE(cred, label, elements, outbuf, outbuflen);
-
-	return (error);
-}
-#endif /* notyet */
-
-int
-mac_cred_internalize_label(struct label *label, char *string)
-{
-	int error;
-
-	MAC_INTERNALIZE(cred, label, string);
-
-	return (error);
-}
-
-/*
- * Initialize MAC label for the first kernel process, from which other kernel
- * processes and threads are spawned.
- */
-void
-mac_proc_create_swapper(struct ucred *cred)
-{
-
-	MAC_PERFORM(proc_create_swapper, cred);
-}
-
-/*
- * Initialize MAC label for the first userland process, from which other
- * userland processes and threads are spawned.
- */
-void
-mac_proc_create_init(struct ucred *cred)
-{
-
-	MAC_PERFORM(proc_create_init, cred);
-}
-
-/*
- * When a thread becomes an NFS server daemon, its credential may need to be
- * updated to reflect this so that policies can recognize when file system
- * operations originate from the network.
- *
- * At some point, it would be desirable if the credential used for each NFS
- * RPC could be set based on the RPC context (i.e., source system, etc) to
- * provide more fine-grained access control.
- */
-void
-mac_proc_associate_nfsd(struct ucred *cred)
-{
-
-	MAC_PERFORM(proc_associate_nfsd, cred);
+	if (p->p_label != NULL) {
+		mac_proc_label_free(p->p_label);
+		p->p_label = NULL;
+	}
 }
 
 void
@@ -212,20 +147,9 @@ mac_proc_userret(struct proc *p)
 	MAC_PERFORM(proc_userret, p);
 }
 
-/*
- * When a new process is created, its label must be initialized.  Generally,
- * this involves inheritence from the parent process, modulo possible deltas.
- * This function allows that processing to take place.
- */
-void
-mac_cred_copy(struct ucred *src, struct ucred *dest)
-{
-
-	MAC_PERFORM(cred_copy_label, src->cr_label, dest->cr_label);
-}
-
+/* XXX PM: No 'struct image_params' in OpenBSD. Use 'exec_package' instead. */
 int
-mac_execve_enter(struct exec_package *epp, struct mac *mac_p)
+mac_execve_enter(struct exec_package *pack, struct mac *mac_p)
 {
 	struct label *label;
 	struct mac mac;
@@ -238,7 +162,10 @@ mac_execve_enter(struct exec_package *epp, struct mac *mac_p)
 	if (mac_p == NULL)
 		return (0);
 #endif
-		
+
+	if (!(mac_labeled & MPC_OBJECT_CRED))
+		return (EINVAL);
+
 	error = copyin(mac_p, &mac, sizeof(mac));
 	if (error)
 		return (error);
@@ -259,8 +186,9 @@ mac_execve_enter(struct exec_package *epp, struct mac *mac_p)
 		free(buffer, M_MACTEMP);
 		return (error);
 	}
+
 #ifdef ANOUBIS
-	} else {
+	} else { /* XXX PM: mac_p == NULL */
 		buffer = malloc(13, M_MACTEMP, M_WAITOK);
 		memcpy(buffer, "anoubis/true", 13);
 	}
@@ -273,32 +201,66 @@ mac_execve_enter(struct exec_package *epp, struct mac *mac_p)
 		mac_cred_label_free(label);
 		return (error);
 	}
-	epp->ep_label = label;
+	pack->ep_label = label;
 	return (0);
 }
 
+/* XXX PM: No 'struct image_params' in OpenBSD. Use 'exec_package' instead. */
 void
-mac_execve_exit(struct exec_package *epp)
+mac_execve_exit(struct exec_package *pack)
 {
-	if (epp->ep_label != NULL) {
-		mac_cred_label_free(epp->ep_label);
-		epp->ep_label = NULL;
+	if (pack->ep_label != NULL) {
+		mac_cred_label_free(pack->ep_label);
+		pack->ep_label = NULL;
 	}
+}
+
+void
+mac_execve_interpreter_enter(struct vnode *interpvp,
+    struct label **interpvplabel)
+{
+
+	if (mac_labeled & MPC_OBJECT_VNODE) {
+		*interpvplabel = mac_vnode_label_alloc();
+		mac_vnode_copy_label(interpvp->v_label, *interpvplabel);
+	} else
+		*interpvplabel = NULL;
+}
+
+void
+mac_execve_interpreter_exit(struct label *interpvplabel)
+{
+
+	if (interpvplabel != NULL)
+		mac_vnode_label_free(interpvplabel);
 }
 
 /*
  * When relabeling a process, call out to the policies for the maximum
  * permission allowed for each object type we know about in its memory space,
  * and revoke access (in the least surprising ways we know) when necessary.
+ * The process lock is not held here.
  */
 void
-mac_cred_mmapped_drop_perms(struct proc *p, struct ucred *cred)
+mac_proc_vm_revoke(struct proc *p)
 {
+	struct ucred *cred;
 
-	/* XXX freeze all other processes */
-	mac_cred_mmapped_drop_perms_recurse(p, cred,
+#if 0 /* XXX PM: Adapt to crhold() in OpenBSD being a macro. */
+	PROC_LOCK(td->td_proc);
+	cred = crhold(td->td_proc->p_ucred);
+	PROC_UNLOCK(td->td_proc);
+#else
+	crhold(p->p_ucred);
+	cred = p->p_ucred;
+#endif
+
+	/* XXX freeze all other threads */
+	mac_proc_vm_revoke_recurse(p, cred,
 	    &p->p_vmspace->vm_map);
-	/* XXX allow other processes to continue */
+	/* XXX allow other threads to continue */
+
+	crfree(cred);
 }
 
 const char *
@@ -326,7 +288,7 @@ prot2str(vm_prot_t prot)
 }
 
 void
-mac_cred_mmapped_drop_perms_recurse(struct proc *p, struct ucred *cred,
+mac_proc_vm_revoke_recurse(struct proc *p, struct ucred *cred,
     struct vm_map *map)
 {
 	struct vm_map_entry *vme;
@@ -339,17 +301,45 @@ mac_cred_mmapped_drop_perms_recurse(struct proc *p, struct ucred *cred,
 	if (!mac_mmap_revocation)
 		return;
 
+/*
+ * XXX PM: In OpenBSD, locking in a 'vm_map' structure is done through the
+ * rwlock(9) API, which does not support upgrading from a read to a write lock.
+ * Therefore, grab a write lock here.
+ */
+#if 0
 	vm_map_lock_read(map);
+#else
+	rw_enter_write(&(map)->lock);
+#endif
 	for (vme = map->header.next; vme != &map->header; vme = vme->next) {
+/*
+ * XXX PM: In OpenBSD, a submap is identified by inspecting the 'etype' field of
+ * the structure 'vm_map_entry'. The UVM_ET_ISSUBMAP() macro does that.
+ */
+#if 0
+		if (vme->eflags & MAP_ENTRY_IS_SUB_MAP) {
+#else
 		if (UVM_ET_ISSUBMAP(vme)) {
-			mac_cred_mmapped_drop_perms_recurse(p, cred,
+#endif
+			mac_proc_vm_revoke_recurse(p, cred,
 			    vme->object.sub_map);
 			continue;
 		}
 		/*
 		 * Skip over entries that obviously are not shared.
 		 */
-		if (UVM_ET_ISCOPYONWRITE(vme) || !vme->max_protection)
+/*
+ * XXX PM: In OpenBSD, a copy-on-write entry is identified by inspecting the
+ * 'etype' field of the structure 'vm_map_entry'. The UVM_ET_IS_COPYONWRITE()
+ * macro does that. Additionally, there is no equivalent in OpenBSD to
+ * FreeBSD's MAP_ENTRY_NOSYNC, so we just skip that check.
+ */
+#if 0
+		if (vme->eflags & (MAP_ENTRY_COW | MAP_ENTRY_NOSYNC) ||
+#else
+		if (UVM_ET_ISCOPYONWRITE(vme) ||
+#endif
+		    !vme->max_protection)
 			continue;
 		/*
 		 * Drill down to the deepest backing object.
@@ -358,7 +348,7 @@ mac_cred_mmapped_drop_perms_recurse(struct proc *p, struct ucred *cred,
 		object = vme->object.uvm_obj;
 		if (object == NULL)
 			continue;
-#if 0		/* XXX PM: We don't have nested UVM objects. */
+#if 0 /* XXX PM: We don't have nested UVM objects in OpenBSD. */
 		VM_OBJECT_LOCK(object);
 		while ((backing_object = object->backing_object) != NULL) {
 			VM_OBJECT_LOCK(backing_object);
@@ -373,9 +363,26 @@ mac_cred_mmapped_drop_perms_recurse(struct proc *p, struct ucred *cred,
 		 * the MAC system, so only things with backing by a normal
 		 * object (read: vnodes) are checked.
 		 */
+/* XXX PM: In OpenBSD, an object being backed by a vnode is identified by
+ * inspecting the 'pgops' field of 'struct uvm_object'. The macro
+ * UVM_OBJ_IS_VNODE() does that.
+ */
+#if 0
+		if (object->type != OBJT_VNODE)
+#else
 		if (!UVM_OBJ_IS_VNODE(object))
+#endif
 			continue;
+/*
+ * XXX PM: In OpenBSD, the vnode is in the beginning of the 'uvm_object'
+ * structure. Also, we don't support VFS suspension.
+ */
+#if 0
+		vp = (struct vnode *)object->handle;
+		vfslocked = VFS_LOCK_GIANT(vp->v_mount);
+#else
 		vp = (struct vnode *)object;
+#endif
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 		result = vme->max_protection;
 		mac_vnode_check_mmap_downgrade(cred, vp, &result);
@@ -385,14 +392,19 @@ mac_cred_mmapped_drop_perms_recurse(struct proc *p, struct ucred *cred,
 		 * but a policy needs to get removed.
 		 */
 		revokeperms = vme->max_protection & ~result;
-		if (!revokeperms)
+		if (!revokeperms) {
+/*			VFS_UNLOCK_GIANT(vfslocked);	*/
 			continue;
+		}
 		printf("pid %ld: revoking %s perms from %#lx:%ld "
 		    "(max %s/cur %s)\n", (long)p->p_pid,
 		    prot2str(revokeperms), (u_long)vme->start,
 		    (long)(vme->end - vme->start),
 		    prot2str(vme->max_protection), prot2str(vme->protection));
-		vm_map_upgrade(map);
+/* XXX PM: No need to upgrade the lock, since we already hold a write one. */
+#if 0
+		vm_map_lock_upgrade(map);
+#endif
 		/*
 		 * This is the really simple case: if a map has more
 		 * max_protection than is allowed, but it's not being
@@ -408,14 +420,37 @@ mac_cred_mmapped_drop_perms_recurse(struct proc *p, struct ucred *cred,
 				 * pending changes to the object then turn it
 				 * copy-on-write.
 				 */
-				object->pgops->pgo_reference(object);
+#if 0 /* XXX PM: No vm_object_reference() in OpenBSD, and no VFS suspension. */
+				vm_object_reference(object);
+				(void) vn_start_write(vp, &mp, V_WAIT);
+#else
+				object->uo_refs++;
+#endif
 				vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
-				/* XXX PM: FreeBSD has different semantics. */
+/*
+ * XXX PM: Flush the pages using uvn_flush(). Notice that the 'start' and 'end'
+ * parameters should be in bytes.
+ */
+#if 0
+				VM_OBJECT_LOCK(object);
+				vm_object_page_clean(object,
+				    OFF_TO_IDX(offset),
+				    OFF_TO_IDX(offset + vme->end - vme->start +
+					PAGE_MASK),
+				    OBJPC_SYNC);
+				VM_OBJECT_UNLOCK(object);
+#else
 				object->pgops->pgo_flush(object, offset,
-				    offset + vme->end - vme->start + PAGE_MASK,
-				    PGO_CLEANIT);
+				    offset + vme->end - vme->start,
+				    PGO_CLEANIT | PGO_SYNCIO);
+#endif
 				VOP_UNLOCK(vp, 0, p);
-				object->pgops->pgo_detach(object);
+#if 0 /* XXX PM: NO vm_object_deallocate() in OpenBSD, and no VFS suspension. */
+				vn_finished_write(mp);
+				vm_object_deallocate(object);
+#else
+				object->uo_refs--;
+#endif
 				/*
 				 * Why bother if there's no read permissions
 				 * anymore?  For the rest, we need to leave
@@ -426,8 +461,14 @@ mac_cred_mmapped_drop_perms_recurse(struct proc *p, struct ucred *cred,
 					vme->max_protection &= ~VM_PROT_WRITE;
 					vme->protection &= ~VM_PROT_WRITE;
 				} if ((revokeperms & VM_PROT_READ) == 0)
+#if 0 /* XXX PM: See comment about UVM_ET_ISCOPYONWRITE() just above. */
+					vme->eflags |= MAP_ENTRY_COW |
+					    MAP_ENTRY_NEEDS_COPY;
+#else
 					vme->etype |= UVM_ET_COPYONWRITE |
 					    UVM_ET_NEEDSCOPY;
+#endif
+					
 			}
 			if (revokeperms & VM_PROT_EXECUTE) {
 				vme->max_protection &= ~VM_PROT_EXECUTE;
@@ -439,46 +480,24 @@ mac_cred_mmapped_drop_perms_recurse(struct proc *p, struct ucred *cred,
 			}
 			pmap_protect(map->pmap, vme->start, vme->end,
 			    vme->protection & ~revokeperms);
-			pmap_update(map->pmap);
-/*			vm_map_simplify_entry(map, vme);	*/
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
+			vm_map_simplify_entry(map, vme);
+#endif
 		}
-		vm_map_downgrade(map);
+#if 0 /* XXX PM: No need to downgrade, and no VFS suspension. */ 
+		vm_map_lock_downgrade(map);
+		VFS_UNLOCK_GIANT(vfslocked);
+#endif
 	}
-	vm_map_unlock_read(map);
-}
-
-#ifdef notyet /* XXX PM: These will be used by the MAC system calls. */
 /*
- * When the subject's label changes, it may require revocation of privilege
- * to mapped objects.  This can't be done on-the-fly later with a unified
- * buffer cache.
+ * XXX PM: We acquire a write lock instead of a read lock (due to the
+ * impossibility of upgrading).
  */
-void
-mac_cred_relabel(struct ucred *cred, struct label *newlabel)
-{
-
-	MAC_PERFORM(cred_relabel, cred, newlabel);
-}
-
-int
-mac_cred_check_relabel(struct ucred *cred, struct label *newlabel)
-{
-	int error;
-
-	MAC_CHECK(cred_check_relabel, cred, newlabel);
-
-	return (error);
-}
-#endif /* notyet */
-
-int
-mac_cred_check_visible(struct ucred *cr1, struct ucred *cr2)
-{
-	int error;
-
-	MAC_CHECK(cred_check_visible, cr1, cr2);
-
-	return (error);
+#if 0
+	vm_map_unlock_read(map);
+#else
+	rw_exit_write(&(map)->lock);
+#endif
 }
 
 int
@@ -486,7 +505,7 @@ mac_proc_check_debug(struct ucred *cred, struct proc *p)
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_debug, cred, p);
 
@@ -498,7 +517,7 @@ mac_proc_check_sched(struct ucred *cred, struct proc *p)
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_sched, cred, p);
 
@@ -510,7 +529,7 @@ mac_proc_check_signal(struct ucred *cred, struct proc *p, int signum)
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_signal, cred, p, signum);
 
@@ -522,7 +541,7 @@ mac_proc_check_setuid(struct proc *p, struct ucred *cred, uid_t uid)
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_setuid, cred, uid);
 	return (error);
@@ -533,7 +552,7 @@ mac_proc_check_seteuid(struct proc *p, struct ucred *cred, uid_t euid)
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_seteuid, cred, euid);
 	return (error);
@@ -544,7 +563,7 @@ mac_proc_check_setgid(struct proc *p, struct ucred *cred, gid_t gid)
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_setgid, cred, gid);
 
@@ -556,7 +575,7 @@ mac_proc_check_setegid(struct proc *p, struct ucred *cred, gid_t egid)
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_setegid, cred, egid);
 
@@ -569,7 +588,7 @@ mac_proc_check_setgroups(struct proc *p, struct ucred *cred, int ngroups,
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_setgroups, cred, ngroups, gidset);
 	return (error);
@@ -581,7 +600,7 @@ mac_proc_check_setreuid(struct proc *p, struct ucred *cred, uid_t ruid,
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_setreuid, cred, ruid, euid);
 
@@ -594,7 +613,7 @@ mac_proc_check_setregid(struct proc *proc, struct ucred *cred, gid_t rgid,
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(proc, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(proc, MA_OWNED);
 
 	MAC_CHECK(proc_check_setregid, cred, rgid, egid);
 
@@ -607,7 +626,7 @@ mac_proc_check_setresuid(struct proc *p, struct ucred *cred, uid_t ruid,
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_setresuid, cred, ruid, euid, suid);
 	return (error);
@@ -619,7 +638,7 @@ mac_proc_check_setresgid(struct proc *p, struct ucred *cred, gid_t rgid,
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_setresgid, cred, rgid, egid, sgid);
 
@@ -631,7 +650,7 @@ mac_proc_check_wait(struct ucred *cred, struct proc *p)
 {
 	int error;
 
-/*	PROC_LOCK_ASSERT(p, MA_OWNED);	*/
+	PROC_LOCK_ASSERT(p, MA_OWNED);
 
 	MAC_CHECK(proc_check_wait, cred, p);
 

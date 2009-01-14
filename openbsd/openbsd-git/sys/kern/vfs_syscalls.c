@@ -1095,6 +1095,8 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 			if (error)
 				goto bad;
 			mode |= VWRITE;
+			if (flags & O_APPEND)
+				mode |= VAPPEND;
 		}
 		if (flags & FREAD)
 			mode |= VREAD;
@@ -1114,12 +1116,15 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 	}
 #else	/* MAC */
 	if (flags & (FWRITE | O_TRUNC)) {
+		int wmode = VWRITE;
+		if (flags & O_APPEND)
+			wmode |= VAPPEND;
 		if (vp->v_type == VDIR) {
 			error = EISDIR;
 			goto bad;
 		}
 		if ((error = vn_writechk(vp)) != 0 ||
-		    (error = VOP_ACCESS(vp, VWRITE, cred, p)) != 0)
+		    (error = VOP_ACCESS(vp, wmode, cred, p)) != 0)
 			goto bad;
 	}
 #endif	/* MAC */

@@ -328,6 +328,7 @@ struct fs {
 #define FS_UNCLEAN	0x01	/* filesystem not clean at mount */
 #define FS_DOSOFTDEP	0x02	/* filesystem using soft dependencies */
 #define FS_ACLS		0x10	/* filesystem has ACLs enabled */
+#define FS_MULTILABEL	0x20	/* filesystem is MAC multi-label */
 
 /*
  * The following flag is used to detect a FFS1 file system that had its flags

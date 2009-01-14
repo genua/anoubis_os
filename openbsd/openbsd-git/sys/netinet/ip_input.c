@@ -747,7 +747,7 @@ ip_reass(ipqe, fp)
 		fp->ipq_src = ipqe->ipqe_ip->ip_src;
 		fp->ipq_dst = ipqe->ipqe_ip->ip_dst;
 #ifdef MAC
-		if (mac_ipq_init(fp, PR_NOWAIT)) {
+		if (mac_ipq_init(fp, M_NOWAIT)) {
 			pool_put(&ipq_pool, fp);
 			goto dropfrag;
 		}

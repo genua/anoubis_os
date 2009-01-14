@@ -64,6 +64,10 @@
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 
+#ifdef FFS2_MAC
+#include <security/mac/mac_framework.h>
+#endif
+
 int ffs_sbupdate(struct ufsmount *, int);
 int ffs_reload_vnode(struct vnode *, void *);
 int ffs_sync_vnode(struct vnode *, void *);
@@ -911,6 +915,20 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct proc *p)
 		(void) ffs_sbupdate(ump, MNT_WAIT);
 	}
 
+
+	if (fs->fs_flags & FS_MULTILABEL) {
+#ifdef FFS2_MAC
+		if (fs->fs_magic == FS_UFS2_MAGIC) {
+			mp->mnt_flag |= MNT_MULTILABEL;
+			printf("ffs_mountfs(): MAC multi-label support "
+			    "enabled on %s\n", mp->mnt_stat.f_mntonname);
+		} else
+#endif
+			printf("ffs_mountfs(): WARNING, mounting %s with *NO* "
+			    "MAC multi-label support!\n",
+			    mp->mnt_stat.f_mntonname);
+	}
+
 	if (fs->fs_flags & FS_ACLS) {
 #ifdef FFS2_ACL
 		if (fs->fs_magic == FS_UFS2_MAGIC) {
@@ -1368,6 +1386,23 @@ retry:
 		ip->i_ffs1_uid = ip->i_din1->di_ouid;
 		ip->i_ffs1_gid = ip->i_din1->di_ogid;
 	}
+
+#ifdef FFS2_MAC
+	if ((mp->mnt_flag & MNT_MULTILABEL) && DIP(ip, mode)) {
+		/*
+		 * If this vnode is already allocated, and we're running
+		 * multi-label, attempt to perform a label association
+		 * from the extended attributes on the inode.
+		 */
+		error = mac_vnode_associate_extattr(mp, vp);
+		if (error) {
+			/* ufs_inactive will release the ip->i_devvp ref. */
+			vput(vp);
+			*vpp = NULL;
+			return (error);
+		}
+	}
+#endif
 
 	*vpp = vp;
 

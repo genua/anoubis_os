@@ -1,5 +1,5 @@
-/*-
- * Copyright (c) 1999-2002, 2007 Robert N. M. Watson
+/*
+ * Copyright (c) 1999-2002, 2007-2008 Robert N. M. Watson
  * Copyright (c) 2001-2005 Networks Associates Technology, Inc.
  * Copyright (c) 2005-2006 SPARTA, Inc.
  * All rights reserved.
@@ -35,7 +35,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: src/sys/security/mac/mac_framework.h,v 1.100 2008/06/27 05:39:04 jhb Exp $
+ * $FreeBSD: mac_framework.h,v 1.106 2008/10/28 13:44:11 trasz Exp $
  */
 
 /*
@@ -56,9 +56,9 @@ struct bpf_d;
 struct cdev;
 struct componentname;
 struct devfs_dirent;
+struct exec_package;
 struct ifnet;
 struct ifreq;
-struct exec_package;
 struct inpcb;
 struct ipq;
 struct ksem;
@@ -87,11 +87,8 @@ struct vattr;
 struct vnode;
 struct vop_setlabel_args;
 
-#ifdef ACL
-#include <sys/acl.h>
-#endif
-
-void	mac_init(void);
+#include <sys/acl.h>			/* XXX acl_type_t */
+#include <sys/types.h>			/* accmode_t */
 
 /*
  * Entry points to the TrustedBSD MAC Framework from the remainder of the
@@ -107,8 +104,11 @@ void	mac_bpfdesc_create_mbuf(struct bpf_d *d, struct mbuf *m);
 void	mac_bpfdesc_destroy(struct bpf_d *);
 void	mac_bpfdesc_init(struct bpf_d *);
 
+void	mac_cred_associate_nfsd(struct ucred *cred);
 int	mac_cred_check_visible(struct ucred *cr1, struct ucred *cr2);
 void	mac_cred_copy(struct ucred *cr1, struct ucred *cr2);
+void	mac_cred_create_init(struct ucred *cred);
+void	mac_cred_create_swapper(struct ucred *cred);
 void	mac_cred_destroy(struct ucred *);
 void	mac_cred_init(struct ucred *);
 
@@ -136,11 +136,21 @@ int	mac_ifnet_ioctl_set(struct ucred *cred, struct ifreq *ifr,
 	    struct ifnet *ifp);
 
 int	mac_inpcb_check_deliver(struct inpcb *inp, struct mbuf *m);
+int	mac_inpcb_check_visible(struct ucred *cred, struct inpcb *inp);
 void	mac_inpcb_create(struct socket *so, struct inpcb *inp);
 void	mac_inpcb_create_mbuf(struct inpcb *inp, struct mbuf *m);
 void	mac_inpcb_destroy(struct inpcb *);
 int	mac_inpcb_init(struct inpcb *, int);
 void	mac_inpcb_sosetlabel(struct socket *so, struct inpcb *inp);
+
+#if 0 /* XXX PM: Inexistant in OpenBSD. */
+void	mac_ip6q_create(struct mbuf *m, struct ip6q *q6);
+void	mac_ip6q_destroy(struct ip6q *q6);
+int	mac_ip6q_init(struct ip6q *q6, int);
+int	mac_ip6q_match(struct mbuf *m, struct ip6q *q6);
+void	mac_ip6q_reassemble(struct ip6q *q6, struct mbuf *m);
+void	mac_ip6q_update(struct mbuf *m, struct ip6q *q6);
+#endif
 
 void	mac_ipq_create(struct mbuf *m, struct ipq *q);
 void	mac_ipq_destroy(struct ipq *q);
@@ -223,7 +233,6 @@ void	mac_posixshm_init(struct shmfd *);
 int	mac_priv_check(struct ucred *cred, int priv);
 int	mac_priv_grant(struct ucred *cred, int priv);
 
-void	mac_proc_associate_nfsd(struct ucred *cred);
 int	mac_proc_check_debug(struct ucred *cred, struct proc *p);
 int	mac_proc_check_sched(struct ucred *cred, struct proc *p);
 int	mac_proc_check_setaudit(struct ucred *cred, struct auditinfo *ai);
@@ -251,13 +260,21 @@ int	mac_proc_check_setuid(struct proc *p,  struct ucred *cred,
 int	mac_proc_check_signal(struct ucred *cred, struct proc *p,
 	    int signum);
 int	mac_proc_check_wait(struct ucred *cred, struct proc *p);
-void	mac_proc_create_init(struct ucred *cred);
-void	mac_proc_create_swapper(struct ucred *cred);
 void	mac_proc_destroy(struct proc *);
+void	mac_proc_init(struct proc *);
+void	mac_proc_vm_revoke(struct proc *p);
 int	mac_execve_enter(struct exec_package *pack, struct mac *mac_p);
 void	mac_execve_exit(struct exec_package *pack);
-void	mac_proc_init(struct proc *);
-
+void	mac_execve_interpreter_enter(struct vnode *interpvp,
+	    struct label **interplabel);
+void	mac_execve_interpreter_exit(struct label *interpvplabel);
+#ifdef ANOUBIS
+int	mac_execve_prepare(struct exec_package *pack);
+void	mac_execve_success(struct exec_package *pack);
+int	mac_file_check_open(struct ucred *cred, struct file * fp,
+	    struct vnode *vp, const char * pathhint);
+int	mac_check_follow_link(struct nameidata *, char *linkbuf, int linklen);
+#endif
 int	mac_socket_check_accept(struct ucred *cred, struct socket *so);
 int	mac_socket_check_accepted(struct ucred *cred, struct socket *so,
 	    struct mbuf *name);
@@ -274,9 +291,7 @@ int	mac_socket_check_receive(struct ucred *cred, struct socket *so);
 int	mac_socket_check_soreceive(struct socket *so, struct mbuf *m);
 int	mac_socket_check_send(struct ucred *cred, struct socket *so);
 int	mac_socket_check_stat(struct ucred *cred, struct socket *so);
-#if 0	/* XXX HSH:  We won't need this one. */
 int	mac_socket_check_visible(struct ucred *cred, struct socket *so);
-#endif
 void	mac_socket_create_mbuf(struct socket *so, struct mbuf *m);
 void	mac_socket_create(struct ucred *cred, struct socket *so);
 void	mac_socket_destroy(struct socket *);
@@ -357,20 +372,30 @@ void	mac_sysvshm_create(struct ucred *cred,
 void	mac_sysvshm_destroy(struct shmid_kernel *);
 void	mac_sysvshm_init(struct shmid_kernel *);
 
-void	mac_proc_userret(struct proc *);
+void	mac_proc_userret(struct proc *p);
 
 int	mac_vnode_associate_extattr(struct mount *mp, struct vnode *vp);
 void	mac_vnode_associate_singlelabel(struct mount *mp, struct vnode *vp);
 int	mac_vnode_check_access(struct ucred *cred, struct vnode *vp,
-	    int acc_mode);
+	    accmode_t accmode);
 int	mac_vnode_check_chdir(struct ucred *cred, struct vnode *dvp);
 int	mac_vnode_check_chroot(struct ucred *cred, struct vnode *dvp);
 int	mac_vnode_check_create(struct ucred *cred, struct vnode *dvp,
 	    struct componentname *cnp, struct vattr *vap);
+int	mac_vnode_check_deleteacl(struct ucred *cred, struct vnode *vp,
+	    acl_type_t type);
+int	mac_vnode_check_deleteextattr(struct ucred *cred, struct vnode *vp,
+	    int attrnamespace, const char *name);
 int	mac_vnode_check_exec(struct ucred *cred, struct vnode *vp,
 	    struct exec_package *pack);
+int	mac_vnode_check_getacl(struct ucred *cred, struct vnode *vp,
+	    acl_type_t type);
+int	mac_vnode_check_getextattr(struct ucred *cred, struct vnode *vp,
+	    int attrnamespace, const char *name, struct uio *uio);
 int	mac_vnode_check_link(struct ucred *cred, struct vnode *dvp,
 	    struct vnode *vp, struct componentname *cnp);
+int	mac_vnode_check_listextattr(struct ucred *cred, struct vnode *vp,
+	    int attrnamespace);
 int	mac_vnode_check_lookup(struct ucred *cred, struct vnode *dvp,
  	    struct componentname *cnp);
 int	mac_vnode_check_mmap(struct ucred *cred, struct vnode *vp, int prot,
@@ -382,14 +407,7 @@ int	mac_vnode_check_open(struct ucred *cred, struct vnode *vp,
 	    int acc_mode, struct vnode *dirvp, struct componentname *cnp);
 #else
 int	mac_vnode_check_open(struct ucred *cred, struct vnode *vp,
-	    int acc_mode);
-#endif
-#ifdef ANOUBIS
-int	mac_execve_prepare(struct exec_package *pack);
-void	mac_execve_success(struct exec_package *pack);
-int	mac_file_check_open(struct ucred *cred, struct file * fp,
-	    struct vnode *vp, const char * pathhint);
-int	mac_check_follow_link(struct nameidata *, char *linkbuf, int linklen);
+	    accmode_t accmode);
 #endif
 int	mac_vnode_check_poll(struct ucred *active_cred,
 	    struct ucred *file_cred, struct vnode *vp);
@@ -402,6 +420,10 @@ int	mac_vnode_check_rename_from(struct ucred *cred, struct vnode *dvp,
 int	mac_vnode_check_rename_to(struct ucred *cred, struct vnode *dvp,
 	    struct vnode *vp, int samedir, struct componentname *cnp);
 int	mac_vnode_check_revoke(struct ucred *cred, struct vnode *vp);
+int	mac_vnode_check_setacl(struct ucred *cred, struct vnode *vp,
+	    acl_type_t type, struct acl *acl);
+int	mac_vnode_check_setextattr(struct ucred *cred, struct vnode *vp,
+	    int attrnamespace, const char *name, struct uio *uio);
 int	mac_vnode_check_setflags(struct ucred *cred, struct vnode *vp,
 	    u_long flags);
 int	mac_vnode_check_setmode(struct ucred *cred, struct vnode *vp,
@@ -430,34 +452,13 @@ int	mac_vnode_execve_will_transition(struct ucred *cred,
 void	mac_vnode_relabel(struct ucred *cred, struct vnode *vp,
 	    struct label *newlabel);
 
-#ifdef ACL
-int	mac_vnode_check_deleteacl(struct ucred *, struct vnode *, acl_type_t);
-int	mac_vnode_check_getacl(struct ucred *, struct vnode *, acl_type_t);
-int	mac_vnode_check_setacl(struct ucred *, struct vnode *, acl_type_t,
-	    struct acl *);
-#endif
-
-#ifdef EXTATTR
-int	mac_vnode_check_deleteextattr(struct ucred *, struct vnode *, int,
-	    const char *);
-int	mac_vnode_check_getextattr(struct ucred *, struct vnode *, int,
-	    const char *, struct uio *);
-int	mac_vnode_check_listextattr(struct ucred *, struct vnode *, int);
-int	mac_vnode_check_setextattr(struct ucred *, struct vnode *, int,
-	    const char *, struct uio *);
-#endif
-
-struct label	*mac_cred_label_alloc(void);
-void		 mac_cred_label_free(struct label *);
-struct label	*mac_vnode_label_alloc(void);
-void		 mac_vnode_label_free(struct label *);
-
-void	mac_cred_mmapped_drop_perms(struct proc *, struct ucred *);
-
 /*
  * Calls to help various file systems implement labeling functionality using
- * their existing EA implementation.
+ * their existing EA implementation. XXX PM: We prototype it in vnode.h.
  */
-int	vop_stdsetlabel_ea(struct vop_setlabel_args *ap);
+/* int	vop_stdsetlabel_ea(struct vop_setlabel_args *ap);	*/
+
+/* XXX PM: Needed in OpenBSD. */
+void	mac_init(void);
 
 #endif /* !_SECURITY_MAC_MAC_FRAMEWORK_H_ */

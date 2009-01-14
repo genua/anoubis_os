@@ -301,7 +301,7 @@ main(void *framep)
 	p->p_ucred->cr_ngroups = 1;	/* group 0 */
 
 #ifdef MAC
-	mac_proc_create_swapper(p->p_ucred);
+	mac_cred_create_swapper(p->p_ucred);
 #endif
 
 	/* Initialize signal state for process 0. */
@@ -605,7 +605,7 @@ start_init(void *arg)
 	 */
 
 #ifdef MAC
-	mac_proc_create_init(p->p_ucred);
+	mac_cred_create_init(p->p_ucred);
 #endif
 
 	/*

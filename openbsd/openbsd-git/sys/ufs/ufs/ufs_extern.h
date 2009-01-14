@@ -99,6 +99,11 @@ int	ufsfifo_close(void *);
 #define	FFS2_ACL
 #endif
 
+/* MAC functionality in FFS2 depends on Extended Attributes support. */
+#if defined(FFS2) && defined(MAC) && defined(EXTATTR)
+#define FFS2_MAC
+#endif
+
 #if defined(FFS2) && defined(EXTATTR)
 #define FFS2_EXTATTR
 #endif

@@ -717,4 +717,32 @@
 333	UNIMPL
 334	UNIMPL
 #endif
-; NUMBER OF SYSCALLS: 334
+#ifdef MAC
+335	STD		{ int sys___mac_get_pid(pid_t pid, struct mac *mac_p); }
+336	STD		{ int sys___mac_get_proc(struct mac *mac_p); }
+337	STD		{ int sys___mac_set_proc(struct mac *mac_p); }
+338	STD		{ int sys___mac_get_fd(int fd, struct mac *mac_p); }
+339	STD		{ int sys___mac_get_file(const char *path_p, \
+			    struct mac *mac_p); }
+340	STD		{ int sys___mac_get_link(const char *path_p, \
+			    struct mac *mac_p); }
+341	STD		{ int sys___mac_set_fd(int fd, struct mac *mac_p); }
+342	STD		{ int sys___mac_set_file(const char *path_p, \
+			    struct mac *mac_p); }
+343	STD		{ int sys___mac_set_link(const char *path_p, \
+			    struct mac *mac_p); }
+344	STD		{ int sys_mac_syscall(const char *policy, int call, \
+			    void *arg); }
+#else
+335	UNIMPL
+336	UNIMPL
+337	UNIMPL
+338	UNIMPL
+339	UNIMPL
+340	UNIMPL
+341	UNIMPL
+342	UNIMPL
+343	UNIMPL
+344	UNIMPL
+#endif
+; NUMBER OF SYSCALLS: 344

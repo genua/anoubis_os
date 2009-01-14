@@ -1,4 +1,4 @@
-/*	\$OpenBSD\$	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call argument lists.
@@ -1425,6 +1425,55 @@ struct sys___acl_aclcheck_link_args {
 	syscallarg(struct acl *) aclp;
 };
 
+struct sys___mac_get_pid_args {
+	syscallarg(pid_t) pid;
+	syscallarg(struct mac *) mac_p;
+};
+
+struct sys___mac_get_proc_args {
+	syscallarg(struct mac *) mac_p;
+};
+
+struct sys___mac_set_proc_args {
+	syscallarg(struct mac *) mac_p;
+};
+
+struct sys___mac_get_fd_args {
+	syscallarg(int) fd;
+	syscallarg(struct mac *) mac_p;
+};
+
+struct sys___mac_get_file_args {
+	syscallarg(const char *) path_p;
+	syscallarg(struct mac *) mac_p;
+};
+
+struct sys___mac_get_link_args {
+	syscallarg(const char *) path_p;
+	syscallarg(struct mac *) mac_p;
+};
+
+struct sys___mac_set_fd_args {
+	syscallarg(int) fd;
+	syscallarg(struct mac *) mac_p;
+};
+
+struct sys___mac_set_file_args {
+	syscallarg(const char *) path_p;
+	syscallarg(struct mac *) mac_p;
+};
+
+struct sys___mac_set_link_args {
+	syscallarg(const char *) path_p;
+	syscallarg(struct mac *) mac_p;
+};
+
+struct sys_mac_syscall_args {
+	syscallarg(const char *) policy;
+	syscallarg(int) call;
+	syscallarg(void *) arg;
+};
+
 /*
  * System call prototypes.
  */
@@ -1777,4 +1826,17 @@ int	sys___acl_delete_link(struct proc *, void *, register_t *);
 int	sys___acl_aclcheck_link(struct proc *, void *, register_t *);
 #else
 #endif
-/* NUMBER OF SYSCALLS: 334 */
+#ifdef MAC
+int	sys___mac_get_pid(struct proc *, void *, register_t *);
+int	sys___mac_get_proc(struct proc *, void *, register_t *);
+int	sys___mac_set_proc(struct proc *, void *, register_t *);
+int	sys___mac_get_fd(struct proc *, void *, register_t *);
+int	sys___mac_get_file(struct proc *, void *, register_t *);
+int	sys___mac_get_link(struct proc *, void *, register_t *);
+int	sys___mac_set_fd(struct proc *, void *, register_t *);
+int	sys___mac_set_file(struct proc *, void *, register_t *);
+int	sys___mac_set_link(struct proc *, void *, register_t *);
+int	sys_mac_syscall(struct proc *, void *, register_t *);
+#else
+#endif
+/* NUMBER OF SYSCALLS: 344 */

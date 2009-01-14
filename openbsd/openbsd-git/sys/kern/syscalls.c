@@ -1,4 +1,4 @@
-/*	\$OpenBSD\$	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call names.
@@ -483,5 +483,28 @@ char *syscallnames[] = {
 	"#333 (unimplemented)",		/* 333 = unimplemented */
 	"#334 (unimplemented)",		/* 334 = unimplemented */
 #endif
-	/* NUMBER OF SYSCALLS: 334 */
+#ifdef MAC
+	"__mac_get_pid",			/* 335 = __mac_get_pid */
+	"__mac_get_proc",			/* 336 = __mac_get_proc */
+	"__mac_set_proc",			/* 337 = __mac_set_proc */
+	"__mac_get_fd",			/* 338 = __mac_get_fd */
+	"__mac_get_file",			/* 339 = __mac_get_file */
+	"__mac_get_link",			/* 340 = __mac_get_link */
+	"__mac_set_fd",			/* 341 = __mac_set_fd */
+	"__mac_set_file",			/* 342 = __mac_set_file */
+	"__mac_set_link",			/* 343 = __mac_set_link */
+	"mac_syscall",			/* 344 = mac_syscall */
+#else
+	"#335 (unimplemented)",		/* 335 = unimplemented */
+	"#336 (unimplemented)",		/* 336 = unimplemented */
+	"#337 (unimplemented)",		/* 337 = unimplemented */
+	"#338 (unimplemented)",		/* 338 = unimplemented */
+	"#339 (unimplemented)",		/* 339 = unimplemented */
+	"#340 (unimplemented)",		/* 340 = unimplemented */
+	"#341 (unimplemented)",		/* 341 = unimplemented */
+	"#342 (unimplemented)",		/* 342 = unimplemented */
+	"#343 (unimplemented)",		/* 343 = unimplemented */
+	"#344 (unimplemented)",		/* 344 = unimplemented */
+#endif
+	/* NUMBER OF SYSCALLS: 344 */
 };

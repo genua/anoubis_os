@@ -55,6 +55,7 @@
 #include <sys/lockf.h>
 #include <sys/event.h>
 #include <sys/poll.h>
+#include <sys/priv.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -71,6 +72,9 @@
 #include <ufs/ufs/dirhash.h>
 #endif
 #include <ufs/ext2fs/ext2fs_extern.h>
+#ifdef FFS2_MAC
+#include <security/mac/mac_framework.h>
+#endif
 
 static int ufs_chmod(struct vnode *, int, struct ucred *, struct proc *);
 static int ufs_chown(struct vnode *, uid_t, gid_t, struct ucred *, struct proc *);
@@ -265,8 +269,8 @@ ufs_access(void *v)
 			    DIP(ip, gid), mode, ap->a_cred);
 			break;
 		case 0:
-			error = vaccess_acl_posix1e(DIP(ip, uid), DIP(ip, gid),
-			    acl, mode, ap->a_cred, NULL);
+			error = vaccess_acl_posix1e(vp->v_type, DIP(ip, uid),
+			    DIP(ip, gid), acl, mode, ap->a_cred);
 			break;
 		default:
 			printf("ufs_access(): error retrieving ACL on "
@@ -355,16 +359,49 @@ ufs_setattr(void *v)
 	    ((int)vap->va_bytes != VNOVAL) || (vap->va_gen != VNOVAL)) {
 		return (EINVAL);
 	}
+	/*
+	 * Mark for update the file's acess time for vfs_mark_atime().
+	 * We are doing this here to avoid some of the checks done
+	 * below -- this operation is done by request of the kernel and
+	 * should bypass some security checks. Things like read-only
+	 * checks get handled by other levels (e.g., ffs_update()).
+	 */
+	if (vap->va_vaflags & VA_MARK_ATIME) {
+		ip->i_flag |= IN_ACCESS;
+		return (0);
+	}
 	if (vap->va_flags != VNOVAL) {
 		if (vp->v_mount->mnt_flag & MNT_RDONLY)
 			return (EROFS);
-		if (cred->cr_uid != DIP(ip, uid) &&
-		    (error = suser_ucred(cred)))
+		/*
+		 * Callers may only modify the file flags on objects they
+		 * have VADMIN rights for.
+		 */
+		if ((error = VOP_ACCESS(vp, VADMIN, cred, p)))
 			return (error);
-		if (cred->cr_uid == 0) {
-			if ((DIP(ip, flags) & (SF_IMMUTABLE | SF_APPEND)) &&
-			    securelevel > 0)
+		/*
+		 * Unprivileged processes are not permitted to unset system
+		 * flags, or modify flags if any system flags are set.
+		 * Privileged non-jail processes may not modify system flags
+		 * if securelevel > 0 and any existing system flags are set.
+		 * Privileged jail processes behave like privileged non-jail
+		 * processes if the security.jail.chflags_allowed sysctl is
+		 * is non-zero; otherwise, they behave like unprivileged
+		 * processes.
+		 */
+		if (!priv_check_cred(cred, PRIV_VFS_SYSFLAGS, 0)) {
+			if (DIP(ip, flags) & (SF_IMMUTABLE | SF_APPEND)) {
+			    	if (securelevel > 0)
+					return (EPERM);
+			}
+#if 0 /* XXX PM: No snapshots in OpenBSD. */
+			/* Snapshot flag cannot be set or cleared */
+			if (((vap->va_flags & SF_SNAPSHOT) != 0 &&
+			     (ip->i_flags & SF_SNAPSHOT) == 0) ||
+			    ((vap->va_flags & SF_SNAPSHOT) == 0 &&
+			     (ip->i_flags & SF_SNAPSHOT) != 0))
 				return (EPERM);
+#endif
 			DIP_ASSIGN(ip, flags, vap->va_flags);
 		} else {
 			if (DIP(ip, flags) & (SF_IMMUTABLE | SF_APPEND) ||
@@ -416,18 +453,54 @@ ufs_setattr(void *v)
 	if (vap->va_atime.tv_sec != VNOVAL || vap->va_mtime.tv_sec != VNOVAL) {
 		if (vp->v_mount->mnt_flag & MNT_RDONLY)
 			return (EROFS);
-		if (cred->cr_uid != DIP(ip, uid) &&
-		    (error = suser_ucred(cred)) &&
-		    ((vap->va_vaflags & VA_UTIMES_NULL) == 0 || 
-		    (error = VOP_ACCESS(vp, VWRITE, cred, p))))
+		/*
+		 * From utimes(2):
+		 * If times is NULL, ... The caller must be the owner of
+		 * the file, have permission to write the file, or be the
+		 * super-user.
+		 * If times is non-NULL, ... The caller must be the owner of
+		 * the file or be the super-user.
+		 *
+		 * Possibly for historical reasons, try to use VADMIN in
+		 * preference to VWRITE for a NULL timestamp.  This means we
+		 * will return EACCES in preference to EPERM if neither
+		 * check succeeds.
+		 */
+		if (vap->va_vaflags & VA_UTIMES_NULL) {
+			error = VOP_ACCESS(vp, VADMIN, cred, p);
+			if (error)
+				error = VOP_ACCESS(vp, VWRITE, cred, p);
+		} else
+			error = VOP_ACCESS(vp, VADMIN, cred, p);
+		if (error)
 			return (error);
+		if (vap->va_atime.tv_sec != VNOVAL)
+			ip->i_flag |= IN_ACCESS;
 		if (vap->va_mtime.tv_sec != VNOVAL)
 			ip->i_flag |= IN_CHANGE | IN_UPDATE;
+#if 0 /* XXX PM: No va_birthtime in OpenBSD. */
+		if (vap->va_birthtime.tv_sec != VNOVAL &&
+		    ip->i_ump->um_fstype == UFS2)
+			ip->i_flag |= IN_MODIFIED;
+#endif
+#if 0 /* XXX PM: In OpenBSD, the steps below are taken in ffs_update(). */
+		ufs_itimes(vp);
 		if (vap->va_atime.tv_sec != VNOVAL) {
-			if (!(vp->v_mount->mnt_flag & MNT_NOATIME) ||
-			    (ip->i_flag & (IN_CHANGE | IN_UPDATE)))
-				ip->i_flag |= IN_ACCESS;
+			DIP_SET(ip, i_atime, vap->va_atime.tv_sec);
+			DIP_SET(ip, i_atimensec, vap->va_atime.tv_nsec);
 		}
+		if (vap->va_mtime.tv_sec != VNOVAL) {
+			DIP_SET(ip, i_mtime, vap->va_mtime.tv_sec);
+			DIP_SET(ip, i_mtimensec, vap->va_mtime.tv_nsec);
+		}
+#endif
+#if 0 /* XXX PM: No va_birthtime in OpenBSD. */
+		if (vap->va_birthtime.tv_sec != VNOVAL &&
+		    ip->i_ump->um_fstype == UFS2) {
+			ip->i_din2->di_birthtime = vap->va_birthtime.tv_sec;
+			ip->i_din2->di_birthnsec = vap->va_birthtime.tv_nsec;
+		}
+#endif
 		error = UFS_UPDATE2(ip, &vap->va_atime, &vap->va_mtime, 0);
 		if (error)
 			return (error);
@@ -452,14 +525,26 @@ ufs_chmod(struct vnode *vp, int mode, struct ucred *cred, struct proc *p)
 	struct inode *ip = VTOI(vp);
 	int error;
 
-	if (cred->cr_uid != DIP(ip, uid) &&
-	    (error = suser_ucred(cred)))
+	/*
+	 * To modify the permissions on a file, must possess VADMIN
+	 * for that file.
+	 */
+	if ((error = VOP_ACCESS(vp, VADMIN, cred, p)))
 		return (error);
-	if (cred->cr_uid) {
-		if (vp->v_type != VDIR && (mode & S_ISTXT))
+	/*
+	 * Privileged processes may set the sticky bit on non-directories,
+	 * as well as set the setgid bit on a file with a group that the
+	 * process is not a member of.  Both of these are allowed in
+	 * jail(8).
+	 */
+	if (vp->v_type != VDIR && (mode & S_ISTXT)) {
+		if (priv_check_cred(cred, PRIV_VFS_STICKYFILE, 0))
 			return (EFTYPE);
-		if (!groupmember(DIP(ip, gid), cred) && (mode & ISGID))
-			return (EPERM);
+	}
+	if (!groupmember(DIP(ip, gid), cred) && (mode & ISGID)) {
+		error = priv_check_cred(cred, PRIV_VFS_SETGID, 0);
+		if (error)
+			return (error);
 	}
 	DIP(ip, mode) &= ~ALLPERMS;
 	DIP(ip, mode) |= (mode & ALLPERMS);
@@ -489,13 +574,19 @@ ufs_chown(struct vnode *vp, uid_t uid, gid_t gid, struct ucred *cred,
 	if (gid == (gid_t)VNOVAL)
 		gid = DIP(ip, gid);
 	/*
-	 * If we don't own the file, are trying to change the owner
-	 * of the file, or are not a member of the target group,
-	 * the caller must be superuser or the call fails.
+	 * To modify the ownership of a file, must possess VADMIN for that
+	 * file.
 	 */
-	if ((cred->cr_uid != DIP(ip, uid) || uid != DIP(ip, uid) ||
-	    (gid != DIP(ip, gid) && !groupmember((gid_t)gid, cred))) &&
-	    (error = suser_ucred(cred)))
+	if ((error = VOP_ACCESS(vp, VADMIN, cred, p)))
+		return (error);
+	/*
+	 * To change the owner of a file, or change the group of a file to a
+	 * group of which we are not a member, the caller must have
+	 * privilege.
+	 */
+	if ((uid != DIP(ip, uid) || 
+	    (gid != DIP(ip, gid) && !groupmember(gid, cred))) &&
+	    (error = priv_check_cred(cred, PRIV_VFS_CHOWN, 0)))
 		return (error);
 	ogid = DIP(ip, gid);
 	ouid = DIP(ip, uid);
@@ -955,18 +1046,18 @@ abortit:
 		 */
 		if (xp->i_number == ip->i_number)
 			panic("ufs_rename: same file");
-		/*
-		 * If the parent directory is "sticky", then the user must
-		 * own the parent directory, or the destination of the rename,
-		 * otherwise the destination may not be changed (except by
-		 * root). This implements append-only directories.
-		 */
-		if ((DIP(dp, mode) & S_ISTXT) && tcnp->cn_cred->cr_uid != 0 &&
-		    tcnp->cn_cred->cr_uid != DIP(dp, uid) &&
-		    DIP(xp, uid )!= tcnp->cn_cred->cr_uid) {
-			error = EPERM;
-			goto bad;
-		}
+                /*
+                 * If the parent directory is "sticky", then the caller
+                 * must possess VADMIN for the parent directory, or the
+                 * destination of the rename.  This implements append-only
+                 * directories.
+                 */
+                if ((DIP(dp, mode) & S_ISTXT) &&
+                    VOP_ACCESS(tdvp, VADMIN, tcnp->cn_cred, p) &&
+                    VOP_ACCESS(tvp, VADMIN, tcnp->cn_cred, p)) {
+                        error = EPERM;
+                        goto bad;
+                }
 		/*
 		 * Target must be empty if a directory and have no links
 		 * to it. Also, ensure source and target are compatible
@@ -1236,6 +1327,16 @@ ufs_mkdir(void *v)
 		softdep_change_linkcnt(dp, 0);
 	if ((error = UFS_UPDATE(dp, !DOINGSOFTDEP(dvp))) != 0)
 		goto bad;
+
+#ifdef FFS2_MAC
+	if (dvp->v_mount->mnt_flag & MNT_MULTILABEL) {
+		error = mac_vnode_create_extattr(cnp->cn_cred, dvp->v_mount,
+		    dvp, tvp, cnp);
+		if (error)
+			goto bad;
+	}
+#endif
+
 #ifdef FFS2_ACL
 	if (acl != NULL) {
 		/*
@@ -2061,6 +2162,16 @@ ufs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 	 */
 	if ((error = UFS_UPDATE(ip, !DOINGSOFTDEP(tvp))) != 0)
 		goto bad;
+
+#ifdef FFS2_MAC
+	if (dvp->v_mount->mnt_flag & MNT_MULTILABEL) {
+		error = mac_vnode_create_extattr(cnp->cn_cred, dvp->v_mount,
+		    dvp, tvp, cnp);
+		if (error)
+			goto bad;
+	}
+#endif
+
 #ifdef FFS2_ACL
 	if (acl != NULL) {
 		/*

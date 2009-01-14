@@ -67,7 +67,7 @@ mac_sysv_msgmsg_label_alloc(void)
 {
 	struct label *label;
 
-	label = mac_labelpool_alloc(PR_WAITOK);
+	label = mac_labelpool_alloc(M_WAITOK);
 	MAC_PERFORM(sysvmsg_init_label, label);
 	return (label);
 }
@@ -84,7 +84,7 @@ mac_sysv_msgqueue_label_alloc(void)
 {
 	struct label *label;
 
-	label = mac_labelpool_alloc(PR_WAITOK);
+	label = mac_labelpool_alloc(M_WAITOK);
 	MAC_PERFORM(sysvmsq_init_label, label);
 	return (label);
 }

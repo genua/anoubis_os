@@ -232,6 +232,8 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 			mode |= VWRITE;
 		if (fmode & FREAD)
 			mode |= VREAD;
+		if (fmode & O_APPEND)
+			mode |= VAPPEND;
 #ifdef ANOUBIS
 		/*
 		 * XXX PM: 'vp' is locked, 'dirvp' is not.
@@ -262,12 +264,15 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 				goto bad;
 		}
 		if (fmode & FWRITE) {
+			int wmode = VWRITE;
+			if (fmode & O_APPEND)
+				wmode |= VAPPEND;
 			if (vp->v_type == VDIR) {
 				error = EISDIR;
 				goto bad;
 			}
 			if ((error = vn_writechk(vp)) != 0 ||
-			    (error = VOP_ACCESS(vp, VWRITE, cred, p)) != 0)
+			    (error = VOP_ACCESS(vp, wmode, cred, p)) != 0)
 				goto bad;
 		}
 	}

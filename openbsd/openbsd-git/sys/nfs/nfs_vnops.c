@@ -533,9 +533,9 @@ nfs_setattr(v)
 	u_quad_t tsize = 0;
 
 	/*
-	 * Setting of flags is not supported.
+	 * Setting of flags and marking of atimes are not supported.
 	 */
-	if (vap->va_flags != VNOVAL)
+	if (vap->va_flags != VNOVAL || (vap->va_vaflags & VA_MARK_ATIME))
 		return (EOPNOTSUPP);
 
 	/*

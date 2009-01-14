@@ -805,6 +805,23 @@ int VOP_ACLCHECK(struct vnode *vp, acl_type_t type, struct acl *aclp,
 	a.a_p = p;
 	return (VCALL(vp, VOFFSET(vop_aclcheck), &a));
 }
+struct vnodeop_desc vop_setlabel_desc = {
+	0,
+	"vop_setlabel",
+	0,
+};
+
+int VOP_SETLABEL(struct vnode *vp, struct label *label, struct ucred *cred, 
+    struct proc *p)
+{
+	struct vop_setlabel_args a;
+	a.a_desc = VDESC(vop_setlabel);
+	a.a_vp = vp;
+	a.a_label = label;
+	a.a_cred = cred;
+	a.a_p = p;
+	return (VCALL(vp, VOFFSET(vop_setlabel), &a));
+}
 
 /* Special cases: */
 struct vnodeop_desc vop_strategy_desc = {
@@ -882,6 +899,7 @@ struct vnodeop_desc *vfs_op_descs[] = {
 	&vop_getacl_desc,
 	&vop_setacl_desc,
 	&vop_aclcheck_desc,
+	&vop_setlabel_desc,
 	NULL
 };
 

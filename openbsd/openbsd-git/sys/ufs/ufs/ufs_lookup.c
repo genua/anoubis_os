@@ -498,9 +498,8 @@ found:
 		 * implements append-only directories.
 		 */
 		if ((DIP(dp, mode) & ISVTX) &&
-		    cred->cr_uid != 0 &&
-		    cred->cr_uid != DIP(dp, uid) &&
-		    DIP(VTOI(tdp), uid) != cred->cr_uid) {
+		    VOP_ACCESS(vdp, VADMIN, cred, cnp->cn_proc) &&
+		    VOP_ACCESS(tdp, VADMIN, cred, cnp->cn_proc)) {
 			vput(tdp);
 			return (EPERM);
 		}

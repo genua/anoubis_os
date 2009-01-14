@@ -1,0 +1,431 @@
+This document holds notes and random thoughts considering the implementation of
+the TrustedBSD MAC framework in OpenBSD.
+
+1. Locking
+
+Once in kernel mode, process preemption does not occur. While interrupts may be
+acknowledged, no other process will be allowed to enter the kernel unless the
+initial process sleeps or returns to userland. FreeBSD has the same design.
+In OpenBSD, due to the biglock, the same situation happens on multiprocessor
+systems. FreeBSD, on the other hand, has fine-grained locking throughout most
+of the kernel. As a consequence, FreeBSD has implemented a lot of object locks
+that simply do not exist in OpenBSD. 
+
+Most of the MAC hooks are reached from a process context, and only a few are
+called from interrupt context. For interrupt context calls or code dealing with
+correlated data structures, proper spl(9) protection should be enforced. As for
+process context calls, the biglock will protect us unless we sleep. Since
+OpenBSD lacks the aforementioned object locks, the best decision then is to
+avoid sleeping if possible.
+
+If for some reason we must sleep, then extra care should be taken with the
+manipulation of kernel objects. Preferably, references should be dropped upon
+sleeping and reacquired afterwards.
+
+Luckily enough, most of the MAC policies do not seem to sleep at all. The same
+applies for the MAC layer, except when allocating resources.  An easy way to
+fix this is to make sure allocations of MAC labels happen simultaneously with
+the allocation of the objects themselves. The TrustedBSD MAC code already does
+that (probably to avoid unnecessary locking).
+
+1.1 The INP* locking macros used in mac_inet.c
+
+The INP* locking macros used in mac_inet.c are meant to protect the contents of
+a 'inpcb' structure. They manipulate a rwlock(9) lock inside the structure. In
+FreeBSD, as in OpenBSD, rwlock(9) locks are held by processes.
+
+In mac_inet.c there are two usages of INP_LOCK_ASSERT() and two usages of
+INP_WLOCK_ASSERT(). The first occurrence of INP_LOCK_ASSERT() is in
+mac_inpcb_create_mbuf(), and the second is commented out.
+
+In mac_inpcb_create_mbuf() we do a mac_mbuf_to_label(), which in turn does a
+m_tag_find(). The m_tag_find() function does not sleep, and so neither does
+mac_mbuf_to_label(). We then proceed to call the 'inpcb_create_mbuf' MAC hook,
+which also cannot sleep. Since we can also be called from interrupt context --
+through ipintr() -- the code was changed to enforce IPL_SOFTNET.
+
+The first occurrence of INP_WLOCK_ASSERT() is in mac_inpcb_sosetlabel(), and
+the second in mac_syncache_create(). In mac_inpcb_sosetlabel() we are always
+in process context. Since the 'inpcb' label can also be accessed from interrupt
+context (see above), the code was changed to be under IPL_SOFTNET. Additionally,
+the 'inpcb_sosetlabel' hook must not sleep.
+
+The mac_syncache_create() function can be called from interrupt context -- also
+through ipintr() -- so the code was changed to be under IPL_SOFTNET. Just like
+the functions previously mentioned, the mac_syncache_create() function may not
+sleep.
+
+1.2 The SOCK_LOCK* locking macros
+
+The SOCK_LOCK* macros are used to protect the contents of the 'sockbuf'
+structure encapsulated in a 'socket' structure. They do so by manipulating a
+mutex(9) lock, which provides mutual exclusion between processes. [Notice that
+this behaviour is different than the one achieved by the use of the homonymous
+API in OpenBSD, which provides mutual exclusion between CPUs.]
+
+1.2.1 SOCK_LOCK_ASSERT()
+
+There are 18 occurences of SOCK_LOCK_ASSERT() in the MAC code.
+
+1.2.1.1 mac_inpcb_sosetlabel()
+
+This function has been already mentioned, and a combination of a non-sleeping
+MAC hook + IPL_SOFNET should be enough to avoid races.
+
+1.2.1.2 mac_socket_newconn()
+
+This function is only called by sonewconn(). The sonewconn() function, in turn,
+is already called in IPL_SOFTNET, so as long as we do not sleep in the
+corresponding MAC hook, we should be safe from races.
+
+1.2.1.3 mac_socket_relabel()
+
+This function is used internally by the MAC code to relabel a socket. It is
+called by mac_socket_label_set() relabel a socket. The mac_socket_label_set()
+function, in turn, can be called from two places: mac_setsockopt_label() and
+sys___mac_set_fd(). In both cases we are in process context, and therefore we
+may not sleep in the 'socket_relabel' hook. Since the socket label can also be
+acessed from interrupt context, the code was changed to enforce IPL_SOFTNET.
+
+1.2.1.4 mac_socketpeer_set_from_mbuf()
+
+This function is called from tcp_input() and syn_cache_get(). Both can be
+called from interrupt context, therefore IPL_SOFTNET protection was added.
+Additionally, the policy MAC hook shall not sleep.
+
+1.2.1.5 mac_socket_create_mbuf()
+
+This hook is not yet implemented.
+
+1.2.1.6 mac_socket_check_accept()
+
+This function is called directly from sys_accept(), which means we are in
+process context. Thus, it is important that the hooks called by this function do
+not sleep. Since the socket label can also be acessed from interrupt context
+(see above), the code was changed to enforce IPL_SOFTNET.
+
+1.2.1.7 mac_socket_check_accepted()
+
+This function is also called from sys_accept(), therefore the same precautions
+were taken. This a local hook, and we must not sleep in it!
+
+1.2.1.8 mac_socket_check_bind()
+
+This function is called by sys_bind(). Thus, the same precautions were taken
+as in mac_socket_check_accepted() and mac_socket_check_accept().
+
+1.2.1.9 mac_socket_check_connect()
+
+This function is called by sys_connect(), therefore the same precautions were
+taken.
+
+1.2.1.10 mac_socket_check_deliver()
+
+This function is only used by the 'netatalk' code, and can be called from
+interrupt context. Thus, IPL_SOFTNET protection was added around it.
+
+1.2.1.11 mac_socket_check_listen()
+
+This function is called by sys_listen(), therefore the same precautions were
+taken as in mac_socket_check_bind().
+
+1.2.1.12 mac_socket_check_poll()
+
+This function is called by soo_poll(), from process context. Thus, the same
+precautions were taken.
+
+1.2.1.13 mac_socket_check_receive()
+
+This function can be called from soo_read() and recvit(). In both cases we are
+in process context. Therefore, the same precautions were taken.
+
+1.2.1.14 mac_socket_check_relabel()
+
+Like mac_socket_relabel(), this function is used internally by the MAC code to
+relabel a socket. See the entry for mac_socket_relabel() for details.
+
+1.2.1.15 mac_socket_check_send()
+
+This function can be called from soo_write() and sendit(). In both cases we are
+in process context. Therefore, the same precautions were taken as in
+mac_socket_check_receive().
+
+1.2.1.16 mac_socket_check_soreceive()
+
+This function is called from soreceive(), which means process context. Thus,
+the same precautions were taken. This a local hook, and we must not sleep in it!
+
+1.2.1.17 mac_socket_check_stat()
+
+This function is called from soo_stat(), which means process context. Thus, the
+same precautions were taken.
+
+1.2.1.18 mac_socket_check_visible()
+
+This hook is not implemented in OpenBSD.
+
+1.2.2 SOCK_LOCK()
+
+There are 4 occurences of SOCK_LOCK() in the MAC code.
+
+1.2.2.1 mac_socket_label_set()
+
+This function has already been discussed above. It uses SOCK_LOCK() to protect
+the call to mac_socket_check_relabel(). Since mac_socket_check_relabel() already
+does the necessary locking itself, no further modifications are needed.
+
+1.2.2.2 mac_getsockopt_label()
+
+This function is called from process context. It uses SOCK_LOCK() to protect
+the call to mac_socket_copy_label(), which was changed to implement the
+necessary IPL_SOFTNET protection.
+
+1.2.2.3 mac_getsockopt_peerlabel()
+
+This function is called from process context. It uses SOCK_LOCK() to protect
+the call to mac_socket_copy_label(), which was changed to implement the
+necessary IPL_SOFTNET protection.
+
+1.2.2.4 sys___mac_get_fd()
+
+This function is called from process context. It uses SOCK_LOCK() to protect
+the call to mac_socket_copy_label(), which was changed to implement the
+necessary IPL_SOFTNET protection.
+
+1.3 The MAC_IFNET* locking macros
+
+The MAC_IFNET* macros are used to protect the contents of a 'ifnet' structure.
+They do so by manipulating a mutex(9) lock, which provides mutual exclusion
+between processes. [Notice that this behaviour is different than the one
+achieved by the use of the homonymous API in OpenBSD, which provides mutual
+exclusion between CPUs.]
+
+1.3.1 MAC_IFNET_LOCK()
+
+There are 8 occurences of MAC_IFNET_LOCK() in the MAC code.
+
+1.3.1.1 mac_netinet_arp_send()
+
+This function can be called from interrupt context. Therefore, appropriate
+IPL_SOFTNET protection was added around it.
+
+1.3.1.2 mac_netinet_igmp_send()
+
+This function can be called from interrupt context. Therefore, appropriate
+IPL_SOFTNET protection was added around it.
+
+1.3.1.3 mac_ifnet_create()
+
+This function is only called from process context. However, it touches
+'ifp->if_label', which can be accessed from interrupt context. Thus, appropriate
+IPL_SOFTNET protection was added around it.
+
+1.3.1.4 mac_ifnet_create_mbuf()
+
+This function can be called from interrupt context. Therefore, appropriate
+IPL_SOFTNET protection was added around it.
+
+1.3.1.5 mac_bpfdesc_check_receive()
+
+This function can be called from interrupt context. Moreover, it can be called
+directly from a NIC driver rx interrupt. Therefore, it needs IPL_NET protection.
+
+1.3.1.6 mac_ifnet_check_transmit()
+
+This function can be called from interrupt context. Therefore, appropriate
+IPL_SOFTNET protection was added around it.
+
+1.3.1.7 mac_ifnet_ioctl_get()
+
+This function is always called from process context. It uses MAC_IFNET_LOCK()
+to protect the call to mac_ifnet_copy_label(). Thus, the mac_ifnet_copy_label()
+function was changed to enforce proper IPL_SOFTNET protection.
+
+1.3.1.8 mac_ifnet_ioctl_set()
+
+Like mac_ifnet_ioctl_get(), this function is always called from process
+context. It uses MAC_IFNET_LOCK() to protect the call to the
+'ifnet_check_relabel' MAC hook. Since 'ifp->if_label' can be accessed from
+interrupt context, the function was changed to enforce IPL_SOFTNET.
+
+1.4 The BPFD_LOCK* locking macros
+
+The BPFD_LOCK* macros are used to protect the contents of a 'bpf_d' structure.
+The 'bpf_d' structure represents a descriptor associated with each open bpf
+file.  The macros manipulate a mutex(9) lock, which provides mutual exclusion
+between processes. [Notice that this behaviour is different than the one
+achieved by the use of the homonymous API in OpenBSD, which provides mutual
+exclusion between CPUs.] Also, notice that the FreeBSD lock doesn't have
+anything to do with 'bd_locked' in 'struct bpf_d'.
+
+1.4.1 BPFD_LOCK_ASSERT()
+
+There are 2 occurences of BPFD_LOCK_ASSERT() in the MAC code.
+
+1.4.1.1 mac_bpfdesc_create_mbuf()
+
+This function is already called in an appropriate interrupt priority level.
+
+1.4.1.2 mac_bpfdesc_check_receive()
+
+This function already has proper spl(9) protection due to its use of
+MAC_IFNET_LOCK().
+
+1.5 The PIPE_LOCK* locking macros
+
+The PIPE* locking macros are used to lock a container structure holding the
+two 'struct pipe' endpoints of a pipe. It is implemented in FreeBSD by the
+mutex(9) API, providing mutual exclusion between processes. For the record,
+this lock is allowed to be recursively acquired in FreeBSD.
+
+In OpenBSD there is no equivalent for this particular lock. The only kind of
+access coordination mechanism in the pipe code seems to be implemented by the
+pipelock()/pipeunlock() functions. These functions implement mutual exclusion
+manually, by rolling in a 'lock' flag and sleeping when necessary. FreeBSD has
+the same mechanism.
+
+1.5.1 PIPE_LOCK()
+
+There are 2 occurences of PIPE_LOCK() in the MAC code.
+
+1.5.1.1 sys___mac_get_fd()
+
+This function is called from process context and makes use of the PIPE_LOCK()
+macro to protect a call to mac_pipe_copy_label(). The mac_pipe_copy_label()
+function, however, does not sleep.
+
+1.5.1.2 sys___mac_set_fd()
+
+This function is called from process context and makes use of the PIPE_LOCK()
+macro to protect a call to mac_pipe_label_set(). The mac_pipe_label_set()
+function, however, does not sleep.
+
+1.5.2 mtx_assert(&pp->pp_mtx, MA_OWNED);
+
+There are 7 occurrences of 'mtx_assert(&pp->pp_mtx, MA_OWNED)' in the MAC code.
+
+1.5.2.1 mac_pipe_check_ioctl()
+
+Here we are in process context. Since the called MAC hook does not sleep,
+further locking is unnecessary.
+
+1.5.2.2 mac_pipe_check_poll()
+
+Here we are in process context. Since the called MAC hook does not sleep,
+further locking is unnecessary.
+
+1.5.2.3 mac_pipe_check_read()
+
+Here we are in process context. Since the called MAC hook does not sleep,
+further locking is unnecessary.
+
+1.5.2.4 mac_pipe_check_relabel()
+
+Here we are in process context. Since the called MAC hook does not sleep,
+further locking is unnecessary.
+
+1.5.2.5 mac_pipe_check_stat()
+
+Here we are in process context. Since the called MAC hook does not sleep,
+further locking is unnecessary.
+
+1.5.2.6 mac_pipe_check_write()
+
+Here we are in process context. Since the called MAC hook does not sleep,
+further locking is unnecessary.
+
+1.5.2.7 mac_pipe_label_set()
+
+Here we are in process context. Since the called MAC hook does not sleep,
+further locking is unnecessary.
+
+1.6 The PROC_LOCK* locking macros
+
+The PROC_LOCK* locking macros are used to protect the contents of a process
+structure. They manipulate a mutex(9) lock in FreeBSD, implementing mutual
+exclusion between processes. There is no equivalent for such lock in OpenBSD.
+
+1.6.1 PROC_LOCK()
+
+There are 2 occurrences of PROC_LOCK() in the MAC code.
+
+1.6.1.1 mac_proc_vm_revoke()
+
+This function is called from process context, and uses PROC_LOCK() to protect
+a call to crhold(). In OpenBSD, crhold() is a macro that does not sleep.
+Therefore, no further locking is necessary.
+
+1.6.1.2 sys___mac_set_proc()
+
+This function is called from process context, and uses PROC_LOCK() to protect
+a call to mac_cred_check_relabel(). The mac_cred_check_relabel() function,
+however, does not sleep. Therefore, no further locking is necessary.
+
+1.6.2 PROC_LOCK_ASSERT()
+
+There are 13 occurrences of PROC_LOCK_ASSERT() in the MAC code.
+
+1.6.2.1 mac_proc_check_debug()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.2 mac_proc_check_sched()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.3 mac_proc_check_signal()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.4 mac_proc_check_setuid()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.5 mac_proc_check_seteuid()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.6 mac_proc_check_setgid()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.7 mac_proc_check_setegid()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.8 mac_proc_check_setgroups()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.9 mac_proc_check_setreuid()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.10 mac_proc_check_setregid()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.11 mac_proc_check_setresuid()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.12 mac_proc_check_setresgid()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.
+
+1.6.2.13 mac_proc_check_wait()
+
+All this function does is to call a MAC hook that does not sleep. Thus, no
+further locking is necessary.

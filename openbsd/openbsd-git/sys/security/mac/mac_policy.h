@@ -99,6 +99,31 @@ struct vattr;
 struct vnode;
 
 /*
+ * Flags for mpc_labeled declaring which objects should have labels allocated
+ * for them by the MAC Framework.
+ */
+#define	MPC_OBJECT_CRED			0x0000000000000001
+#define	MPC_OBJECT_PROC			0x0000000000000002
+#define	MPC_OBJECT_VNODE		0x0000000000000004
+#define	MPC_OBJECT_INPCB		0x0000000000000008
+#define	MPC_OBJECT_SOCKET		0x0000000000000010
+#define	MPC_OBJECT_DEVFS		0x0000000000000020
+#define	MPC_OBJECT_MBUF			0x0000000000000040
+#define	MPC_OBJECT_IPQ			0x0000000000000080
+#define	MPC_OBJECT_IFNET		0x0000000000000100
+#define	MPC_OBJECT_BPFDESC		0x0000000000000200
+#define	MPC_OBJECT_PIPE			0x0000000000000400
+#define	MPC_OBJECT_MOUNT		0x0000000000000800
+#define	MPC_OBJECT_POSIXSEM		0x0000000000001000
+#define	MPC_OBJECT_POSIXSHM		0x0000000000002000
+#define	MPC_OBJECT_SYSVMSG		0x0000000000004000
+#define	MPC_OBJECT_SYSVMSQ		0x0000000000008000
+#define	MPC_OBJECT_SYSVSEM		0x0000000000010000
+#define	MPC_OBJECT_SYSVSHM		0x0000000000020000
+#define	MPC_OBJECT_SYNCACHE		0x0000000000040000
+#define	MPC_OBJECT_IP6Q			0x0000000000080000
+
+/*
  * Policy module operations.
  */
 typedef void	(*mpo_destroy_t)(struct mac_policy_conf *mpc);
@@ -108,7 +133,7 @@ typedef void	(*mpo_init_t)(struct mac_policy_conf *mpc);
  * General policy-directed security system call so that policies may
  * implement new services without reserving explicit system call numbers.
  */
-typedef int	(*mpo_syscall_t)(struct thread *td, int call, void *arg);
+typedef int	(*mpo_syscall_t)(struct proc *p, int call, void *arg);
 
 /*
  * Place-holder function pointers for ABI-compatibility purposes.
@@ -313,7 +338,7 @@ typedef void	(*mpo_posixshm_init_label_t)(struct label *label);
 typedef int	(*mpo_priv_check_t)(struct ucred *cred, int priv);
 typedef int	(*mpo_priv_grant_t)(struct ucred *cred, int priv);
 
-typedef void	(*mpo_proc_associate_nfsd_t)(struct ucred *cred);
+typedef void	(*mpo_cred_associate_nfsd_t)(struct ucred *cred);
 typedef int	(*mpo_proc_check_debug_t)(struct ucred *cred,
 		    struct proc *p);
 typedef int	(*mpo_proc_check_sched_t)(struct ucred *cred,
@@ -341,8 +366,8 @@ typedef int	(*mpo_proc_check_signal_t)(struct ucred *cred,
 		    struct proc *proc, int signum);
 typedef int	(*mpo_proc_check_wait_t)(struct ucred *cred,
 		    struct proc *proc);
-typedef void	(*mpo_proc_create_init_t)(struct ucred *cred);
-typedef void	(*mpo_proc_create_swapper_t)(struct ucred *cred);
+typedef void	(*mpo_cred_create_init_t)(struct ucred *cred);
+typedef void	(*mpo_cred_create_swapper_t)(struct ucred *cred);
 typedef void	(*mpo_proc_destroy_label_t)(struct label *label);
 typedef void	(*mpo_proc_init_label_t)(struct label *label);
 
@@ -764,7 +789,7 @@ struct mac_policy_ops {
 	mpo_priv_check_t			mpo_priv_check;
 	mpo_priv_grant_t			mpo_priv_grant;
 
-	mpo_proc_associate_nfsd_t		mpo_proc_associate_nfsd;
+	mpo_cred_associate_nfsd_t		mpo_cred_associate_nfsd;
 	mpo_proc_check_debug_t			mpo_proc_check_debug;
 	mpo_proc_check_sched_t			mpo_proc_check_sched;
 	mpo_proc_check_setaudit_t		mpo_proc_check_setaudit;
@@ -781,8 +806,8 @@ struct mac_policy_ops {
 	mpo_proc_check_setresgid_t		mpo_proc_check_setresgid;
 	mpo_proc_check_signal_t			mpo_proc_check_signal;
 	mpo_proc_check_wait_t			mpo_proc_check_wait;
-	mpo_proc_create_swapper_t		mpo_proc_create_swapper;
-	mpo_proc_create_init_t			mpo_proc_create_init;
+	mpo_cred_create_swapper_t		mpo_cred_create_swapper;
+	mpo_cred_create_init_t			mpo_cred_create_init;
 	mpo_proc_destroy_label_t		mpo_proc_destroy_label;
 	mpo_proc_init_label_t			mpo_proc_init_label;
 

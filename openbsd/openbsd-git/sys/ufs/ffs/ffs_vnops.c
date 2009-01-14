@@ -109,6 +109,9 @@ struct vnodeopv_entry_desc ffs_vnodeop_entries[] = {
 	{ &vop_listextattr_desc, ffs_ea_list },		/* listextattr */
 	{ &vop_setextattr_desc, ffs_ea_set },		/* setextattr */
 #endif
+#ifdef FFS2_MAC
+	{ &vop_setlabel_desc, vop_stdsetlabel_ea },	/* setlabel */
+#endif
 #ifdef FFS2_ACL
 	{ &vop_getacl_desc, ufs_getacl },
 	{ &vop_setacl_desc, ufs_setacl },

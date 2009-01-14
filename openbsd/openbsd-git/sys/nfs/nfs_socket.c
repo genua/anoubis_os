@@ -1543,7 +1543,7 @@ nfs_getreq(nd, nfsd, has_header)
 		nd->nd_cr.cr_uid = fxdr_unsigned(uid_t, *tl++);
 		nd->nd_cr.cr_gid = fxdr_unsigned(gid_t, *tl++);
 #ifdef MAC
-		mac_proc_associate_nfsd(&nd->nd_cr);
+		mac_cred_associate_nfsd(&nd->nd_cr);
 #endif
 		len = fxdr_unsigned(int, *tl);
 		if (len < 0 || len > RPCAUTH_UNIXGIDS) {

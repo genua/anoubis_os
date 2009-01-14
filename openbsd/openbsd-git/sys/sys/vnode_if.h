@@ -458,6 +458,17 @@ extern struct vnodeop_desc vop_aclcheck_desc;
 int VOP_ACLCHECK(struct vnode *, acl_type_t, struct acl *, struct ucred *, 
     struct proc *);
 
+struct vop_setlabel_args {
+	struct vnodeop_desc *a_desc;
+	struct vnode *a_vp;
+	struct label *a_label;
+	struct ucred *a_cred;
+	struct proc *a_p;
+};
+extern struct vnodeop_desc vop_setlabel_desc;
+int VOP_SETLABEL(struct vnode *, struct label *, struct ucred *, 
+    struct proc *);
+
 /* Special cases: */
 #include <sys/buf.h>
 

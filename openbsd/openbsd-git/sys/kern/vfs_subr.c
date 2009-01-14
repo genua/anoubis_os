@@ -60,6 +60,7 @@
 #include <sys/syscallargs.h>
 #include <sys/pool.h>
 #include <sys/extattr.h>
+#include <sys/priv.h>
 
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
@@ -411,6 +412,10 @@ getnewvnode(enum vtagtype tag, struct mount *mp, int (**vops)(void *),
 #ifdef MAC
 	/* XXX PM: vp is not locked. */
 	mac_vnode_init(vp);
+	if (mp != NULL && (mp->mnt_flag & MNT_MULTILABEL) == 0)
+		mac_vnode_associate_singlelabel(mp, vp);
+	else if (mp == NULL && vp->v_op != dead_vnodeop_p)
+		printf("NULL mp in getnewvnode()\n");
 #endif
 	insmntque(vp, mp);
 	*vpp = vp;
@@ -1557,57 +1562,104 @@ vfs_export_lookup(struct mount *mp, struct netexport *nep, struct mbuf *nam)
 }
 
 /*
- * Do the usual access checking.
- * file_mode, uid and gid are from the vnode in question,
- * while acc_mode and cred are from the VOP_ACCESS parameter list
+ * Common filesystem object access control check routine.  Accepts a
+ * vnode's type, "mode", uid and gid, requested access mode and
+ * credentials. Returns 0 on success, or an errno on failure.
  */
 int
-vaccess(enum vtype type, mode_t file_mode, uid_t uid, gid_t gid,
-    mode_t acc_mode, struct ucred *cred)
+vaccess(enum vtype type, mode_t file_mode, uid_t file_uid, gid_t file_gid,
+    accmode_t accmode, struct ucred *cred)
 {
-	mode_t mask;
+	accmode_t dac_granted;
+	accmode_t priv_granted;
 
-	/* User id 0 always gets read/write access. */
-	if (cred->cr_uid == 0) {
-		/* For VEXEC, at least one of the execute bits must be set. */
-		if ((acc_mode & VEXEC) && type != VDIR &&
-		    (file_mode & (S_IXUSR|S_IXGRP|S_IXOTH)) == 0)
-			return EACCES;
-		return 0;
+	/*
+	 * Look for a normal, non-privileged way to access the file/directory
+	 * as requested.  If it exists, go with that.
+	 */
+
+	dac_granted = 0;
+
+	/* Check the owner. */
+	if (cred->cr_uid == file_uid) {
+		dac_granted |= VADMIN;
+		if (file_mode & S_IXUSR)
+			dac_granted |= VEXEC;
+		if (file_mode & S_IRUSR)
+			dac_granted |= VREAD;
+		if (file_mode & S_IWUSR)
+			dac_granted |= (VWRITE | VAPPEND);
+
+		if ((accmode & dac_granted) == accmode)
+			return (0);
+
+		goto privcheck;
 	}
 
-	mask = 0;
+	/* Otherwise, check the groups (first match) */
+	if (groupmember(file_gid, cred)) {
+		if (file_mode & S_IXGRP)
+			dac_granted |= VEXEC;
+		if (file_mode & S_IRGRP)
+			dac_granted |= VREAD;
+		if (file_mode & S_IWGRP)
+			dac_granted |= (VWRITE | VAPPEND);
 
-	/* Otherwise, check the owner. */
-	if (cred->cr_uid == uid) {
-		if (acc_mode & VEXEC)
-			mask |= S_IXUSR;
-		if (acc_mode & VREAD)
-			mask |= S_IRUSR;
-		if (acc_mode & VWRITE)
-			mask |= S_IWUSR;
-		return (file_mode & mask) == mask ? 0 : EACCES;
-	}
+		if ((accmode & dac_granted) == accmode)
+			return (0);
 
-	/* Otherwise, check the groups. */
-	if (cred->cr_gid == gid || groupmember(gid, cred)) {
-		if (acc_mode & VEXEC)
-			mask |= S_IXGRP;
-		if (acc_mode & VREAD)
-			mask |= S_IRGRP;
-		if (acc_mode & VWRITE)
-			mask |= S_IWGRP;
-		return (file_mode & mask) == mask ? 0 : EACCES;
+		goto privcheck;
 	}
 
 	/* Otherwise, check everyone else. */
-	if (acc_mode & VEXEC)
-		mask |= S_IXOTH;
-	if (acc_mode & VREAD)
-		mask |= S_IROTH;
-	if (acc_mode & VWRITE)
-		mask |= S_IWOTH;
-	return (file_mode & mask) == mask ? 0 : EACCES;
+	if (file_mode & S_IXOTH)
+		dac_granted |= VEXEC;
+	if (file_mode & S_IROTH)
+		dac_granted |= VREAD;
+	if (file_mode & S_IWOTH)
+		dac_granted |= (VWRITE | VAPPEND);
+	if ((accmode & dac_granted) == accmode)
+		return (0);
+
+privcheck:
+	/*
+	 * Build a privilege mask to determine if the set of privileges
+	 * satisfies the requirements when combined with the granted mask
+	 * from above.  For each privilege, if the privilege is required,
+	 * bitwise or the request type onto the priv_granted mask.
+	 */
+	priv_granted = 0;
+
+	if (type == VDIR) {
+		/*
+		 * For directories, use PRIV_VFS_LOOKUP to satisfy VEXEC
+		 * requests, instead of PRIV_VFS_EXEC.
+		 */
+		if ((accmode & VEXEC) && ((dac_granted & VEXEC) == 0) &&
+		    !priv_check_cred(cred, PRIV_VFS_LOOKUP, 0))
+			priv_granted |= VEXEC;
+	} else {
+		if ((accmode & VEXEC) && ((dac_granted & VEXEC) == 0) &&
+		    !priv_check_cred(cred, PRIV_VFS_EXEC, 0))
+			priv_granted |= VEXEC;
+	}
+
+	if ((accmode & VREAD) && ((dac_granted & VREAD) == 0) &&
+	    !priv_check_cred(cred, PRIV_VFS_READ, 0))
+		priv_granted |= VREAD;
+
+	if ((accmode & VWRITE) && ((dac_granted & VWRITE) == 0) &&
+	    !priv_check_cred(cred, PRIV_VFS_WRITE, 0))
+		priv_granted |= (VWRITE | VAPPEND);
+
+	if ((accmode & VADMIN) && ((dac_granted & VADMIN) == 0) &&
+	    !priv_check_cred(cred, PRIV_VFS_ADMIN, 0))
+		priv_granted |= VADMIN;
+
+	if ((accmode & (priv_granted | dac_granted)) == accmode)
+		return (0); /* XXX audit: privilege used */
+
+	return ((accmode & VADMIN) ? EPERM : EACCES);
 }
 
 /*
@@ -2346,3 +2398,20 @@ copy_statfs_info(struct statfs *sbp, const struct mount *mp)
 	    sizeof(struct ufs_args));
 }
 
+/*
+ * Mark for update the access time of the file if the filesystem
+ * supports VA_MARK_ATIME.  This functionality is used by execve
+ * and mmap, so we want to avoid the synchronous I/O implied by
+ * directly setting va_atime for the sake of efficiency.
+ */
+void
+vfs_mark_atime(struct vnode *vp, struct ucred *cred)
+{
+	struct vattr atimeattr;
+
+	if ((vp->v_mount->mnt_flag & (MNT_NOATIME | MNT_RDONLY)) == 0) {
+		VATTR_NULL(&atimeattr);
+		atimeattr.va_vaflags |= VA_MARK_ATIME;
+		(void)VOP_SETATTR(vp, &atimeattr, cred, curproc);
+	}
+}

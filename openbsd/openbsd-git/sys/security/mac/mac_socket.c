@@ -1,8 +1,9 @@
-/*-
+/*
  * Copyright (c) 1999-2002 Robert N. M. Watson
  * Copyright (c) 2001 Ilmar S. Habibulin
  * Copyright (c) 2001-2005 Networks Associates Technology, Inc.
  * Copyright (c) 2005-2006 SPARTA, Inc.
+ * Copyright (c) 2008 Apple Inc.
  * All rights reserved.
  *
  * This software was developed by Robert Watson and Ilmar Habibulin for the
@@ -37,7 +38,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: src/sys/security/mac/mac_socket.c,v 1.11 2007/10/24 19:04:01 rwatson Exp $
+ * $FreeBSD: mac_socket.c,v 1.12 2008/08/23 15:26:36 rwatson Exp $
  */
 
 #include <sys/param.h>
@@ -47,6 +48,7 @@
 #include <sys/mutex.h>
 #include <sys/mac.h>
 #include <sys/mbuf.h>
+#include <sys/sbuf.h>
 #include <sys/systm.h>
 #include <sys/mount.h>
 #include <sys/file.h>
@@ -60,7 +62,6 @@
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
 #include <net/route.h>
-#include <net/if.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -72,11 +73,20 @@
 #include <security/mac/mac_internal.h>
 #include <security/mac/mac_policy.h>
 
-#if 1	/* XXX HJH:  On OpenBSD we do not have locking for sockets.  */
+/* XXX HJH: On OpenBSD we do not have locking for sockets. */
 #define SOCK_LOCK_ASSERT(x)
 #define SOCK_LOCK(x)
 #define SOCK_UNLOCK(x)
-#endif
+
+/* XXX PM: These need to be prototyped here in OpenBSD. */
+struct label   *mac_socketpeer_label_alloc(int flag);
+void		mac_socketpeer_label_free(struct label *label);
+void		mac_socket_relabel(struct ucred *cred, struct socket *so,
+		    struct label *newlabel);
+int		mac_socketpeer_externalize_label(struct label *label,
+		    char *elements, char *outbuf, size_t outbuflen);
+int		mac_socket_check_relabel(struct ucred *cred, struct socket *so,
+		    struct label *newlabel);
 
 /*
  * Currently, sockets hold two labels: the label of the socket itself, and a
@@ -110,7 +120,7 @@ mac_socket_label_alloc(int flag)
 	return (label);
 }
 
-static struct label *
+struct label *
 mac_socketpeer_label_alloc(int flag)
 {
 	struct label *label;
@@ -133,14 +143,19 @@ int
 mac_socket_init(struct socket *so, int flag)
 {
 
-	so->so_label = mac_socket_label_alloc(flag);
-	if (so->so_label == NULL)
-		return (ENOMEM);
-	so->so_peerlabel = mac_socketpeer_label_alloc(flag);
-	if (so->so_peerlabel == NULL) {
-		mac_socket_label_free(so->so_label);
+	if (mac_labeled & MPC_OBJECT_SOCKET) {
+		so->so_label = mac_socket_label_alloc(flag);
+		if (so->so_label == NULL)
+			return (ENOMEM);
+		so->so_peerlabel = mac_socketpeer_label_alloc(flag);
+		if (so->so_peerlabel == NULL) {
+			mac_socket_label_free(so->so_label);
+			so->so_label = NULL;
+			return (ENOMEM);
+		}
+	} else {
 		so->so_label = NULL;
-		return (ENOMEM);
+		so->so_peerlabel = NULL;
 	}
 	return (0);
 }
@@ -153,7 +168,7 @@ mac_socket_label_free(struct label *label)
 	mac_labelpool_free(label);
 }
 
-static void
+void
 mac_socketpeer_label_free(struct label *label)
 {
 
@@ -165,17 +180,21 @@ void
 mac_socket_destroy(struct socket *so)
 {
 
-	mac_socket_label_free(so->so_label);
-	so->so_label = NULL;
-	mac_socketpeer_label_free(so->so_peerlabel);
-	so->so_peerlabel = NULL;
+	if (so->so_label != NULL) {
+		mac_socket_label_free(so->so_label);
+		so->so_label = NULL;
+		mac_socketpeer_label_free(so->so_peerlabel);
+		so->so_peerlabel = NULL;
+	}
 }
 
 void
 mac_socket_copy_label(struct label *src, struct label *dest)
 {
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
+	s = splsoftnet();
 	MAC_PERFORM(socket_copy_label, src, dest);
+	splx(s);
 }
 
 int
@@ -184,26 +203,18 @@ mac_socket_externalize_label(struct label *label, char *elements,
 {
 	int error;
 
-#if 0	/* XXX HSH: not yet */
 	MAC_EXTERNALIZE(socket, label, elements, outbuf, outbuflen);
-#else
-	error = EINVAL;
-#endif
 
 	return (error);
 }
 
-static int
+int
 mac_socketpeer_externalize_label(struct label *label, char *elements,
     char *outbuf, size_t outbuflen)
 {
 	int error;
 
-#if 0	/* XXX HSH: not yet */
 	MAC_EXTERNALIZE(socketpeer, label, elements, outbuf, outbuflen);
-#else
-	error = EINVAL;
-#endif
 
 	return (error);
 }
@@ -213,11 +224,7 @@ mac_socket_internalize_label(struct label *label, char *string)
 {
 	int error;
 
-#if 0	/* XXX HSH: not yet */
 	MAC_INTERNALIZE(socket, label, string);
-#else
-	error = EINVAL;
-#endif
 
 	return (error);
 }
@@ -229,6 +236,7 @@ mac_socket_create(struct ucred *cred, struct socket *so)
 	MAC_PERFORM(socket_create, cred, so, so->so_label);
 }
 
+/* XXX PM: Already called at IPL_SOFTNET. */
 void
 mac_socket_newconn(struct socket *oldso, struct socket *newso)
 {
@@ -239,29 +247,30 @@ mac_socket_newconn(struct socket *oldso, struct socket *newso)
 	    newso->so_label);
 }
 
-static void
+void
 mac_socket_relabel(struct ucred *cred, struct socket *so,
     struct label *newlabel)
 {
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_PERFORM(socket_relabel, cred, so, so->so_label, newlabel);
+	splx(s);
 }
 
 void
 mac_socketpeer_set_from_mbuf(struct mbuf *m, struct socket *so)
 {
-#if 0	/* XXX HSH: not yet */
 	struct label *label;
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	label = mac_mbuf_to_label(m);
 
 	MAC_PERFORM(socketpeer_set_from_mbuf, m, label, so,
 	    so->so_peerlabel);
-#endif	/* 0 */
+	splx(s);
 }
 
 void
@@ -277,10 +286,10 @@ mac_socketpeer_set_from_socket(struct socket *oldso, struct socket *newso)
 	    newso, newso->so_peerlabel);
 }
 
+/* XXX PM: Hook not yet implemented. */
 void
 mac_socket_create_mbuf(struct socket *so, struct mbuf *m)
 {
-#if 0	/* XXX HSH: not yet */
 	struct label *label;
 
 	SOCK_LOCK_ASSERT(so);
@@ -288,31 +297,31 @@ mac_socket_create_mbuf(struct socket *so, struct mbuf *m)
 	label = mac_mbuf_to_label(m);
 
 	MAC_PERFORM(socket_create_mbuf, so, so->so_label, m, label);
-#endif	/* 0 */
 }
 
 int
 mac_socket_check_accept(struct ucred *cred, struct socket *so)
 {
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_CHECK(socket_check_accept, cred, so, so->so_label);
-
+	splx(s);
 	return (error);
 }
 
+/* XXX PM: Local hook. */
 int
 mac_socket_check_accepted(struct ucred *cred, struct socket *so,
     struct mbuf *name)
 {
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_CHECK(socket_check_accepted, cred, so, so->so_label, name);
-
+	splx(s);
 	return (error);
 }
 
@@ -321,11 +330,11 @@ mac_socket_check_bind(struct ucred *ucred, struct socket *so,
     const struct sockaddr *sa)
 {
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_CHECK(socket_check_bind, ucred, so, so->so_label, sa);
-
+	splx(s);
 	return (error);
 }
 
@@ -334,11 +343,11 @@ mac_socket_check_connect(struct ucred *cred, struct socket *so,
     const struct sockaddr *sa)
 {
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_CHECK(socket_check_connect, cred, so, so->so_label, sa);
-
+	splx(s);
 	return (error);
 }
 
@@ -355,21 +364,15 @@ mac_socket_check_create(struct ucred *cred, int domain, int type, int proto)
 int
 mac_socket_check_deliver(struct socket *so, struct mbuf *m)
 {
-#if 0	/* XXX HSH: not yet */
 	struct label *label;
-#endif
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
-#if 0	/* XXX HSH: not yet */
+	s = splsoftnet();
 	label = mac_mbuf_to_label(m);
 
 	MAC_CHECK(socket_check_deliver, so, so->so_label, m, label);
-#else
-	error = EINVAL;
-#endif	/* 0 */
-
+	splx(s);
 	return (error);
 }
 
@@ -377,11 +380,11 @@ int
 mac_socket_check_listen(struct ucred *cred, struct socket *so)
 {
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_CHECK(socket_check_listen, cred, so, so->so_label);
-
+	splx(s);
 	return (error);
 }
 
@@ -389,11 +392,11 @@ int
 mac_socket_check_poll(struct ucred *cred, struct socket *so)
 {
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_CHECK(socket_check_poll, cred, so, so->so_label);
-
+	splx(s);
 	return (error);
 }
 
@@ -401,36 +404,24 @@ int
 mac_socket_check_receive(struct ucred *cred, struct socket *so)
 {
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_CHECK(socket_check_receive, cred, so, so->so_label);
-
+	splx(s);
 	return (error);
 }
 
 int
-mac_socket_check_soreceive(struct socket *so, struct mbuf *m)
-{
-	int error;
-
-	SOCK_LOCK_ASSERT(so);
-
-	MAC_CHECK(socket_check_soreceive, so, so->so_label, m);
-
-	return (error);
-}
-
-static int
 mac_socket_check_relabel(struct ucred *cred, struct socket *so,
     struct label *newlabel)
 {
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_CHECK(socket_check_relabel, cred, so, so->so_label, newlabel);
-
+	splx(s);
 	return (error);
 }
 
@@ -438,11 +429,24 @@ int
 mac_socket_check_send(struct ucred *cred, struct socket *so)
 {
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_CHECK(socket_check_send, cred, so, so->so_label);
+	splx(s);
+	return (error);
+}
 
+/* XXX PM: Local hook. */
+int
+mac_socket_check_soreceive(struct socket *so, struct mbuf *m)
+{
+	int error;
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
+	SOCK_LOCK_ASSERT(so);
+	s = splsoftnet();
+	MAC_CHECK(socket_check_soreceive, so, so->so_label, m);
+	splx(s);
 	return (error);
 }
 
@@ -450,19 +454,14 @@ int
 mac_socket_check_stat(struct ucred *cred, struct socket *so)
 {
 	int error;
-
+	int s;	/* XXX PM: Enforce IPL_SOFTNET for extra paranoia. */
 	SOCK_LOCK_ASSERT(so);
-
+	s = splsoftnet();
 	MAC_CHECK(socket_check_stat, cred, so, so->so_label);
-
+	splx(s);
 	return (error);
 }
 
-/*
- * XXX HSH:  We won't get this one.  We do not provide FreeBSD cansee-API,
- * XXX HSH:  which uses this hook.
- */
-#if 0
 int
 mac_socket_check_visible(struct ucred *cred, struct socket *so)
 {
@@ -474,7 +473,6 @@ mac_socket_check_visible(struct ucred *cred, struct socket *so)
 
 	return (error);
 }
-#endif
 
 int
 mac_socket_label_set(struct ucred *cred, struct socket *so,
@@ -506,7 +504,7 @@ mac_socket_label_set(struct ucred *cred, struct socket *so,
 	 * from the socket, notify it of the label change while holding the
 	 * socket lock.
 	 */
-#if 0	/* XXX HSH: not yet */
+#if 0 /* XXX HSH: not yet */
 	if (so->so_proto->pr_usrreqs->pru_sosetlabel != NULL)
 		(so->so_proto->pr_usrreqs->pru_sosetlabel)(so);
 #endif
@@ -520,6 +518,9 @@ mac_setsockopt_label(struct ucred *cred, struct socket *so, struct mac *mac)
 	struct label *intlabel;
 	char *buffer;
 	int error;
+
+	if (!(mac_labeled & MPC_OBJECT_SOCKET))
+		return (EINVAL);
 
 	error = mac_check_structmac_consistent(mac);
 	if (error)
@@ -550,6 +551,9 @@ mac_getsockopt_label(struct ucred *cred, struct socket *so, struct mac *mac)
 	char *buffer, *elements;
 	struct label *intlabel;
 	int error;
+
+	if (!(mac_labeled & MPC_OBJECT_SOCKET))
+		return (EINVAL);
 
 	error = mac_check_structmac_consistent(mac);
 	if (error)
@@ -586,6 +590,9 @@ mac_getsockopt_peerlabel(struct ucred *cred, struct socket *so,
 	char *elements, *buffer;
 	struct label *intlabel;
 	int error;
+
+	if (!(mac_labeled & MPC_OBJECT_SOCKET))
+		return (EINVAL);
 
 	error = mac_check_structmac_consistent(mac);
 	if (error)

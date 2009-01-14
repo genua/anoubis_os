@@ -172,6 +172,8 @@ struct vattr {
  */
 #define	VA_UTIMES_NULL	0x01		/* utimes argument was NULL */
 #define VA_EXCLUSIVE    0x02		/* exclusive create request */
+#define VA_MARK_ATIME	0x04		/* setting atime for execve/mmap */
+
 /*
  * Flags for ioflag.
  */
@@ -194,6 +196,8 @@ struct vattr {
 #define	VSGID	002000		/* set group id on execution */
 #define	VSUID	004000		/* set user id on execution */
 #define	VADMIN	010000		/* permission to administer */
+#define	VSTAT	020000		/* permission to retrieve attrs */
+#define	VAPPEND	040000		/* permission to write/append */
 
 /*
  * Token indicating no attribute value yet assigned.
@@ -355,10 +359,10 @@ int	cdevvp(dev_t, struct vnode **);
 struct vnode *checkalias(struct vnode *, dev_t, struct mount *);
 int	getnewvnode(enum vtagtype, struct mount *, int (**vops)(void *),
 	    struct vnode **);
-int	vaccess(enum vtype, mode_t, uid_t, gid_t, mode_t, struct ucred *);
+int	vaccess(enum vtype, mode_t, uid_t, gid_t, accmode_t, struct ucred *);
 #ifdef ACL
-int	vaccess_acl_posix1e(uid_t, gid_t, struct acl *, mode_t, struct ucred *,
-	    int *);
+int	vaccess_acl_posix1e(enum vtype, uid_t, gid_t, struct acl *, accmode_t,
+	    struct ucred *);
 #endif
 void	vattr_null(struct vattr *);
 void	vdevgone(int, int, int, enum vtype);
@@ -380,6 +384,7 @@ int	vrele(struct vnode *);
 void	vref(struct vnode *);
 void	vprint(char *, struct vnode *);
 void	copy_statfs_info(struct statfs *, const struct mount *);
+void	vfs_mark_atime(struct vnode *, struct ucred *);
 
 /* vfs_getcwd.c */
 int vfs_getcwd_scandir(struct vnode **, struct vnode **, char **, char *,
@@ -435,5 +440,6 @@ void	vn_syncer_add_to_worklist(struct vnode *, int);
 int	vn_isdisk(struct vnode *, int *);
 int	softdep_fsync(struct vnode *);
 int 	getvnode(struct filedesc *, int, struct file **);
+int	vop_stdsetlabel_ea(void *);
 
 #endif /* _KERNEL */

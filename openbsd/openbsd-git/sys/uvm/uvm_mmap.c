@@ -593,6 +593,8 @@ sys_mmap(p, v, retval)
 			maxprot |= VM_PROT_WRITE;
 		}
 
+		vfs_mark_atime(vp, p->p_ucred);
+
 		/*
 		 * set handle to vnode
 		 */

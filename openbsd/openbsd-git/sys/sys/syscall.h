@@ -1,4 +1,4 @@
-/*	\$OpenBSD\$	*/
+/*	$OpenBSD$	*/
 
 /*
  * System call numbers.
@@ -773,6 +773,36 @@
 /* syscall: "__acl_aclcheck_link" ret: "int" args: "const char *" "acl_type_t" "struct acl *" */
 #define	SYS___acl_aclcheck_link	334
 
-#define	SYS_MAXSYSCALL	335
+/* syscall: "__mac_get_pid" ret: "int" args: "pid_t" "struct mac *" */
+#define	SYS___mac_get_pid	335
 
-/* NUMBER OF SYSCALLS: 335 */
+/* syscall: "__mac_get_proc" ret: "int" args: "struct mac *" */
+#define	SYS___mac_get_proc	336
+
+/* syscall: "__mac_set_proc" ret: "int" args: "struct mac *" */
+#define	SYS___mac_set_proc	337
+
+/* syscall: "__mac_get_fd" ret: "int" args: "int" "struct mac *" */
+#define	SYS___mac_get_fd	338
+
+/* syscall: "__mac_get_file" ret: "int" args: "const char *" "struct mac *" */
+#define	SYS___mac_get_file	339
+
+/* syscall: "__mac_get_link" ret: "int" args: "const char *" "struct mac *" */
+#define	SYS___mac_get_link	340
+
+/* syscall: "__mac_set_fd" ret: "int" args: "int" "struct mac *" */
+#define	SYS___mac_set_fd	341
+
+/* syscall: "__mac_set_file" ret: "int" args: "const char *" "struct mac *" */
+#define	SYS___mac_set_file	342
+
+/* syscall: "__mac_set_link" ret: "int" args: "const char *" "struct mac *" */
+#define	SYS___mac_set_link	343
+
+/* syscall: "mac_syscall" ret: "int" args: "const char *" "int" "void *" */
+#define	SYS_mac_syscall	344
+
+#define	SYS_MAXSYSCALL	345
+
+/* NUMBER OF SYSCALLS: 344 */
