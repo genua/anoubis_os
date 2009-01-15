@@ -78,6 +78,11 @@ ASM+=	extattr_set_fd.o extattr_get_fd.o extattr_delete_fd.o \
 	extattrctl.o extattr_set_file.o extattr_get_file.o \
 	extattr_delete_file.o
 
+# MAC system calls.
+ASM+=	__mac_get_pid.o __mac_get_proc.o __mac_set_proc.o __mac_get_fd.o \
+	__mac_get_file.o __mac_get_link.o __mac_set_fd.o __mac_set_file.o \
+	__mac_set_link.o mac_syscall.o
+
 GASM=	${ASM:.o=.go}
 PASM=	${ASM:.o=.po}
 SASM=	${ASM:.o=.so}
