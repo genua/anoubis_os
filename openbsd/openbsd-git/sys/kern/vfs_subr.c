@@ -414,8 +414,11 @@ getnewvnode(enum vtagtype tag, struct mount *mp, int (**vops)(void *),
 	mac_vnode_init(vp);
 	if (mp != NULL && (mp->mnt_flag & MNT_MULTILABEL) == 0)
 		mac_vnode_associate_singlelabel(mp, vp);
-	else if (mp == NULL && vp->v_op != dead_vnodeop_p)
-		printf("NULL mp in getnewvnode()\n");
+	/*
+	 * XXX PM: If we are coming form getdevvp(), 'mp' being NULL is normal.
+	 */
+/*	else if (mp == NULL && vp->v_op != dead_vnodeop_p)	*/
+/*		printf("NULL mp in getnewvnode()\n");		*/
 #endif
 	insmntque(vp, mp);
 	*vpp = vp;
