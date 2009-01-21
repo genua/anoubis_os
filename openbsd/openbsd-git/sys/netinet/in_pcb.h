@@ -282,6 +282,7 @@ extern struct sockaddr_in *in_selectsrc(struct sockaddr_in *,
 	struct route *, int, struct ip_moptions *, int *);
 struct rtentry *
 	in_pcbrtentry(struct inpcb *);
+void	in_pcbsosetlabel(struct socket *);
 
 /* INET6 stuff */
 int	in6_pcbnotify(struct inpcbtable *, struct sockaddr *,

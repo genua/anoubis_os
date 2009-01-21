@@ -1163,3 +1163,28 @@ in6_pcblookup_listen(struct inpcbtable *table, struct in6_addr *laddr,
 	return (inp);
 }
 #endif /* INET6 */
+
+/*
+ * A set label operation has occurred at the socket layer, propagate the
+ * label change into the in_pcb for the socket.
+ */
+void
+in_pcbsosetlabel(struct socket *so)
+{
+#ifdef MAC
+	struct inpcb *inp;
+
+	inp = sotoinpcb(so);
+	KASSERT(inp != NULL);
+
+#if 0
+	INP_WLOCK(inp);
+	SOCK_LOCK(so);
+#endif
+	mac_inpcb_sosetlabel(so, inp);
+#if 0
+	SOCK_UNLOCK(so);
+	INP_WUNLOCK(inp);
+#endif
+#endif /* MAC */
+}

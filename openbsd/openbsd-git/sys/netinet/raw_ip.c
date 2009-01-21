@@ -522,7 +522,11 @@ rip_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	case PRU_PEERADDR:
 		in_setpeeraddr(inp, nam);
 		break;
-
+#ifdef MAC
+	case PRU_SOSETLABEL:
+		in_pcbsosetlabel(so);
+		break;
+#endif
 	default:
 		panic("rip_usrreq");
 	}

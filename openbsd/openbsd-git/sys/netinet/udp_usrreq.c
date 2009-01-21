@@ -1225,7 +1225,11 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr,
 	case PRU_RCVD:
 	case PRU_RCVOOB:
 		return (EOPNOTSUPP);	/* do not free mbuf's */
-
+#ifdef MAC
+	case PRU_SOSETLABEL:
+		in_pcbsosetlabel(so);
+		break;
+#endif
 	default:
 		panic("udp_usrreq");
 	}

@@ -47,6 +47,7 @@
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
 #include <sys/pool.h>
+#include <sys/mac.h>
 
 #ifdef MAC
 #include <security/mac/mac_framework.h>
@@ -1125,6 +1126,18 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 			break;
 		    }
 
+		case SO_LABEL:
+#ifdef MAC
+			if (m == NULL || m->m_len < sizeof(struct mac)) {
+				error = EINVAL;
+				goto bad;
+			}
+			error = mac_setsockopt_label(curproc->p_ucred, so,
+			    mtod(m, struct mac *));	/* XXX */
+#else
+			error = EOPNOTSUPP;
+#endif
+			break;
 		default:
 			error = ENOPROTOOPT;
 			break;
@@ -1145,6 +1158,9 @@ int
 sogetopt(struct socket *so, int level, int optname, struct mbuf **mp)
 {
 	struct mbuf *m;
+#ifdef MAC
+	int error;
+#endif
 
 	if (level != SOL_SOCKET) {
 		if (so->so_proto && so->so_proto->pr_ctloutput) {
@@ -1216,7 +1232,34 @@ sogetopt(struct socket *so, int level, int optname, struct mbuf **mp)
 			    (val % hz) * tick;
 			break;
 		    }
-
+		case SO_LABEL:
+#ifdef MAC
+			m->m_len = sizeof(struct mac);
+			error = mac_getsockopt_label(curproc->p_ucred, so,
+			    mtod(m, struct mac *));	/* XXX */
+			if (error) {
+				m_free(m);
+				return (error);
+			}
+			break;
+#else
+			m_free(m);
+			return (EOPNOTSUPP);
+#endif
+		case SO_PEERLABEL:
+#ifdef MAC
+			m->m_len = sizeof(struct mac);
+			error = mac_getsockopt_peerlabel(curproc->p_ucred, so,
+			    mtod(m, struct mac *));	/* XXX */
+			if (error) {
+				m_free(m);
+				return (error);
+			}
+			break;
+#else
+			m_free(m);
+			return (EOPNOTSUPP);
+#endif
 		default:
 			(void)m_free(m);
 			return (ENOPROTOOPT);

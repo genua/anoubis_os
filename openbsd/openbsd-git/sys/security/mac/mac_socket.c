@@ -504,12 +504,13 @@ mac_socket_label_set(struct ucred *cred, struct socket *so,
 	 * from the socket, notify it of the label change while holding the
 	 * socket lock.
 	 */
-#if 0 /* XXX HSH: not yet */
+#if 0 /* XXX PM: Handled differently in OpenBSD. */
 	if (so->so_proto->pr_usrreqs->pru_sosetlabel != NULL)
 		(so->so_proto->pr_usrreqs->pru_sosetlabel)(so);
+#else
+	return ((*so->so_proto->pr_usrreq)(so, PRU_SOSETLABEL, NULL, NULL,
+	    NULL, NULL));
 #endif
-
-	return (0);
 }
 
 int
