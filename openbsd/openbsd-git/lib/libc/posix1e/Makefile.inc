@@ -55,8 +55,7 @@ MAN+=	acl.3				\
 	mac_get.3			\
 	mac_prepare.3			\
 	mac_set.3			\
-	mac_text.3			\
-	posix1e.3
+	mac_text.3
 
 MLINKS+=acl_delete.3 acl_delete_def_file.3	\
 	acl_delete.3 acl_delete_file_np.3	\
