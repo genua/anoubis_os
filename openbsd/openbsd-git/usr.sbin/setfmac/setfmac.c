@@ -153,7 +153,7 @@ main(int argc, char **argv)
 		case FTS_F:		/* do regular */
 		case FTS_SL:		/* do symlink */
 		case FTS_SLNONE:	/* do symlink */
-#if 0 /* XXX PM: No whiteout support in OpenBSD.
+#if 0 /* XXX PM: No whiteout support in OpenBSD. */
 		case FTS_W:		/* do whiteout */
 #endif
 			if (apply_specs(specs, ftsent, hflag, vflag)) {

@@ -1,4 +1,4 @@
-/*-
+/*
  * Copyright (c) 2002-2003 Networks Associates Technology, Inc.
  * Copyright (c) 2006 SPARTA, Inc.
  * Copyright (c) 2007 Robert N. M. Watson
@@ -65,7 +65,7 @@
 #define mac_assert_vnode_locked(VP) \
     assert((((VP)->v_flag & VLOCKSWORK) == 0) || VOP_ISLOCKED((VP)))
 
-#ifdef notyet
+#if 0 /* XXX PM: We don't have the kenv(2) system call in OpenBSD. */
 int
 mac_kenv_check_dump(struct ucred *cred)
 {
@@ -105,7 +105,9 @@ mac_kenv_check_unset(struct ucred *cred, char *name)
 
 	return (error);
 }
+#endif
 
+#if 0 /* XXX PM: We won't support kernel modules. */
 int
 mac_kld_check_load(struct ucred *cred, struct vnode *vp)
 {
@@ -127,7 +129,7 @@ mac_kld_check_stat(struct ucred *cred)
 
 	return (error);
 }
-#endif /* notyet */
+#endif
 
 int
 mac_system_check_acct(struct ucred *cred, struct vnode *vp)
@@ -154,13 +156,12 @@ mac_system_check_reboot(struct ucred *cred, int howto)
 	return (error);
 }
 
-#ifdef notyet
 int
 mac_system_check_swapon(struct ucred *cred, struct vnode *vp)
 {
 	int error;
 
-	ASSERT_VOP_LOCKED(vp, "mac_system_check_swapon");
+	mac_assert_vnode_locked(vp);
 
 	MAC_CHECK(system_check_swapon, cred, vp, vp->v_label);
 	return (error);
@@ -171,15 +172,20 @@ mac_system_check_swapoff(struct ucred *cred, struct vnode *vp)
 {
 	int error;
 
-	ASSERT_VOP_LOCKED(vp, "mac_system_check_swapoff");
+	mac_assert_vnode_locked(vp);
 
 	MAC_CHECK(system_check_swapoff, cred, vp, vp->v_label);
 	return (error);
 }
 
 int
+#if 0 /* XXX PM: Defined differently in OpenBSD. */
 mac_system_check_sysctl(struct ucred *cred, struct sysctl_oid *oidp,
     void *arg1, int arg2, struct sysctl_req *req)
+#else
+mac_system_check_sysctl(struct ucred *cred, int *name,
+    struct sys___sysctl_args *uap, size_t oldlen)
+#endif
 {
 	int error;
 
@@ -187,8 +193,11 @@ mac_system_check_sysctl(struct ucred *cred, struct sysctl_oid *oidp,
 	 * XXXMAC: We would very much like to assert the SYSCTL_LOCK here,
 	 * but since it's not exported from kern_sysctl.c, we can't.
 	 */
+#if 0 /* XXX PM: Defined differently in OpenBSD. */
 	MAC_CHECK(system_check_sysctl, cred, oidp, arg1, arg2, req);
+#else
+	MAC_CHECK(system_check_sysctl, cred, name, uap, oldlen);
+#endif
 
 	return (error);
 }
-#endif /* notyet */

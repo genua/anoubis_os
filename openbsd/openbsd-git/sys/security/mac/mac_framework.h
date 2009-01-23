@@ -77,8 +77,6 @@ struct shmfd;
 struct shmid_kernel;
 struct sockaddr;
 struct socket;
-struct sysctl_oid;
-struct sysctl_req;
 struct pipepair;
 struct timespec;
 struct ucred;
@@ -86,6 +84,7 @@ struct uio;
 struct vattr;
 struct vnode;
 struct vop_setlabel_args;
+struct sys___sysctl_args;
 
 #include <sys/acl.h>			/* XXX acl_type_t */
 #include <sys/types.h>			/* accmode_t */
@@ -320,8 +319,13 @@ int	mac_system_check_auditon(struct ucred *cred, int cmd);
 int	mac_system_check_reboot(struct ucred *cred, int howto);
 int	mac_system_check_swapon(struct ucred *cred, struct vnode *vp);
 int	mac_system_check_swapoff(struct ucred *cred, struct vnode *vp);
+#if 0 /* XXX PM: Defined differently in OpenBSD. */
 int	mac_system_check_sysctl(struct ucred *cred, struct sysctl_oid *oidp,
 	    void *arg1, int arg2, struct sysctl_req *req);
+#else
+int	mac_system_check_sysctl(struct ucred *cred, int *name,
+	    struct sys___sysctl_args *uap, size_t oldlen);
+#endif
 
 void	mac_sysvmsg_cleanup(struct msg *msgptr);
 void	mac_sysvmsg_create(struct ucred *cred, struct msqid_kernel *msqkptr,

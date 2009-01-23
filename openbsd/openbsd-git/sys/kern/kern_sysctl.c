@@ -210,8 +210,14 @@ sys___sysctl(struct proc *p, void *v, register_t *retval)
 		}
 		savelen = oldlen;
 	}
-	error = (*fn)(&name[1], SCARG(uap, namelen) - 1, SCARG(uap, old),
-	    &oldlen, SCARG(uap, new), SCARG(uap, newlen), p);
+
+#ifdef MAC
+	error = mac_system_check_sysctl(p->p_ucred, name, uap, oldlen);
+	if (!error)
+#endif
+		error = (*fn)(&name[1], SCARG(uap, namelen) - 1,
+		    SCARG(uap, old), &oldlen, SCARG(uap, new),
+		    SCARG(uap, newlen), p);
 	if (SCARG(uap, old) != NULL) {
 		if (dolock)
 			uvm_vsunlock(p, SCARG(uap, old), savelen);

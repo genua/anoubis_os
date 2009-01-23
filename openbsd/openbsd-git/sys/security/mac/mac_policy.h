@@ -90,13 +90,12 @@ struct shmfd;
 struct shmid_kernel;
 struct sockaddr;
 struct socket;
-struct sysctl_oid;
-struct sysctl_req;
 struct thread;
 struct ucred;
 struct uio;
 struct vattr;
 struct vnode;
+struct sys___sysctl_args;
 
 /*
  * Flags for mpc_labeled declaring which objects should have labels allocated
@@ -454,10 +453,14 @@ typedef int	(*mpo_system_check_swapon_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel);
 typedef int	(*mpo_system_check_swapoff_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel);
+#if 0 /* XXX PM: Defined differently in OpenBSD. */
 typedef int	(*mpo_system_check_sysctl_t)(struct ucred *cred,
 		    struct sysctl_oid *oidp, void *arg1, int arg2,
 		    struct sysctl_req *req);
-
+#else
+typedef int	(*mpo_system_check_sysctl_t)(struct ucred *cred,
+		    int *name, struct sys___sysctl_args *uap, size_t oldlen);
+#endif
 typedef void	(*mpo_sysvmsg_cleanup_t)(struct label *msglabel);
 typedef void	(*mpo_sysvmsg_create_t)(struct ucred *cred,
 		    struct msqid_kernel *msqkptr, struct label *msqlabel,
