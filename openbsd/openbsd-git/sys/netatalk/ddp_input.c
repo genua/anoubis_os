@@ -368,13 +368,6 @@ ddp_input( m, ifp, elh, phase )
 	return;
     }
 
-#ifdef MAC
-	if (mac_socket_check_deliver(ddp->ddp_socket, m) != 0) {
-		m_freem(m);
-		return;
-	}
-#endif
-
     if ( sbappendaddr( &ddp->ddp_socket->so_rcv, (struct sockaddr *)&from,
 	    m, (struct mbuf *)0 ) == 0 ) {
 	ddpstat.ddps_nosockspace++;

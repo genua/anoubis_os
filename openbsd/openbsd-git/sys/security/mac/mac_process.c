@@ -363,7 +363,8 @@ mac_proc_vm_revoke_recurse(struct proc *p, struct ucred *cred,
 		 * the MAC system, so only things with backing by a normal
 		 * object (read: vnodes) are checked.
 		 */
-/* XXX PM: In OpenBSD, an object being backed by a vnode is identified by
+/*
+ * XXX PM: In OpenBSD, an object being backed by a vnode is identified by
  * inspecting the 'pgops' field of 'struct uvm_object'. The macro
  * UVM_OBJ_IS_VNODE() does that.
  */

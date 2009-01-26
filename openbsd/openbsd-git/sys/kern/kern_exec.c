@@ -278,11 +278,11 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 		syscallarg(char *const *) argp;
 		syscallarg(char *const *) envp;
 	} */ *uap = v;
-	int error;
+	int credential_changing, error;
 	struct exec_package pack;
 	struct nameidata nid;
 	struct vattr attr;
-	struct ucred *cred = p->p_ucred;
+	struct ucred *oldcred, *cred = p->p_ucred;
 	char *argp = NULL;
 	char * const *cpp, *dp, *sp;
 	long argc, envc;
@@ -299,6 +299,9 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 	int wassugid =
 	    ISSET(p->p_flag, P_SUGID) || ISSET(p->p_flag, P_SUGIDEXEC);
 	size_t pathbuflen;
+#endif
+#ifdef MAC
+	int will_transition;
 #endif
 	char *pathbuf = NULL;
 
@@ -344,6 +347,7 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 	pack.ep_flags = 0;
 #ifdef MAC
 	pack.ep_label = NULL;
+	pack.ep_interlabel = NULL;
 #endif
 
 #ifdef MAC
@@ -539,7 +543,19 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 	 * deal with set[ug]id.
 	 * MNT_NOEXEC has already been used to disable s[ug]id.
 	 */
-	if ((attr.va_mode & (VSUID | VSGID)) && proc_cansugid(p)) {
+	oldcred = p->p_ucred;
+	credential_changing = 0;
+	credential_changing |= (attr.va_mode & VSUID) && oldcred->cr_uid !=
+	    attr.va_uid;
+	credential_changing |= (attr.va_mode & VSGID) && oldcred->cr_gid !=
+	    attr.va_gid;
+#ifdef MAC
+	will_transition = mac_vnode_execve_will_transition(oldcred, pack.ep_vp,
+	    pack.ep_interlabel, &pack);
+	credential_changing |= will_transition;
+#endif
+
+	if (credential_changing && proc_cansugid(p)) {
 		int i;
 
 		atomic_setbits_int(&p->p_flag, P_SUGID|P_SUGIDEXEC);
@@ -559,6 +575,13 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 			p->p_ucred->cr_uid = attr.va_uid;
 		if (attr.va_mode & VSGID)
 			p->p_ucred->cr_gid = attr.va_gid;
+
+#ifdef MAC
+		if (will_transition) {
+			mac_vnode_execve_transition(oldcred, p->p_ucred,
+			    pack.ep_vp, pack.ep_interlabel, &pack);
+		}
+#endif
 
 		/*
 		 * For set[ug]id processes, a few caveats apply to
@@ -703,6 +726,7 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 
 #ifdef MAC
 	mac_execve_exit(&pack);
+	mac_execve_interpreter_exit(pack.ep_interlabel);
 #endif
 
 #ifdef KTRACE

@@ -90,7 +90,7 @@ struct label {
 extern struct mac_policy_list_head	mac_policy_list;
 extern struct mac_policy_list_head	mac_static_policy_list;
 extern uint64_t				mac_labeled;
-#if 0 /* XXX PM: Disabled for now. */
+#if 0 /* XXX PM: Not necessary in OpenBSD. */
 extern struct mtx			mac_ifnet_mtx;
 #endif
 
@@ -115,7 +115,7 @@ void	mac_destroy_label(struct label *label);
 int	mac_check_structmac_consistent(struct mac *mac);
 int	mac_allocate_slot(void);
 
-#if 0 /* XXX PM: Disabled for now. */
+#if 0 /* XXX PM: Not necessary in OpenBSD. */
 #define MAC_IFNET_LOCK(ifp)	mtx_lock(&mac_ifnet_mtx)
 #define MAC_IFNET_UNLOCK(ifp)	mtx_unlock(&mac_ifnet_mtx)
 #else

@@ -45,6 +45,10 @@
 
 #include <sys/pipe.h>
 
+#ifdef MAC
+#include <security/mac/mac_framework.h>
+#endif
+
 /*
  * interfaces to the outside world
  */
@@ -105,23 +109,53 @@ sys_opipe(struct proc *p, void *v, register_t *retval)
 {
 	struct filedesc *fdp = p->p_fd;
 	struct file *rf, *wf;
+	struct pipepair *pp;
 	struct pipe *rpipe, *wpipe;
 	int fd, error;
 
 	fdplock(fdp);
 
-	rpipe = pool_get(&pipe_pool, PR_WAITOK);
+	/* Allocate the container and link the endpoints. */
+	pp = pool_get(&pipe_pool, PR_WAITOK);
+	rpipe = &pp->pp_rpipe;
+	wpipe = &pp->pp_wpipe;
+	rpipe->pipe_pair = pp;
+	wpipe->pipe_pair = pp;
+
+#ifdef MAC
+        /*
+         * The MAC label is shared between the connected endpoints.  As a
+         * result mac_pipe_init() and mac_pipe_create() are called once
+         * for the pair, and not on the endpoints.
+         */
+	mac_pipe_init(pp);
+	mac_pipe_create(p->p_ucred, pp);
+#endif
+
 	error = pipe_create(rpipe);
-	if (error != 0)
-		goto free1;
-	wpipe = pool_get(&pipe_pool, PR_WAITOK);
+	if (error != 0) {
+		pool_put(&pipe_pool, pp);
+		fdpunlock(fdp);
+		return (error);
+	}
+
 	error = pipe_create(wpipe);
-	if (error != 0)
-		goto free2;
+	if (error != 0) {
+		pipeclose(rpipe);
+		pool_put(&pipe_pool, pp);
+		fdpunlock(fdp);
+		return (error);
+	}
 
 	error = falloc(p, &rf, &fd);
-	if (error != 0)
-		goto free2;
+	if (error != 0) {
+		pipeclose(rpipe);
+		pipeclose(wpipe);
+		pool_put(&pipe_pool, pp);
+		fdpunlock(fdp);
+		return (error);
+	}
+
 	rf->f_flag = FREAD | FWRITE;
 	rf->f_type = DTYPE_PIPE;
 	rf->f_data = rpipe;
@@ -129,8 +163,16 @@ sys_opipe(struct proc *p, void *v, register_t *retval)
 	retval[0] = fd;
 
 	error = falloc(p, &wf, &fd);
-	if (error != 0)
-		goto free3;
+	if (error != 0) {
+		fdremove(fdp, retval[0]);
+		closef(rf, p);
+		pipeclose(rpipe);
+		pipeclose(wpipe);
+		pool_put(&pipe_pool, pp);
+		fdpunlock(fdp);
+		return (error);
+	}
+
 	wf->f_flag = FREAD | FWRITE;
 	wf->f_type = DTYPE_PIPE;
 	wf->f_data = wpipe;
@@ -145,18 +187,6 @@ sys_opipe(struct proc *p, void *v, register_t *retval)
 
 	fdpunlock(fdp);
 	return (0);
-
-free3:
-	fdremove(fdp, retval[0]);
-	closef(rf, p);
-	rpipe = NULL;
-free2:
-	(void)pipeclose(wpipe);
-free1:
-	if (rpipe != NULL)
-		(void)pipeclose(rpipe);
-	fdpunlock(fdp);
-	return (error);
 }
 
 /*
@@ -275,6 +305,15 @@ pipe_read(struct file *fp, off_t *poff, struct uio *uio, struct ucred *cred)
 		return (error);
 
 	++rpipe->pipe_busy;
+
+#ifdef MAC
+	error = mac_pipe_check_read(cred, rpipe->pipe_pair);
+	if (error) {
+		--rpipe->pipe_busy;
+		pipeunlock(rpipe);
+		return (error);
+	}
+#endif
 
 	while (uio->uio_resid) {
 		/*
@@ -396,6 +435,14 @@ pipe_write(struct file *fp, off_t *poff, struct uio *uio, struct ucred *cred)
 	if ((wpipe == NULL) || (wpipe->pipe_state & PIPE_EOF)) {
 		return (EPIPE);
 	}
+
+#ifdef MAC
+	/* XXX PM: Pipe is not locked! */
+	error = mac_pipe_check_write(cred, wpipe->pipe_pair);
+	if (error)
+		return (error);
+#endif
+
 	++wpipe->pipe_busy;
 
 	/*
@@ -607,6 +654,14 @@ pipe_ioctl(struct file *fp, u_long cmd, caddr_t data, struct proc *p)
 {
 	struct pipe *mpipe = (struct pipe *)fp->f_data;
 
+#ifdef MAC
+	int error;
+	/* XXX PM: Pipe is not locked! */
+	error = mac_pipe_check_ioctl(p->p_ucred, mpipe->pipe_pair, cmd, data);
+	if (error)
+		return (error);
+#endif
+
 	switch (cmd) {
 
 	case FIONBIO:
@@ -642,8 +697,19 @@ pipe_poll(struct file *fp, int events, struct proc *p)
 	struct pipe *rpipe = (struct pipe *)fp->f_data;
 	struct pipe *wpipe;
 	int revents = 0;
+#ifdef MAC
+	int error;
+#endif
 
 	wpipe = rpipe->pipe_peer;
+
+#ifdef MAC
+	/* XXX PM: Pipe is not locked! */
+	error = mac_pipe_check_poll(p->p_ucred, rpipe->pipe_pair);
+	if (error)
+		return (0);
+#endif
+
 	if (events & (POLLIN | POLLRDNORM)) {
 		if ((rpipe->pipe_buffer.cnt > 0) ||
 		    (rpipe->pipe_state & PIPE_EOF))
@@ -677,7 +743,13 @@ int
 pipe_stat(struct file *fp, struct stat *ub, struct proc *p)
 {
 	struct pipe *pipe = (struct pipe *)fp->f_data;
-
+#ifdef MAC
+	int error;
+	/* XXX PM: Pipe is not locked! */
+	error = mac_pipe_check_stat(p->p_ucred, pipe->pipe_pair);
+	if (error)
+		return (error);
+#endif
 	bzero(ub, sizeof(*ub));
 	ub->st_mode = S_IFIFO;
 	ub->st_blksize = pipe->pipe_buffer.size;
@@ -754,11 +826,22 @@ pipeclose(struct pipe *cpipe)
 			ppipe->pipe_peer = NULL;
 		}
 
-		/*
-		 * free resources
-		 */
 		pipe_free_kmem(cpipe);
-		pool_put(&pipe_pool, cpipe);
+		cpipe->pipe_state |= PIPE_CLOSED;
+
+		/*
+		 * If both endpoints are now closed, release the memory
+		 * for the pipe pair.
+		 */
+		if (ppipe != NULL && ppipe->pipe_state & PIPE_CLOSED) {
+#ifdef DIAGNOSTIC
+			KASSERT(ppipe->pipe_pair == cpipe->pipe_pair);
+#endif
+#ifdef MAC
+			mac_pipe_destroy(ppipe->pipe_pair);
+#endif
+			pool_put(&pipe_pool, ppipe->pipe_pair);
+		}
 	}
 }
 
@@ -842,7 +925,7 @@ filt_pipewrite(struct knote *kn, long hint)
 void
 pipe_init(void)
 {
-	pool_init(&pipe_pool, sizeof(struct pipe), 0, 0, 0, "pipepl",
+	pool_init(&pipe_pool, sizeof(struct pipepair), 0, 0, 0, "pipepl",
 	    &pool_allocator_nointr);
 }
 

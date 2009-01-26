@@ -80,12 +80,24 @@
 #include <security/mac/mac_internal.h>
 #include <security/mac/mac_policy.h>
 
+/*
+ * XXX PM: For now, if we are compiled in, we are enabled.
+ */
 #ifdef MAC_TEST
 #include <security/mac_test/mac_test.h>
+int mac_test_enabled = 1;
+#else
+int mac_test_enabled = 0;
 #endif
 
+/*
+ * XXX PM: For now, if we are compiled in, we are enabled.
+ */
 #ifdef ANOUBIS
 #include <security/mac_anoubis/mac_anoubis.h>
+int mac_anoubis_enabled = 1;
+#else
+int mac_anoubis_enabled = 0;
 #endif
 
 #if 0	
@@ -168,7 +180,7 @@ static int	mac_late = 0;
 int	mac_labelmbufs = 0;
 #endif
 
-#if 0	/* XXX HSH: we might need this one. */
+#if 0	/* XXX PM: We define this in sys/malloc.h. */
 MALLOC_DEFINE(M_MACTEMP, "mactemp", "MAC temporary label storage");
 #endif
 
@@ -681,6 +693,9 @@ security_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 #ifdef MAC_TEST
 	case SECURITY_MAC_TEST:
 		switch (name[1]) {
+		case MAC_POLICY_ENABLED:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_enabled));
 		case MAC_TEST_ACCEPT:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
 			    &mac_test_accept));
@@ -719,6 +734,9 @@ security_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 #ifdef ANOUBIS
 	case SECURITY_ANOUBIS:
 		switch(name[1]) {
+		case MAC_POLICY_ENABLED:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_anoubis_enabled));
 		case ANOUBIS_ALF_ENABLE:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
 			    &alf_enable));

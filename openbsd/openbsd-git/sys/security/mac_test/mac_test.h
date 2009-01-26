@@ -34,6 +34,7 @@ extern int	mac_test_accept;
 extern int	mac_test_accepted;
 extern int	mac_test_bind;
 extern int	mac_test_connect;
+extern int	mac_test_enabled;
 extern int	mac_test_listen;
 extern int	mac_test_poll;
 extern int	mac_test_receive;

@@ -73,6 +73,10 @@
 #include <uvm/uvm_device.h>
 #include <uvm/uvm_vnode.h>
 
+#ifdef MAC
+#include <security/mac/mac_framework.h>
+#endif
+
 /*
  * Page align addr and size, returning EINVAL on wraparound.
  */
@@ -592,6 +596,12 @@ sys_mmap(p, v, retval)
 			/* MAP_PRIVATE mappings can always write to */
 			maxprot |= VM_PROT_WRITE;
 		}
+
+#ifdef MAC
+		error = mac_vnode_check_mmap(p->p_ucred, vp, prot, flags);
+		if (error)
+			goto out;
+#endif
 
 		vfs_mark_atime(vp, p->p_ucred);
 

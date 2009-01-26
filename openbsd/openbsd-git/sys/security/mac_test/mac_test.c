@@ -78,8 +78,6 @@ int	mac_test_check_socket_bind(struct ucred *, struct socket *,
 	    struct label *, const struct sockaddr *);
 int	mac_test_check_socket_connect(struct ucred *, struct socket *,
 	    struct label *, const struct sockaddr *);
-int	mac_test_check_socket_deliver(struct socket *, struct label *,
-	    struct mbuf *, struct label *);
 int	mac_test_check_socket_listen(struct ucred *, struct socket *,
 	    struct label *);
 int	mac_test_check_socket_poll(struct ucred *, struct socket *,
@@ -316,13 +314,6 @@ mac_test_check_socket_connect(struct ucred *cred, struct socket *so,
                     curproc->p_pid, so, sa, (unsigned long)cred->cr_uid,
                     (unsigned long)cred->cr_gid, solabel);
 
-	return (0);
-}
-
-int
-mac_test_check_socket_deliver(struct socket *so, struct label *solabel,
-    struct mbuf *m, struct label *mlabel)
-{
 	return (0);
 }
 
@@ -579,7 +570,6 @@ static struct mac_policy_ops mac_test_ops =
 	.mpo_socket_check_accepted = mac_test_check_socket_accepted,
 	.mpo_socket_check_bind = mac_test_check_socket_bind,
 	.mpo_socket_check_connect = mac_test_check_socket_connect,
-	.mpo_socket_check_deliver = mac_test_check_socket_deliver,
 	.mpo_socket_check_listen = mac_test_check_socket_listen,
 	.mpo_socket_check_poll = mac_test_check_socket_poll,
 	.mpo_socket_check_receive = mac_test_check_socket_receive,

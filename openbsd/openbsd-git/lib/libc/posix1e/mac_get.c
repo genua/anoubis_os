@@ -62,7 +62,6 @@ mac_get_link(const char *path, struct mac *label)
 	return (__mac_get_link(path, label));
 }
 
-#if 0 /* XXX PM: Not yet. */
 int
 mac_get_peer(int fd, struct mac *label)
 {
@@ -71,7 +70,6 @@ mac_get_peer(int fd, struct mac *label)
 	len = sizeof(*label);
 	return (getsockopt(fd, SOL_SOCKET, SO_PEERLABEL, label, &len));
 }
-#endif
 
 int
 mac_get_pid(pid_t pid, struct mac *label)

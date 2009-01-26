@@ -44,6 +44,7 @@ extern struct mutex anoubis_lock;
 
 extern int alf_enable;
 extern int sfs_enable;
+extern int mac_anoubis_enabled;
 
 extern int alf_allow_port_min;
 extern int alf_allow_port_max;

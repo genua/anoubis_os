@@ -67,6 +67,10 @@
 #include <compat/freebsd/freebsd_exec.h>
 #endif
 
+#ifdef MAC
+#include <security/mac/mac_framework.h>
+#endif
+
 struct ELFNAME(probe_entry) {
 	int (*func)(struct proc *, struct exec_package *, char *,
 	    u_long *, u_int8_t *);
@@ -446,6 +450,11 @@ ELFNAME(load_file)(struct proc *p, char *path, struct exec_package *epp,
 			break;
 		}
 	}
+
+#ifdef MAC
+	if (path && epp->ep_interp)
+		mac_execve_interpreter_enter(nd.ni_vp, &epp->ep_interlabel);
+#endif
 
 	vn_marktext(nd.ni_vp);
 

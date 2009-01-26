@@ -653,23 +653,28 @@ struct kinfo_proc2 {
 	{ 0, 0 }, \
 	{ "version", CTLTYPE_INT }, \
 	{ "mac_test", CTLTYPE_NODE }, \
-	{ "anoubis", CTLTYPE_NODE }, \
+	{ "mac_anoubis", CTLTYPE_NODE }, \
 }
+
+/*
+ * The following definition applies to all MAC policies compiled in the kernel.
+ */
+#define MAC_POLICY_ENABLED	1
 
 /*
  * MAC_TEST definitions.
  */
-#define MAC_TEST_ACCEPT		1
-#define MAC_TEST_ACCEPTED	2
-#define MAC_TEST_BIND		3
-#define MAC_TEST_CONNECT	4
-#define MAC_TEST_LISTEN		5
-#define MAC_TEST_POLL		6
-#define MAC_TEST_RECEIVE	7
-#define MAC_TEST_SEND		8
-#define MAC_TEST_STAT		9
-#define MAC_TEST_BPF_RECEIVE	10
-#define MAC_TEST_MAXID		11
+#define MAC_TEST_ACCEPT		2
+#define MAC_TEST_ACCEPTED	3
+#define MAC_TEST_BIND		4
+#define MAC_TEST_CONNECT	5
+#define MAC_TEST_LISTEN		6
+#define MAC_TEST_POLL		7
+#define MAC_TEST_RECEIVE	8
+#define MAC_TEST_SEND		9
+#define MAC_TEST_STAT		10
+#define MAC_TEST_BPF_RECEIVE	11
+#define MAC_TEST_MAXID		12
 
 #define MAC_TEST_NAMES { \
 	{ 0, 0 }, \
@@ -688,11 +693,11 @@ struct kinfo_proc2 {
 /*
  * ANOUBIS definitions.
  */
-#define ANOUBIS_ALF_ENABLE		1
-#define ANOUBIS_ALF_ALLOW_PORT_MIN	2
-#define ANOUBIS_ALF_ALLOW_PORT_MAX	3
-#define ANOUBIS_SFS_ENABLE		4
-#define ANOUBIS_MAXID			5
+#define ANOUBIS_ALF_ENABLE		2
+#define ANOUBIS_ALF_ALLOW_PORT_MIN	3
+#define ANOUBIS_ALF_ALLOW_PORT_MAX	4
+#define ANOUBIS_SFS_ENABLE		5
+#define ANOUBIS_MAXID			6
 
 #define ANOUBIS_NAMES { \
 	{ 0, 0 }, \

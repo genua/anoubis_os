@@ -40,7 +40,7 @@ extern int __mac_execve(char *fname, char **argv, char **envv,
 int
 mac_execve(char *fname, char **argv, char **envv, struct mac *label)
 {
-#if 0 /* XXX PM: Not yet. */
+#if 0 /* XXX PM: Nothing seems to use this system call. Should we bother? */
 	return (__mac_execve(fname, argv, envv, label));
 #else
 	return (-1);

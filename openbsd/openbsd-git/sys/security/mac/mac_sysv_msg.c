@@ -59,9 +59,10 @@
  */
 struct label   *mac_sysv_msgmsg_label_alloc(void);
 struct label   *mac_sysv_msgqueue_label_alloc(void);
+#if 0 /* XXX PM: We never release SysV messages in OpenBSD. */
 void		mac_sysv_msgmsg_label_free(struct label *);
 void		mac_sysv_msgqueue_label_free(struct label *);
-
+#endif
 struct label *
 mac_sysv_msgmsg_label_alloc(void)
 {
@@ -96,6 +97,7 @@ mac_sysvmsq_init(struct msqid_kernel *msqkptr)
 	msqkptr->label = mac_sysv_msgqueue_label_alloc();
 }
 
+#if 0 /* XXX PM: We never release SysV messages in OpenBSD. */
 void
 mac_sysv_msgmsg_label_free(struct label *label)
 {
@@ -127,6 +129,7 @@ mac_sysvmsq_destroy(struct msqid_kernel *msqkptr)
 	mac_sysv_msgqueue_label_free(msqkptr->label);
 	msqkptr->label = NULL;
 }
+#endif
 
 void
 mac_sysvmsg_create(struct ucred *cred, struct msqid_kernel *msqkptr,

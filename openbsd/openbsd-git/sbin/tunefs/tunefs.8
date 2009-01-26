@@ -44,6 +44,7 @@
 .Op Fl e Ar maxbpg
 .Op Fl g Ar avgfilesize
 .Op Fl h Ar avgfpdir
+.Op Fl l Cm set | unset
 .Op Fl m Ar minfree
 .\" .Op Fl n Ar soft_dependency_enabling
 .Op Fl o Ar optimize_preference
@@ -96,6 +97,8 @@ will be accessed
 This specifies the expected average file size.
 .It Fl h Ar avgfpdir
 This specifies the expected number of files per directory.
+.It Fl l Cm set | unset
+Set or unset the multilabel MAC flag in the superblock.
 .It Fl m Ar minfree
 This value specifies the percentage of space held back
 from normal users; the minimum free space threshold.

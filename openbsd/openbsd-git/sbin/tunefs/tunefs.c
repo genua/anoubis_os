@@ -91,14 +91,14 @@ static	void	usage(void);
 int
 main(int argc, char *argv[])
 {
-#define	OPTSTRING	"AFNa:e:g:h:m:o:"
-	int		i, ch, Aflag, Fflag, Nflag, aflag, openflags;
+#define	OPTSTRING	"AFNa:e:g:h:l:m:o:"
+	int		i, ch, Aflag, Fflag, Nflag, aflag, lflag, openflags;
 	const char	*special, *chg[2];
 	char		device[MAXPATHLEN];
-	int		maxbpg, minfree, optim, aclset;
+	int		maxbpg, minfree, optim, aclset, macset;
 	int		avgfilesize, avgfpdir;
 
-	Aflag = Fflag = Nflag = aflag = 0;
+	Aflag = Fflag = Nflag = aflag = lflag = 0;
 	maxbpg = minfree = optim = -1;
 	avgfilesize = avgfpdir = -1;
 	chg[FS_OPTSPACE] = "space";
@@ -144,6 +144,16 @@ main(int argc, char *argv[])
 			avgfpdir = getnum(optarg,
 			    "expected number of files per directory",
 			    1, INT_MAX);
+			break;
+
+		case 'l':
+			lflag++;;
+			if (!strcmp(optarg, "set"))
+				macset = 1;
+			else if (!strcmp(optarg, "unset"))
+				macset = 0;
+			else
+				errx(10, "invalid argument for option -l");
 			break;
 
 		case 'm':
@@ -214,6 +224,28 @@ main(int argc, char *argv[])
 			else {
 				sblock.fs_flags &= ~FS_ACLS;
 				warnx("administrative ACL flag changes from "
+				    "set to unset");
+			}
+		}
+	}
+
+	if (lflag) {
+		if (macset) {
+			if (sblock.fs_flags & FS_MULTILABEL)
+				warnx("multilabel MAC flag remains "
+				    "unchanged and set");
+			else {
+				sblock.fs_flags |= FS_MULTILABEL;
+				warnx("multilabel MAC flag changes from "
+				    "unset to set");
+			}
+		} else {
+			if (!(sblock.fs_flags & FS_MULTILABEL))
+				warnx("multilabel MAC flag remains "
+				    "unchanged and unset");
+			else {
+				sblock.fs_flags &= ~FS_MULTILABEL;
+				warnx("multilabel MAC flag changes from "
 				    "set to unset");
 			}
 		}
@@ -305,7 +337,7 @@ usage(void)
 
 	fprintf(stderr,
 	    "usage: %s [-AFN] [-a set | unset] [-e maxbpg] [-g avgfilesize] "
-	    "[-h avgfpdir] [-m minfree]\n"
+	    "[-h avgfpdir] [-l set | unset] [-m minfree]\n"
 	    "\t[-o optimize_preference] special | filesys\n",
 	    __progname);
 

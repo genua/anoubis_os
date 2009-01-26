@@ -361,6 +361,7 @@ mac_socket_check_create(struct ucred *cred, int domain, int type, int proto)
 	return (error);
 }
 
+#if 0 /* XXX PM: This hook is only called from the netatalk code. */
 int
 mac_socket_check_deliver(struct socket *so, struct mbuf *m)
 {
@@ -375,6 +376,7 @@ mac_socket_check_deliver(struct socket *so, struct mbuf *m)
 	splx(s);
 	return (error);
 }
+#endif
 
 int
 mac_socket_check_listen(struct ucred *cred, struct socket *so)

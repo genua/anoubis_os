@@ -156,6 +156,7 @@ struct exec_package {
 	char	*ep_interp;		/* name of interpreter if any */
 	u_long	ep_interp_pos;		/* interpreter load position */
 #ifdef MAC
+	struct	label *ep_interlabel;	/* interpreter MAC label */
 	struct	label *ep_label;	/* MAC label */
 #endif
 };

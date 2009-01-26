@@ -50,30 +50,24 @@
 #error "no user-serviceable parts inside"
 #endif
 
-struct auditinfo;
-struct auditinfo_addr;
 struct bpf_d;
 struct cdev;
 struct componentname;
-struct devfs_dirent;
 struct exec_package;
 struct ifnet;
 struct ifreq;
 struct inpcb;
 struct ipq;
-struct ksem;
 struct label;
 struct m_tag;
 struct mac;
 struct mbuf;
 struct mount;
 struct msg;
-struct msghdr;
 struct msqid_kernel;
 struct nameidata;
 struct proc;
 struct semid_kernel;
-struct shmfd;
 struct shmid_kernel;
 struct sockaddr;
 struct socket;
@@ -83,7 +77,6 @@ struct ucred;
 struct uio;
 struct vattr;
 struct vnode;
-struct vop_setlabel_args;
 struct sys___sysctl_args;
 
 #include <sys/acl.h>			/* XXX acl_type_t */
@@ -103,6 +96,10 @@ void	mac_bpfdesc_create_mbuf(struct bpf_d *d, struct mbuf *m);
 void	mac_bpfdesc_destroy(struct bpf_d *);
 void	mac_bpfdesc_init(struct bpf_d *);
 
+#ifdef ANOUBIS
+int	mac_check_follow_link(struct nameidata *, char *linkbuf, int linklen);
+#endif
+
 void	mac_cred_associate_nfsd(struct ucred *cred);
 int	mac_cred_check_visible(struct ucred *cr1, struct ucred *cr2);
 void	mac_cred_copy(struct ucred *cr1, struct ucred *cr2);
@@ -111,6 +108,7 @@ void	mac_cred_create_swapper(struct ucred *cred);
 void	mac_cred_destroy(struct ucred *);
 void	mac_cred_init(struct ucred *);
 
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 void	mac_devfs_create_device(struct ucred *cred, struct mount *mp,
 	    struct cdev *dev, struct devfs_dirent *de);
 void	mac_devfs_create_directory(struct mount *mp, char *dirname,
@@ -123,6 +121,22 @@ void	mac_devfs_update(struct mount *mp, struct devfs_dirent *de,
 	    struct vnode *vp);
 void	mac_devfs_vnode_associate(struct mount *mp, struct devfs_dirent *de,
 	    struct vnode *vp);
+#endif
+
+int	mac_execve_enter(struct exec_package *pack, struct mac *mac_p);
+void	mac_execve_exit(struct exec_package *pack);
+void	mac_execve_interpreter_enter(struct vnode *interpvp,
+	    struct label **interplabel);
+void	mac_execve_interpreter_exit(struct label *interpvplabel);
+#ifdef ANOUBIS
+int     mac_execve_prepare(struct exec_package *pack);
+void    mac_execve_success(struct exec_package *pack);
+#endif
+
+#ifdef ANOUBIS
+int	mac_file_check_open(struct ucred *cred, struct file * fp,
+	    struct vnode *vp, const char * pathhint);
+#endif
 
 int	mac_ifnet_check_transmit(struct ifnet *ifp, struct mbuf *m);
 void	mac_ifnet_create(struct ifnet *ifp);
@@ -142,7 +156,7 @@ void	mac_inpcb_destroy(struct inpcb *);
 int	mac_inpcb_init(struct inpcb *, int);
 void	mac_inpcb_sosetlabel(struct socket *so, struct inpcb *inp);
 
-#if 0 /* XXX PM: Inexistant in OpenBSD. */
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 void	mac_ip6q_create(struct mbuf *m, struct ip6q *q6);
 void	mac_ip6q_destroy(struct ip6q *q6);
 int	mac_ip6q_init(struct ip6q *q6, int);
@@ -158,6 +172,7 @@ int	mac_ipq_match(struct mbuf *m, struct ipq *q);
 void	mac_ipq_reassemble(struct ipq *q, struct mbuf *m);
 void	mac_ipq_update(struct mbuf *m, struct ipq *q);
 
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 int	mac_kenv_check_dump(struct ucred *cred);
 int	mac_kenv_check_get(struct ucred *cred, char *name);
 int	mac_kenv_check_set(struct ucred *cred, char *name, char *value);
@@ -165,6 +180,7 @@ int	mac_kenv_check_unset(struct ucred *cred, char *name);
 
 int	mac_kld_check_load(struct ucred *cred, struct vnode *vp);
 int	mac_kld_check_stat(struct ucred *cred);
+#endif
 
 void	mac_mbuf_copy(struct mbuf *, struct mbuf *);
 int	mac_mbuf_init(struct mbuf *, int);
@@ -178,7 +194,9 @@ void	mac_mount_create(struct ucred *cred, struct mount *mp);
 void	mac_mount_destroy(struct mount *);
 void	mac_mount_init(struct mount *);
 
+#if 0 /* XXX PM: AppleTalk is deprecated, we don't implement it in OpenBSD. */
 void	mac_netatalk_aarp_send(struct ifnet *ifp, struct mbuf *m);
+#endif
 
 void	mac_netinet_arp_send(struct ifnet *ifp, struct mbuf *m);
 void	mac_netinet_firewall_reply(struct mbuf *mrecv, struct mbuf *msend);
@@ -189,7 +207,9 @@ void	mac_netinet_icmp_replyinplace(struct mbuf *m);
 void	mac_netinet_igmp_send(struct ifnet *ifp, struct mbuf *m);
 void	mac_netinet_tcp_reply(struct mbuf *m);
 
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 void	mac_netinet6_nd6_send(struct ifnet *ifp, struct mbuf *m);
+#endif
 
 int	mac_pipe_check_ioctl(struct ucred *cred, struct pipepair *pp,
 	    unsigned long cmd, void *data);
@@ -203,6 +223,7 @@ void	mac_pipe_init(struct pipepair *);
 int	mac_pipe_label_set(struct ucred *cred, struct pipepair *pp,
 	    struct label *label);
 
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 int	mac_posixsem_check_getvalue(struct ucred *active_cred,
 	    struct ucred *file_cred, struct ksem *ks);
 int	mac_posixsem_check_open(struct ucred *cred, struct ksem *ks);
@@ -228,16 +249,19 @@ int	mac_posixshm_check_unlink(struct ucred *cred, struct shmfd *shmfd);
 void 	mac_posixshm_create(struct ucred *cred, struct shmfd *shmfd);
 void	mac_posixshm_destroy(struct shmfd *);
 void	mac_posixshm_init(struct shmfd *);
+#endif
 
 int	mac_priv_check(struct ucred *cred, int priv);
 int	mac_priv_grant(struct ucred *cred, int priv);
 
 int	mac_proc_check_debug(struct ucred *cred, struct proc *p);
 int	mac_proc_check_sched(struct ucred *cred, struct proc *p);
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 int	mac_proc_check_setaudit(struct ucred *cred, struct auditinfo *ai);
 int	mac_proc_check_setaudit_addr(struct ucred *cred,
 	    struct auditinfo_addr *aia);
 int	mac_proc_check_setauid(struct ucred *cred, uid_t auid);
+#endif
 int	mac_proc_check_setegid(struct proc *p, struct ucred *cred,
 	    gid_t egid);
 int	mac_proc_check_seteuid(struct proc *p, struct ucred *cred,
@@ -262,18 +286,7 @@ int	mac_proc_check_wait(struct ucred *cred, struct proc *p);
 void	mac_proc_destroy(struct proc *);
 void	mac_proc_init(struct proc *);
 void	mac_proc_vm_revoke(struct proc *p);
-int	mac_execve_enter(struct exec_package *pack, struct mac *mac_p);
-void	mac_execve_exit(struct exec_package *pack);
-void	mac_execve_interpreter_enter(struct vnode *interpvp,
-	    struct label **interplabel);
-void	mac_execve_interpreter_exit(struct label *interpvplabel);
-#ifdef ANOUBIS
-int	mac_execve_prepare(struct exec_package *pack);
-void	mac_execve_success(struct exec_package *pack);
-int	mac_file_check_open(struct ucred *cred, struct file * fp,
-	    struct vnode *vp, const char * pathhint);
-int	mac_check_follow_link(struct nameidata *, char *linkbuf, int linklen);
-#endif
+
 int	mac_socket_check_accept(struct ucred *cred, struct socket *so);
 int	mac_socket_check_accepted(struct ucred *cred, struct socket *so,
 	    struct mbuf *name);
@@ -283,7 +296,9 @@ int	mac_socket_check_connect(struct ucred *cred, struct socket *so,
 	    const struct sockaddr *sa);
 int	mac_socket_check_create(struct ucred *cred, int domain, int type,
 	    int proto);
+#if 0 /* XXX PM: This hook is only called from the netatalk code. */
 int	mac_socket_check_deliver(struct socket *so, struct mbuf *m);
+#endif
 int	mac_socket_check_listen(struct ucred *cred, struct socket *so);
 int	mac_socket_check_poll(struct ucred *cred, struct socket *so);
 int	mac_socket_check_receive(struct ucred *cred, struct socket *so);
@@ -313,9 +328,11 @@ void	mac_syncache_destroy(struct label **l);
 int	mac_syncache_init(struct label **l);
 
 int	mac_system_check_acct(struct ucred *cred, struct vnode *vp);
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 int	mac_system_check_audit(struct ucred *cred, void *record, int length);
 int	mac_system_check_auditctl(struct ucred *cred, struct vnode *vp);
 int	mac_system_check_auditon(struct ucred *cred, int cmd);
+#endif
 int	mac_system_check_reboot(struct ucred *cred, int howto);
 int	mac_system_check_swapon(struct ucred *cred, struct vnode *vp);
 int	mac_system_check_swapoff(struct ucred *cred, struct vnode *vp);
@@ -330,7 +347,9 @@ int	mac_system_check_sysctl(struct ucred *cred, int *name,
 void	mac_sysvmsg_cleanup(struct msg *msgptr);
 void	mac_sysvmsg_create(struct ucred *cred, struct msqid_kernel *msqkptr,
 	    struct msg *msgptr);
+#if 0 /* XXX PM: We never release SysV messages in OpenBSD. */
 void	mac_sysvmsg_destroy(struct msg *);
+#endif
 void	mac_sysvmsg_init(struct msg *);
 
 int	mac_sysvmsq_check_msgmsq(struct ucred *cred, struct msg *msgptr,
@@ -347,7 +366,9 @@ int	mac_sysvmsq_check_msqsnd(struct ucred *cred,
 	    struct msqid_kernel *msqkptr);
 void	mac_sysvmsq_cleanup(struct msqid_kernel *msqkptr);
 void	mac_sysvmsq_create(struct ucred *cred, struct msqid_kernel *msqkptr);
+#if 0 /* XXX PM: We never release SysV messages in OpenBSD. */
 void	mac_sysvmsq_destroy(struct msqid_kernel *);
+#endif
 void	mac_sysvmsq_init(struct msqid_kernel *);
 
 int	mac_sysvsem_check_semctl(struct ucred *cred,
@@ -404,8 +425,10 @@ int	mac_vnode_check_lookup(struct ucred *cred, struct vnode *dvp,
  	    struct componentname *cnp);
 int	mac_vnode_check_mmap(struct ucred *cred, struct vnode *vp, int prot,
 	    int flags);
+#if 0 /* XXX PM: This hook does not seem to be called anywhere in FreeBSD. */
 int	mac_vnode_check_mprotect(struct ucred *cred, struct vnode *vp,
 	    int prot);
+#endif
 #ifdef ANOUBIS
 int	mac_vnode_check_open(struct ucred *cred, struct vnode *vp,
 	    int acc_mode, struct vnode *dirvp, struct componentname *cnp);
@@ -458,9 +481,11 @@ void	mac_vnode_relabel(struct ucred *cred, struct vnode *vp,
 
 /*
  * Calls to help various file systems implement labeling functionality using
- * their existing EA implementation. XXX PM: We prototype it in vnode.h.
+ * their existing EA implementation.
  */
-/* int	vop_stdsetlabel_ea(struct vop_setlabel_args *ap);	*/
+#if 0 /* XXX PM: We prototype it in vnode.h. */
+int	vop_stdsetlabel_ea(struct vop_setlabel_args *ap);
+#endif
 
 /* XXX PM: Needed in OpenBSD. */
 void	mac_init(void);

@@ -1442,6 +1442,13 @@ sys_link(struct proc *p, void *v, register_t *retval)
 		error = EEXIST;
 		goto out;
 	}
+#ifdef MAC
+	error = mac_vnode_check_link(p->p_ucred, nd.ni_dvp, vp, &nd.ni_cnd);
+	if (error) {
+		vrele(vp);
+		return (error);
+	}
+#endif
 	error = VOP_LINK(nd.ni_dvp, vp, &nd.ni_cnd);
 out:
 	vrele(vp);
@@ -1543,6 +1550,19 @@ sys_unlink(struct proc *p, void *v, register_t *retval)
 		error = EBUSY;
 		goto out;
 	}
+
+#ifdef MAC
+	error = mac_vnode_check_unlink(p->p_ucred, nd.ni_dvp, vp, &nd.ni_cnd);
+	if (error) {
+		VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
+		if (nd.ni_dvp == vp)
+			vrele(nd.ni_dvp);
+		else
+			vput(nd.ni_dvp);
+		vput(vp);
+		return (error);
+	}
+#endif
 
 	(void)uvm_vnp_uncache(vp);
 
@@ -2426,6 +2446,19 @@ sys_rename(struct proc *p, void *v, register_t *retval)
 	    SCARG(uap, from), p);
 	if ((error = namei(&fromnd)) != 0)
 		return (error);
+#ifdef MAC
+	error = mac_vnode_check_rename_from(p->p_ucred, fromnd.ni_dvp,
+	    fromnd.ni_vp, &fromnd.ni_cnd);
+	if (error) {
+		VOP_ABORTOP(fromnd.ni_dvp, &fromnd.ni_cnd);
+		vrele(fromnd.ni_dvp);
+		vrele(fromnd.ni_vp);
+		if (fromnd.ni_startdir)
+			vrele(fromnd.ni_startdir);
+		pool_put(&namei_pool, fromnd.ni_cnd.cn_pnbuf);
+		return (error);
+	}
+#endif
 	fvp = fromnd.ni_vp;
 
 	flags = LOCKPARENT | LOCKLEAF | NOCACHE | SAVESTART;
@@ -2462,6 +2495,11 @@ sys_rename(struct proc *p, void *v, register_t *retval)
 	 */
 	if (fvp == tvp)
 		error = -1;
+#ifdef MAC
+	else
+		error = mac_vnode_check_rename_to(p->p_ucred, tdvp, tvp,
+		    fromnd.ni_dvp == tdvp, &tond.ni_cnd);
+#endif
 out:
 	if (!error) {
 		if (tvp) {
@@ -2588,6 +2626,11 @@ sys_rmdir(struct proc *p, void *v, register_t *retval)
 	if (vp->v_flag & VROOT)
 		error = EBUSY;
 out:
+#ifdef MAC
+	if (!error)
+		error = mac_vnode_check_unlink(p->p_ucred, nd.ni_dvp, vp,
+		    &nd.ni_cnd);
+#endif
 	if (!error) {
 		error = VOP_RMDIR(nd.ni_dvp, nd.ni_vp, &nd.ni_cnd);
 	} else {

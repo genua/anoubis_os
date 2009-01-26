@@ -512,7 +512,9 @@ mac_vnode_check_link(struct ucred *cred, struct vnode *dvp,
 	int error;
 
 	ASSERT_VOP_LOCKED(dvp, "mac_vnode_check_link");
+#if 0 /* XXX PM: In OpenBSD, 'vp' is not locked. */
 	ASSERT_VOP_LOCKED(vp, "mac_vnode_check_link");
+#endif
 
 	MAC_CHECK(vnode_check_link, cred, dvp, dvp->v_label, vp,
 	    vp->v_label, cnp);
@@ -570,6 +572,7 @@ mac_vnode_check_mmap_downgrade(struct ucred *cred, struct vnode *vp,
 	*prot = result;
 }
 
+#if 0 /* XXX PM: This hook doesn't seem to be called anywhere in FreeBSD. */
 int
 mac_vnode_check_mprotect(struct ucred *cred, struct vnode *vp, int prot)
 {
@@ -580,6 +583,7 @@ mac_vnode_check_mprotect(struct ucred *cred, struct vnode *vp, int prot)
 	MAC_CHECK(vnode_check_mprotect, cred, vp, vp->v_label, prot);
 	return (error);
 }
+#endif
 
 #ifdef ANOUBIS
 int
@@ -717,8 +721,10 @@ mac_vnode_check_rename_from(struct ucred *cred, struct vnode *dvp,
 {
 	int error;
 
+#if 0 /* XXX PM: In OpenBSD, these vnodes are not locked. */
 	ASSERT_VOP_LOCKED(dvp, "mac_vnode_check_rename_from");
 	ASSERT_VOP_LOCKED(vp, "mac_vnode_check_rename_from");
+#endif
 
 	MAC_CHECK(vnode_check_rename_from, cred, dvp, dvp->v_label, vp,
 	    vp->v_label, cnp);
@@ -732,7 +738,9 @@ mac_vnode_check_rename_to(struct ucred *cred, struct vnode *dvp,
 	int error;
 
 	ASSERT_VOP_LOCKED(dvp, "mac_vnode_check_rename_to");
-	ASSERT_VOP_LOCKED(vp, "mac_vnode_check_rename_to");
+	/* XXX PM: vp can be NULL. */
+	if (vp != NULL)
+		ASSERT_VOP_LOCKED(vp, "mac_vnode_check_rename_to");
 
 	MAC_CHECK(vnode_check_rename_to, cred, dvp, dvp->v_label, vp,
 	    vp != NULL ? vp->v_label : NULL, samedir, cnp);

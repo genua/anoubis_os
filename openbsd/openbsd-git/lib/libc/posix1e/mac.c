@@ -403,48 +403,58 @@ mac_prepare_process_label(struct mac **mac)
 	return (mac_prepare_type(mac, "process"));
 }
 
+#ifdef CTL_SECURITY_NAMES
+struct ctlname securityname[] = CTL_SECURITY_NAMES;
+#else
+struct ctlname securityname[] = { 0, 0 };
+#define SECURITY_MAXID 0
+#endif
+
 /*
  * Simply test whether the TrustedBSD/MAC MIB tree is present; if so,
  * return 1 to indicate that the system has MAC enabled overall or for
  * a given policy.
  */
-#if 0 /* XXX PM: Not yet. */
 int
 mac_is_present(const char *policyname)
 {
-	int mib[5];
-	size_t siz;
-	char *mibname;
-	int error;
+	int error, i, mac_enabled, mac_version, mib[3];
+	size_t len;
+	struct ctlname ctlname;
 
 	if (policyname != NULL) {
-		if (policyname[strcspn(policyname, ".=")] != '\0') {
+		for (i = 0; i < SECURITY_MAXID; i++) {
+			ctlname = securityname[i];
+			/* Skip "mac_" and see if the policy name matches. */
+			if (strlen(ctlname.ctl_name) < 5)
+				continue;
+			if (!strcmp(ctlname.ctl_name + 4, policyname))
+				break;
+		}
+		if (i == SECURITY_MAXID) {
 			errno = EINVAL;
-			return (-1);
+			return (-1); /* No such policy. */
 		}
-		mibname = malloc(sizeof("security.mac.") - 1 +
-		    strlen(policyname) + sizeof(".enabled"));
-		if (mibname == NULL)
+		/* Now do the sysctl(), to see if the policy is active. */
+		mib[0] = CTL_SECURITY;
+		mib[1] = i;
+		/* XXX PM: EVERY POLICY SHOULD SUPPORT THAT SYSCTL! */
+		mib[2] = MAC_POLICY_ENABLED;
+		len = sizeof(mac_enabled);
+		error = sysctl(mib, 3, &mac_enabled, &len, NULL, 0);
+		if (error == -1)
 			return (-1);
-		strcpy(mibname, "security.mac.");
-		strcat(mibname, policyname);
-		strcat(mibname, ".enabled");
-		siz = 5;
-		error = sysctlnametomib(mibname, mib, &siz);
-		free(mibname);
+		return (mac_enabled);
 	} else {
-		siz = 3;
-		error = sysctlnametomib("security.mac", mib, &siz);
-	}
-	if (error == -1) {
-		switch (errno) {
-		case ENOTDIR:
-		case ENOENT:
-			return (0);
-		default:
-			return (error);
+		mib[0] = CTL_SECURITY;
+		mib[1] = SECURITY_VERSION;
+		len = sizeof(mac_version);
+		error = sysctl(mib, 2, &mac_version, &len, NULL, 0);
+		if (error == -1) {
+			if (errno == EOPNOTSUPP)
+				return (0); /* MAC not present. */
+			return (-1); /* Preserve 'errno'. */
 		}
+		return (1); /* MAC present. */
 	}
-	return (1);
 }
-#endif

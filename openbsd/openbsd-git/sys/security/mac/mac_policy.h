@@ -63,23 +63,18 @@
 #include <sys/acl.h>
 #endif
 
-struct auditinfo;
-struct auditinfo_addr;
 struct bpf_d;
 struct cdev;
 struct componentname;
-struct devfs_dirent;
 struct ifnet;
 struct exec_package;
 struct inpcb;
 struct ipq;
-struct ksem;
 struct label;
 struct mac_policy_conf;
 struct mbuf;
 struct mount;
 struct msg;
-struct msghdr;
 struct msqid_kernel;
 struct nameidata;
 struct pipepair;
@@ -90,7 +85,6 @@ struct shmfd;
 struct shmid_kernel;
 struct sockaddr;
 struct socket;
-struct thread;
 struct ucred;
 struct uio;
 struct vattr;
@@ -153,6 +147,10 @@ typedef void	(*mpo_bpfdesc_create_mbuf_t)(struct bpf_d *d,
 typedef void	(*mpo_bpfdesc_destroy_label_t)(struct label *label);
 typedef void	(*mpo_bpfdesc_init_label_t)(struct label *label);
 
+#ifdef ANOUBIS
+typedef int	(*mpo_check_follow_link)(struct nameidata *, char *, int);
+#endif
+
 typedef int	(*mpo_cred_check_relabel_t)(struct ucred *cred,
 		    struct label *newlabel);
 typedef int	(*mpo_cred_check_visible_t)(struct ucred *cr1,
@@ -167,6 +165,19 @@ typedef int	(*mpo_cred_internalize_label_t)(struct label *label,
 		    char *element_name, char *element_data, int *claimed);
 typedef void	(*mpo_cred_relabel_t)(struct ucred *cred,
 		    struct label *newlabel);
+typedef void	(*mpo_cred_create_init_t)(struct ucred *cred);
+typedef void	(*mpo_cred_create_swapper_t)(struct ucred *cred);
+
+#ifdef ANOUBIS
+typedef int	(*mpo_execve_prepare_t)(struct exec_package *, struct label *);
+typedef void	(*mpo_execve_success_t)(struct exec_package *, struct label *);
+#endif
+
+#ifdef ANOUBIS
+typedef int	(*mpo_file_check_open_t)(struct ucred *cred, struct file * fp,
+		    struct vnode *vp, struct label *vplabel,
+		    const char * pathhint);
+#endif
 
 typedef int	(*mpo_ifnet_check_relabel_t)(struct ucred *cred,
 		    struct ifnet *ifp, struct label *ifplabel,
@@ -215,7 +226,7 @@ typedef void	(*mpo_ipq_reassemble)(struct ipq *q, struct label *qlabel,
 		    struct mbuf *m, struct label *mlabel);
 typedef void	(*mpo_ipq_update_t)(struct mbuf *m, struct label *mlabel,
 		    struct ipq *q, struct label *qlabel);
-
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 typedef int	(*mpo_kenv_check_dump_t)(struct ucred *cred);
 typedef int	(*mpo_kenv_check_get_t)(struct ucred *cred, char *name);
 typedef int	(*mpo_kenv_check_set_t)(struct ucred *cred, char *name,
@@ -225,7 +236,7 @@ typedef int	(*mpo_kenv_check_unset_t)(struct ucred *cred, char *name);
 typedef int	(*mpo_kld_check_load_t)(struct ucred *cred, struct vnode *vp,
 		    struct label *vplabel);
 typedef int	(*mpo_kld_check_stat_t)(struct ucred *cred);
-
+#endif
 typedef void	(*mpo_mbuf_copy_label_t)(struct label *src,
 		    struct label *dest);
 typedef void	(*mpo_mbuf_destroy_label_t)(struct label *label);
@@ -237,11 +248,11 @@ typedef void	(*mpo_mount_create_t)(struct ucred *cred, struct mount *mp,
 		    struct label *mplabel);
 typedef void	(*mpo_mount_destroy_label_t)(struct label *label);
 typedef void	(*mpo_mount_init_label_t)(struct label *label);
-
+#if 0 /* XXX PM: AppleTalk is deprecated, we don't implement it in OpenBSD. */
 typedef void	(*mpo_netatalk_aarp_send_t)(struct ifnet *ifp,
 		    struct label *ifplabel, struct mbuf *m,
 		    struct label *mlabel);
-
+#endif
 typedef void	(*mpo_netinet_arp_send_t)(struct ifnet *ifp,
 		    struct label *ifplabel, struct mbuf *m,
 		    struct label *mlabel);
@@ -263,11 +274,11 @@ typedef void	(*mpo_netinet_igmp_send_t)(struct ifnet *ifp,
 		    struct label *mlabel);
 typedef void	(*mpo_netinet_tcp_reply_t)(struct mbuf *m,
 		    struct label *mlabel);
-
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 typedef void	(*mpo_netinet6_nd6_send_t)(struct ifnet *ifp,
 		    struct label *ifplabel, struct mbuf *m,
 		    struct label *mlabel);
-
+#endif
 typedef int	(*mpo_pipe_check_ioctl_t)(struct ucred *cred,
 		    struct pipepair *pp, struct label *pplabel,
 		    unsigned long cmd, void *data);
@@ -294,7 +305,7 @@ typedef int	(*mpo_pipe_internalize_label_t)(struct label *label,
 		    char *element_name, char *element_data, int *claimed);
 typedef void	(*mpo_pipe_relabel_t)(struct ucred *cred, struct pipepair *pp,
 		    struct label *oldlabel, struct label *newlabel);
-
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 typedef int	(*mpo_posixsem_check_getvalue_t)(struct ucred *active_cred,
 		    struct ucred *file_cred, struct ksem *ks,
 		    struct label *kslabel);
@@ -333,6 +344,7 @@ typedef void	(*mpo_posixshm_create_t)(struct ucred *cred,
 		    struct shmfd *shmfd, struct label *shmlabel);
 typedef void	(*mpo_posixshm_destroy_label_t)(struct label *label);
 typedef void	(*mpo_posixshm_init_label_t)(struct label *label);
+#endif
 
 typedef int	(*mpo_priv_check_t)(struct ucred *cred, int priv);
 typedef int	(*mpo_priv_grant_t)(struct ucred *cred, int priv);
@@ -342,10 +354,12 @@ typedef int	(*mpo_proc_check_debug_t)(struct ucred *cred,
 		    struct proc *p);
 typedef int	(*mpo_proc_check_sched_t)(struct ucred *cred,
 		    struct proc *p);
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 typedef int	(*mpo_proc_check_setaudit_t)(struct ucred *cred,
 		    struct auditinfo *ai);
 typedef int	(*mpo_proc_check_setaudit_addr_t)(struct ucred *cred,
 		    struct auditinfo_addr *aia);
+#endif
 typedef int	(*mpo_proc_check_setauid_t)(struct ucred *cred, uid_t auid);
 typedef int	(*mpo_proc_check_setegid_t)(struct ucred *cred, gid_t egid);
 typedef int	(*mpo_proc_check_seteuid_t)(struct ucred *cred, uid_t euid);
@@ -365,10 +379,9 @@ typedef int	(*mpo_proc_check_signal_t)(struct ucred *cred,
 		    struct proc *proc, int signum);
 typedef int	(*mpo_proc_check_wait_t)(struct ucred *cred,
 		    struct proc *proc);
-typedef void	(*mpo_cred_create_init_t)(struct ucred *cred);
-typedef void	(*mpo_cred_create_swapper_t)(struct ucred *cred);
 typedef void	(*mpo_proc_destroy_label_t)(struct label *label);
 typedef void	(*mpo_proc_init_label_t)(struct label *label);
+typedef void	(*mpo_proc_userret_t)(struct proc *proc);
 
 typedef int	(*mpo_socket_check_accept_t)(struct ucred *cred,
 		    struct socket *so, struct label *solabel);
@@ -383,9 +396,11 @@ typedef int	(*mpo_socket_check_connect_t)(struct ucred *cred,
 		    const struct sockaddr *sa);
 typedef int	(*mpo_socket_check_create_t)(struct ucred *cred, int domain,
 		    int type, int protocol);
+#if 0 /* XXX PM: This hook is only called from the netatalk code. */
 typedef int	(*mpo_socket_check_deliver_t)(struct socket *so,
 		    struct label *solabel, struct mbuf *m,
 		    struct label *mlabel);
+#endif
 typedef int	(*mpo_socket_check_listen_t)(struct ucred *cred,
 		    struct socket *so, struct label *solabel);
 typedef int	(*mpo_socket_check_poll_t)(struct ucred *cred,
@@ -443,11 +458,13 @@ typedef int	(*mpo_syncache_init_label_t)(struct label *label, int flag);
 
 typedef int	(*mpo_system_check_acct_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel);
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 typedef int	(*mpo_system_check_audit_t)(struct ucred *cred, void *record,
 		    int length);
 typedef int	(*mpo_system_check_auditctl_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel);
 typedef int	(*mpo_system_check_auditon_t)(struct ucred *cred, int cmd);
+#endif
 typedef int	(*mpo_system_check_reboot_t)(struct ucred *cred, int howto);
 typedef int	(*mpo_system_check_swapon_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel);
@@ -465,7 +482,9 @@ typedef void	(*mpo_sysvmsg_cleanup_t)(struct label *msglabel);
 typedef void	(*mpo_sysvmsg_create_t)(struct ucred *cred,
 		    struct msqid_kernel *msqkptr, struct label *msqlabel,
 		    struct msg *msgptr, struct label *msglabel);
+#if 0 /* XXX PM: We never release SysV messages in OpenBSD. */
 typedef void	(*mpo_sysvmsg_destroy_label_t)(struct label *label);
+#endif
 typedef void	(*mpo_sysvmsg_init_label_t)(struct label *label);
 
 typedef int	(*mpo_sysvmsq_check_msgmsq_t)(struct ucred *cred,
@@ -487,7 +506,9 @@ typedef int	(*mpo_sysvmsq_check_msqsnd_t)(struct ucred *cred,
 typedef void	(*mpo_sysvmsq_cleanup_t)(struct label *msqlabel);
 typedef void	(*mpo_sysvmsq_create_t)(struct ucred *cred,
 		    struct msqid_kernel *msqkptr, struct label *msqlabel);
+#if 0 /* XXX PM: We never release SysV messages in OpenBSD. */
 typedef void	(*mpo_sysvmsq_destroy_label_t)(struct label *label);
+#endif
 typedef void	(*mpo_sysvmsq_init_label_t)(struct label *label);
 
 typedef int	(*mpo_sysvsem_check_semctl_t)(struct ucred *cred,
@@ -522,8 +543,6 @@ typedef void	(*mpo_sysvshm_create_t)(struct ucred *cred,
 typedef void	(*mpo_sysvshm_destroy_label_t)(struct label *label);
 typedef void	(*mpo_sysvshm_init_label_t)(struct label *label);
 
-typedef void	(*mpo_proc_userret_t)(struct proc *proc);
-
 typedef int	(*mpo_vnode_associate_extattr_t)(struct mount *mp,
 		    struct label *mplabel, struct vnode *vp,
 		    struct label *vplabel);
@@ -554,8 +573,10 @@ typedef int	(*mpo_vnode_check_mmap_t)(struct ucred *cred,
 		    int flags);
 typedef void	(*mpo_vnode_check_mmap_downgrade_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel, int *prot);
+#if 0 /* XXX PM: This hook does not seem to be called anywhere in FreeBSD. */
 typedef int	(*mpo_vnode_check_mprotect_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel, int prot);
+#endif
 #ifdef ANOUBIS
 typedef int	(*mpo_vnode_check_open_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel, int acc_mode,
@@ -564,14 +585,6 @@ typedef int	(*mpo_vnode_check_open_t)(struct ucred *cred,
 #else
 typedef int	(*mpo_vnode_check_open_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel, int acc_mode);
-#endif
-#ifdef ANOUBIS
-typedef int	(*mpo_execve_prepare_t)(struct exec_package *, struct label *);
-typedef void	(*mpo_execve_success_t)(struct exec_package *, struct label *);
-typedef int	(*mpo_file_check_open_t)(struct ucred *cred, struct file * fp,
-		    struct vnode *vp, struct label *vplabel,
-		    const char * pathhint);
-typedef int	(*mpo_check_follow_link)(struct nameidata *, char *, int);
 #endif
 typedef int	(*mpo_vnode_check_poll_t)(struct ucred *active_cred,
 		    struct ucred *file_cred, struct vnode *vp,
@@ -692,6 +705,10 @@ struct mac_policy_ops {
 	mpo_bpfdesc_destroy_label_t		mpo_bpfdesc_destroy_label;
 	mpo_bpfdesc_init_label_t		mpo_bpfdesc_init_label;
 
+#ifdef ANOUBIS
+	mpo_check_follow_link			mpo_check_follow_link;
+#endif
+
 	mpo_cred_check_relabel_t		mpo_cred_check_relabel;
 	mpo_cred_check_visible_t		mpo_cred_check_visible;
 	mpo_cred_copy_label_t			mpo_cred_copy_label;
@@ -700,6 +717,15 @@ struct mac_policy_ops {
 	mpo_cred_init_label_t			mpo_cred_init_label;
 	mpo_cred_internalize_label_t		mpo_cred_internalize_label;
 	mpo_cred_relabel_t			mpo_cred_relabel;
+
+#ifdef ANOUBIS
+	mpo_execve_prepare_t			mpo_execve_prepare;
+	mpo_execve_success_t			mpo_execve_success;
+#endif
+
+#ifdef ANOUBIS
+	mpo_file_check_open_t			mpo_file_check_open;
+#endif
 
 	mpo_ifnet_check_relabel_t		mpo_ifnet_check_relabel;
 	mpo_ifnet_check_transmit_t		mpo_ifnet_check_transmit;
@@ -725,7 +751,7 @@ struct mac_policy_ops {
 	mpo_ipq_match_t				mpo_ipq_match;
 	mpo_ipq_reassemble			mpo_ipq_reassemble;
 	mpo_ipq_update_t			mpo_ipq_update;
-
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 	mpo_kenv_check_dump_t			mpo_kenv_check_dump;
 	mpo_kenv_check_get_t			mpo_kenv_check_get;
 	mpo_kenv_check_set_t			mpo_kenv_check_set;
@@ -733,7 +759,7 @@ struct mac_policy_ops {
 
 	mpo_kld_check_load_t			mpo_kld_check_load;
 	mpo_kld_check_stat_t			mpo_kld_check_stat;
-
+#endif
 	mpo_mbuf_copy_label_t			mpo_mbuf_copy_label;
 	mpo_mbuf_destroy_label_t		mpo_mbuf_destroy_label;
 	mpo_mbuf_init_label_t			mpo_mbuf_init_label;
@@ -742,9 +768,9 @@ struct mac_policy_ops {
 	mpo_mount_create_t			mpo_mount_create;
 	mpo_mount_destroy_label_t		mpo_mount_destroy_label;
 	mpo_mount_init_label_t			mpo_mount_init_label;
-
+#if 0 /* XXX PM: AppleTalk is deprecated, we don't implement it in OpenBSD. */
 	mpo_netatalk_aarp_send_t		mpo_netatalk_aarp_send;
-
+#endif
 	mpo_netinet_arp_send_t			mpo_netinet_arp_send;
 	mpo_netinet_firewall_reply_t		mpo_netinet_firewall_reply;
 	mpo_netinet_firewall_send_t		mpo_netinet_firewall_send;
@@ -753,9 +779,9 @@ struct mac_policy_ops {
 	mpo_netinet_icmp_replyinplace_t		mpo_netinet_icmp_replyinplace;
 	mpo_netinet_igmp_send_t			mpo_netinet_igmp_send;
 	mpo_netinet_tcp_reply_t			mpo_netinet_tcp_reply;
-
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 	mpo_netinet6_nd6_send_t			mpo_netinet6_nd6_send;
-
+#endif
 	mpo_pipe_check_ioctl_t			mpo_pipe_check_ioctl;
 	mpo_pipe_check_poll_t			mpo_pipe_check_poll;
 	mpo_pipe_check_read_t			mpo_pipe_check_read;
@@ -769,7 +795,7 @@ struct mac_policy_ops {
 	mpo_pipe_init_label_t			mpo_pipe_init_label;
 	mpo_pipe_internalize_label_t		mpo_pipe_internalize_label;
 	mpo_pipe_relabel_t			mpo_pipe_relabel;
-
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 	mpo_posixsem_check_getvalue_t		mpo_posixsem_check_getvalue;
 	mpo_posixsem_check_open_t		mpo_posixsem_check_open;
 	mpo_posixsem_check_post_t		mpo_posixsem_check_post;
@@ -788,15 +814,17 @@ struct mac_policy_ops {
 	mpo_posixshm_create_t			mpo_posixshm_create;
 	mpo_posixshm_destroy_label_t		mpo_posixshm_destroy_label;
 	mpo_posixshm_init_label_t		mpo_posixshm_init_label;
-
+#endif
 	mpo_priv_check_t			mpo_priv_check;
 	mpo_priv_grant_t			mpo_priv_grant;
 
 	mpo_cred_associate_nfsd_t		mpo_cred_associate_nfsd;
 	mpo_proc_check_debug_t			mpo_proc_check_debug;
 	mpo_proc_check_sched_t			mpo_proc_check_sched;
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 	mpo_proc_check_setaudit_t		mpo_proc_check_setaudit;
 	mpo_proc_check_setaudit_addr_t		mpo_proc_check_setaudit_addr;
+#endif
 	mpo_proc_check_setauid_t		mpo_proc_check_setauid;
 	mpo_proc_check_setuid_t			mpo_proc_check_setuid;
 	mpo_proc_check_seteuid_t		mpo_proc_check_seteuid;
@@ -819,7 +847,9 @@ struct mac_policy_ops {
 	mpo_socket_check_bind_t			mpo_socket_check_bind;
 	mpo_socket_check_connect_t		mpo_socket_check_connect;
 	mpo_socket_check_create_t		mpo_socket_check_create;
+#if 0 /* XXX PM: This hook is only called from the netatalk code. */
 	mpo_socket_check_deliver_t		mpo_socket_check_deliver;
+#endif
 	mpo_socket_check_listen_t		mpo_socket_check_listen;
 	mpo_socket_check_poll_t			mpo_socket_check_poll;
 	mpo_socket_check_receive_t		mpo_socket_check_receive;
@@ -850,9 +880,11 @@ struct mac_policy_ops {
 	mpo_syncache_create_mbuf_t		mpo_syncache_create_mbuf;
 
 	mpo_system_check_acct_t			mpo_system_check_acct;
+#if 0 /* XXX PM: Inexistent in OpenBSD. */
 	mpo_system_check_audit_t		mpo_system_check_audit;
 	mpo_system_check_auditctl_t		mpo_system_check_auditctl;
 	mpo_system_check_auditon_t		mpo_system_check_auditon;
+#endif
 	mpo_system_check_reboot_t		mpo_system_check_reboot;
 	mpo_system_check_swapon_t		mpo_system_check_swapon;
 	mpo_system_check_swapoff_t		mpo_system_check_swapoff;
@@ -860,7 +892,9 @@ struct mac_policy_ops {
 
 	mpo_sysvmsg_cleanup_t			mpo_sysvmsg_cleanup;
 	mpo_sysvmsg_create_t			mpo_sysvmsg_create;
+#if 0 /* XXX PM: We never release SysV messages in OpenBSD. */
 	mpo_sysvmsg_destroy_label_t		mpo_sysvmsg_destroy_label;
+#endif
 	mpo_sysvmsg_init_label_t		mpo_sysvmsg_init_label;
 
 	mpo_sysvmsq_check_msgmsq_t		mpo_sysvmsq_check_msgmsq;
@@ -872,7 +906,9 @@ struct mac_policy_ops {
 	mpo_sysvmsq_check_msqsnd_t		mpo_sysvmsq_check_msqsnd;
 	mpo_sysvmsq_cleanup_t			mpo_sysvmsq_cleanup;
 	mpo_sysvmsq_create_t			mpo_sysvmsq_create;
+#if 0 /* XXX PM: We never release SysV messages in OpenBSD. */
 	mpo_sysvmsq_destroy_label_t		mpo_sysvmsq_destroy_label;
+#endif
 	mpo_sysvmsq_init_label_t		mpo_sysvmsq_init_label;
 
 	mpo_sysvsem_check_semctl_t		mpo_sysvsem_check_semctl;
@@ -916,15 +952,10 @@ struct mac_policy_ops {
 	mpo_vnode_check_lookup_t		mpo_vnode_check_lookup;
 	mpo_vnode_check_mmap_t			mpo_vnode_check_mmap;
 	mpo_vnode_check_mmap_downgrade_t	mpo_vnode_check_mmap_downgrade;
+#if 0 /* XXX PM: This hook does not seem to be called anywhere in FreeBSD. */
 	mpo_vnode_check_mprotect_t		mpo_vnode_check_mprotect;
-	mpo_vnode_check_open_t			mpo_vnode_check_open;
-
-#ifdef ANOUBIS
-	mpo_execve_prepare_t			mpo_execve_prepare;
-	mpo_execve_success_t			mpo_execve_success;
-	mpo_file_check_open_t			mpo_file_check_open;
-	mpo_check_follow_link			mpo_check_follow_link;
 #endif
+	mpo_vnode_check_open_t			mpo_vnode_check_open;
 
 	mpo_vnode_check_poll_t			mpo_vnode_check_poll;
 	mpo_vnode_check_read_t			mpo_vnode_check_read;
