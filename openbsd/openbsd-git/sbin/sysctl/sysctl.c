@@ -700,7 +700,7 @@ parse(char *string, int flags)
 #ifdef SECURITY_ANOUBIS
 		if (mib[1] == SECURITY_ANOUBIS) {
 			sysctl_security(string, newval, SECURITY_ANOUBIS,
-			    ANOUBIS_MAXID, "security.anoubis", anoubisname);
+			    ANOUBIS_MAXID, "security.mac_anoubis", anoubisname);
 			return;
 		}
 #endif

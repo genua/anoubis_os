@@ -701,10 +701,11 @@ struct kinfo_proc2 {
 
 #define ANOUBIS_NAMES { \
 	{ 0, 0 }, \
-	{ "alf_enable", ANOUBIS_ALF_ENABLE }, \
-	{ "alf_allow_port_min", ANOUBIS_ALF_ALLOW_PORT_MIN }, \
-	{ "alf_allow_port_max", ANOUBIS_ALF_ALLOW_PORT_MAX }, \
-	{ "sfs_enable", ANOUBIS_SFS_ENABLE }, \
+	{ "enabled", CTLTYPE_INT }, \
+	{ "alf_enable", CTLTYPE_INT }, \
+	{ "alf_allow_port_min", CTLTYPE_INT }, \
+	{ "alf_allow_port_max",  CTLTYPE_INT }, \
+	{ "sfs_enable",  CTLTYPE_INT }, \
 }
 
 #ifdef	_KERNEL
