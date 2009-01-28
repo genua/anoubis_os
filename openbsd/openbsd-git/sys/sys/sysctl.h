@@ -664,30 +664,377 @@ struct kinfo_proc2 {
 /*
  * MAC_TEST definitions.
  */
-#define MAC_TEST_ACCEPT		2
-#define MAC_TEST_ACCEPTED	3
-#define MAC_TEST_BIND		4
-#define MAC_TEST_CONNECT	5
-#define MAC_TEST_LISTEN		6
-#define MAC_TEST_POLL		7
-#define MAC_TEST_RECEIVE	8
-#define MAC_TEST_SEND		9
-#define MAC_TEST_STAT		10
-#define MAC_TEST_BPF_RECEIVE	11
-#define MAC_TEST_MAXID		12
+#define	MAC_TEST_BPFDESC_CHECK_RECEIVE		2
+#define	MAC_TEST_BPFDESC_CREATE			3
+#define	MAC_TEST_BPFDESC_CREATE_MBUF		4
+#define	MAC_TEST_BPFDESC_DESTROY_LABEL		5
+#define	MAC_TEST_BPFDESC_INIT_LABEL		6
+#define	MAC_TEST_CRED_CHECK_RELABEL		7
+#define	MAC_TEST_CRED_CHECK_VISIBLE		8
+#define	MAC_TEST_CRED_COPY_LABEL		9
+#define	MAC_TEST_CRED_CREATE_INIT		10
+#define	MAC_TEST_CRED_CREATE_SWAPPER		11
+#define	MAC_TEST_CRED_DESTROY_LABEL		12
+#define	MAC_TEST_CRED_EXTERNALIZE_LABEL		13
+#define	MAC_TEST_CRED_INIT_LABEL		14
+#define	MAC_TEST_CRED_INTERNALIZE_LABEL		15
+#define	MAC_TEST_CRED_RELABEL			16
+#define	MAC_TEST_IFNET_CHECK_RELABEL		17
+#define	MAC_TEST_IFNET_CHECK_TRANSMIT		18
+#define	MAC_TEST_IFNET_COPY_LABEL		19
+#define	MAC_TEST_IFNET_CREATE			20
+#define	MAC_TEST_IFNET_CREATE_MBUF		21
+#define	MAC_TEST_IFNET_DESTROY_LABEL		22
+#define	MAC_TEST_IFNET_EXTERNALIZE_LABEL	23
+#define	MAC_TEST_IFNET_INIT_LABEL		24
+#define	MAC_TEST_IFNET_INTERNALIZE_LABEL	25
+#define	MAC_TEST_IFNET_RELABEL			26
+#define	MAC_TEST_INPCB_CHECK_DELIVER		27
+#define	MAC_TEST_INPCB_CREATE			28
+#define	MAC_TEST_INPCB_CREATE_MBUF		29
+#define	MAC_TEST_INPCB_DESTROY_LABEL		30
+#define	MAC_TEST_INPCB_INIT_LABEL		31
+#define	MAC_TEST_INPCB_SOSETLABEL		32
+#define	MAC_TEST_IPQ_CREATE			33
+#define	MAC_TEST_IPQ_DESTROY_LABEL		34
+#define	MAC_TEST_IPQ_INIT_LABEL			35
+#define	MAC_TEST_IPQ_MATCH			36
+#define	MAC_TEST_IPQ_REASSEMBLE			37
+#define	MAC_TEST_IPQ_UPDATE			38
+#define	MAC_TEST_MBUF_COPY_LABEL		39
+#define	MAC_TEST_MBUF_DESTROY_LABEL		40
+#define	MAC_TEST_MBUF_INIT_LABEL		41
+#define	MAC_TEST_MOUNT_CHECK_STAT		42
+#define	MAC_TEST_MOUNT_CREATE			43
+#define	MAC_TEST_MOUNT_DESTROY_LABEL		44
+#define	MAC_TEST_MOUNT_INIT_LABEL		45
+#define	MAC_TEST_NETINET_ARP_SEND		46
+#define	MAC_TEST_NETINET_FRAGMENT		47
+#define	MAC_TEST_NETINET_ICMP_REPLY		48
+#define	MAC_TEST_NETINET_ICMP_REPLYINPLACE	49
+#define	MAC_TEST_NETINET_IGMP_SEND		50
+#define	MAC_TEST_NETINET_TCP_REPLY		51
+#define	MAC_TEST_PIPE_CHECK_IOCTL		52
+#define	MAC_TEST_PIPE_CHECK_POLL		53
+#define	MAC_TEST_PIPE_CHECK_READ		54
+#define	MAC_TEST_PIPE_CHECK_RELABEL		55
+#define	MAC_TEST_PIPE_CHECK_STAT		56
+#define	MAC_TEST_PIPE_CHECK_WRITE		57
+#define	MAC_TEST_PIPE_COPY_LABEL		58
+#define	MAC_TEST_PIPE_CREATE			59
+#define	MAC_TEST_PIPE_DESTROY_LABEL		60
+#define	MAC_TEST_PIPE_EXTERNALIZE_LABEL		61
+#define	MAC_TEST_PIPE_INIT_LABEL		62
+#define	MAC_TEST_PIPE_INTERNALIZE_LABEL		63
+#define	MAC_TEST_PIPE_RELABEL			64
+#define	MAC_TEST_PROC_CHECK_DEBUG		65
+#define	MAC_TEST_PROC_CHECK_SCHED		66
+#define	MAC_TEST_PROC_CHECK_SIGNAL		67
+#define	MAC_TEST_PROC_CHECK_SETEGID		68
+#define	MAC_TEST_PROC_CHECK_EUID		69
+#define	MAC_TEST_PROC_CHECK_SETREGID		70
+#define	MAC_TEST_PROC_CHECK_SETREUID		71
+#define	MAC_TEST_PROC_CHECK_SETGID		72
+#define	MAC_TEST_PROC_CHECK_SETGROUPS		73
+#define	MAC_TEST_PROC_CHECK_SETRESGID		74
+#define	MAC_TEST_PROC_CHECK_SETRESUID		75
+#define	MAC_TEST_PROC_CHECK_SETUID		76
+#define	MAC_TEST_PROC_CHECK_WAIT		77
+#define	MAC_TEST_PROC_DESTROY_LABEL		78
+#define	MAC_TEST_PROC_INIT_LABEL		79
+#define	MAC_TEST_PROC_USERRET			80
+#define	MAC_TEST_SOCKET_CHECK_ACCEPT		81
+#define	MAC_TEST_SOCKET_CHECK_BIND		82
+#define	MAC_TEST_SOCKET_CHECK_CONNECT		83
+#define	MAC_TEST_SOCKET_CHECK_LISTEN		84
+#define	MAC_TEST_SOCKET_CHECK_POLL		85
+#define	MAC_TEST_SOCKET_CHECK_RECEIVE		86
+#define	MAC_TEST_SOCKET_CHECK_RELABEL		87
+#define	MAC_TEST_SOCKET_CHECK_SEND		88
+#define	MAC_TEST_SOCKET_CHECK_STAT		89
+#define	MAC_TEST_SOCKET_CHECK_VISIBLE		90
+#define	MAC_TEST_SOCKET_COPY_LABEL		91
+#define	MAC_TEST_SOCKET_CREATE			92
+#define	MAC_TEST_SOCKET_CREATE_MBUF		93
+#define	MAC_TEST_SOCKET_DESTROY_LABEL		94
+#define	MAC_TEST_SOCKET_EXTERNALIZE_LABEL	95
+#define	MAC_TEST_SOCKET_INIT_LABEL		96
+#define	MAC_TEST_SOCKET_INTERNALIZE_LABEL	97
+#define	MAC_TEST_SOCKET_NEWCONN			98
+#define	MAC_TEST_SOCKET_RELABEL			99
+#define	MAC_TEST_SOCKETPEER_DESTROY_LABEL	100
+#define	MAC_TEST_SOCKETPEER_EXTERNALIZE_LABEL	101
+#define	MAC_TEST_SOCKETPEER_INIT_LABEL		102
+#define	MAC_TEST_SOCKETPEER_SET_FROM_MBUF	103
+#define	MAC_TEST_SOCKETPEER_SET_FROM_SOCKET	104
+#define	MAC_TEST_SYNCACHE_CREATE		105
+#define	MAC_TEST_SYNCACHE_CREATE_MBUF		106
+#define	MAC_TEST_SYNCACHE_DESTROY_LABEL		107
+#define	MAC_TEST_SYNCACHE_INIT_LABEL		108
+#define	MAC_TEST_SYSTEM_CHECK_ACCT		109
+#define	MAC_TEST_SYSTEM_CHECK_REBOOT		110
+#define	MAC_TEST_SYSTEM_CHECK_SWAPOFF		111
+#define	MAC_TEST_SYSTEM_CHECK_SWAPON		112
+#define	MAC_TEST_SYSTEM_CHECK_SYSCTL		113
+#define	MAC_TEST_SYSVMSG_CLEANUP		114
+#define	MAC_TEST_SYSVMSG_CREATE			115
+#define	MAC_TEST_SYSVMSG_INIT_LABEL		116
+#define	MAC_TEST_SYSVMSQ_CHECK_MSGMSQ		117
+#define	MAC_TEST_SYSVMSQ_CHECK_MSGRCV		118
+#define	MAC_TEST_SYSVMSQ_CHECK_MSGRMID		119
+#define	MAC_TEST_SYSVMSQ_CHECK_MSQGET		120
+#define	MAC_TEST_SYSVMSQ_CHECK_MSQSND		121
+#define	MAC_TEST_SYSVMSQ_CHECK_MSQRCV		122
+#define	MAC_TEST_SYSVMSQ_CHECK_MSQCTL		123
+#define	MAC_TEST_SYSVMSQ_CLEANUP		124
+#define	MAC_TEST_SYSVMSQ_CREATE			125
+#define	MAC_TEST_SYSVMSQ_INIT_LABEL		126
+#define	MAC_TEST_SYSVSEM_CHECK_SEMCTL		127
+#define	MAC_TEST_SYSVSEM_CHECK_SEMGET		128
+#define	MAC_TEST_SYSVSEM_CHECK_SEMOP		129
+#define	MAC_TEST_SYSVSEM_CLEANUP		130
+#define	MAC_TEST_SYSVSEM_CREATE			131
+#define	MAC_TEST_SYSVSEM_DESTROY_LABEL		132
+#define	MAC_TEST_SYSVSEM_INIT_LABEL		133
+#define	MAC_TEST_SYSVSHM_CHECK_SHMAT		134
+#define	MAC_TEST_SYSVSHM_CHECK_SHMCTL		135
+#define	MAC_TEST_SYSVSHM_CHECK_SHMDT		136
+#define	MAC_TEST_SYSVSHM_CHECK_SHMGET		137
+#define	MAC_TEST_SYSVSHM_CLEANUP		138
+#define	MAC_TEST_SYSVSHM_CREATE			139
+#define	MAC_TEST_SYSVSHM_DESTROY_LABEL		140
+#define	MAC_TEST_SYSVSHM_INIT_LABEL		141
+#define	MAC_TEST_VNODE_ASSOCIATE_EXTATTR	142
+#define	MAC_TEST_VNODE_ASSOCIATE_SINGLELABEL	143
+#define	MAC_TEST_VNODE_CHECK_ACCESS		144
+#define	MAC_TEST_VNODE_CHECK_CHDIR		145
+#define	MAC_TEST_VNODE_CHECK_CHROOT		146
+#define	MAC_TEST_VNODE_CHECK_CREATE		147
+#define	MAC_TEST_VNODE_CHECK_DELETEACL		148
+#define	MAC_TEST_VNODE_CHECK_DELETEEXTATTR	149
+#define	MAC_TEST_VNODE_CHECK_EXEC		150
+#define	MAC_TEST_VNODE_CHECK_GETACL		151
+#define	MAC_TEST_VNODE_CHECK_GETEXTATTR		152
+#define	MAC_TEST_VNODE_CHECK_LINK		153
+#define	MAC_TEST_VNODE_CHECK_LISTEXTATTR	154
+#define	MAC_TEST_VNODE_CHECK_LOOKUP		155
+#define	MAC_TEST_VNODE_CHECK_MMAP		156
+#define	MAC_TEST_VNODE_CHECK_OPEN		157
+#define	MAC_TEST_VNODE_CHECK_POLL		158
+#define	MAC_TEST_VNODE_CHECK_READ		159
+#define	MAC_TEST_VNODE_CHECK_READDIR		160
+#define	MAC_TEST_VNODE_CHECK_READLINK		161
+#define	MAC_TEST_VNODE_CHECK_RELABEL		162
+#define	MAC_TEST_VNODE_CHECK_RENAME_FROM	163
+#define	MAC_TEST_VNODE_CHECK_RENAME_TO		164
+#define	MAC_TEST_VNODE_CHECK_REVOKE		165
+#define	MAC_TEST_VNODE_CHECK_SETACL		166
+#define	MAC_TEST_VNODE_CHECK_SETEXTATTR		167
+#define	MAC_TEST_VNODE_CHECK_SETFLAGS		168
+#define	MAC_TEST_VNODE_CHECK_SETMODE		169
+#define	MAC_TEST_VNODE_CHECK_SETOWNER		170
+#define	MAC_TEST_VNODE_CHECK_SETUTIMES		171
+#define	MAC_TEST_VNODE_CHECK_STAT		172
+#define	MAC_TEST_VNODE_CHECK_UNLINK		173
+#define	MAC_TEST_VNODE_CHECK_WRITE		174
+#define	MAC_TEST_VNODE_COPY_LABEL		175
+#define	MAC_TEST_VNODE_CREATE_EXTATTR		176
+#define	MAC_TEST_VNODE_DESTROY_LABEL		177
+#define	MAC_TEST_VNODE_EXECVE_TRANSITION	178
+#define	MAC_TEST_VNODE_EXECVE_WILL_TRANSITION	179
+#define	MAC_TEST_VNODE_EXTERNALIZE_LABEL	180
+#define	MAC_TEST_VNODE_INIT_LABEL		181
+#define	MAC_TEST_VNODE_INTERNALIZE_LABEL	182
+#define	MAC_TEST_VNODE_RELABEL			183
+#define	MAC_TEST_VNODE_SETLABEL_EXTATTR		184
+#define MAC_TEST_MAXID				185
 
 #define MAC_TEST_NAMES { \
 	{ 0, 0 }, \
-	{ "accept", MAC_TEST_ACCEPT }, \
-	{ "accepted", MAC_TEST_ACCEPTED }, \
-	{ "bind", MAC_TEST_BIND }, \
-	{ "connect", MAC_TEST_CONNECT }, \
-	{ "listen", MAC_TEST_LISTEN }, \
-	{ "poll", MAC_TEST_POLL }, \
-	{ "receive", MAC_TEST_RECEIVE }, \
-	{ "send", MAC_TEST_SEND }, \
-	{ "stat", MAC_TEST_STAT }, \
-	{ "bpf_receive", MAC_TEST_BPF_RECEIVE }, \
+	{ "enabled", CTLTYPE_INT }, \
+	{ "bpfdesc_check_receive", CTLTYPE_INT }, \
+	{ "bpfdesc_create", CTLTYPE_INT }, \
+	{ "bpfdesc_create_mbuf", CTLTYPE_INT }, \
+	{ "bpfdesc_destroy_label", CTLTYPE_INT }, \
+	{ "bpfdesc_init_label", CTLTYPE_INT }, \
+	{ "cred_check_relabel", CTLTYPE_INT }, \
+	{ "cred_check_visible", CTLTYPE_INT }, \
+	{ "cred_copy_label", CTLTYPE_INT }, \
+	{ "cred_create_init", CTLTYPE_INT }, \
+	{ "cred_create_swapper", CTLTYPE_INT }, \
+	{ "cred_destroy_label", CTLTYPE_INT }, \
+	{ "cred_externalize_label", CTLTYPE_INT }, \
+	{ "cred_init_label", CTLTYPE_INT }, \
+	{ "cred_internalize_label", CTLTYPE_INT }, \
+	{ "cred_relabel", CTLTYPE_INT }, \
+	{ "ifnet_check_relabel", CTLTYPE_INT }, \
+	{ "ifnet_check_transmit", CTLTYPE_INT }, \
+	{ "ifnet_copy_label", CTLTYPE_INT }, \
+	{ "ifnet_create", CTLTYPE_INT }, \
+	{ "ifnet_create_mbuf", CTLTYPE_INT }, \
+	{ "ifnet_destroy_label", CTLTYPE_INT }, \
+	{ "ifnet_externalize_label", CTLTYPE_INT }, \
+	{ "ifnet_init_label", CTLTYPE_INT }, \
+	{ "ifnet_internalize_label", CTLTYPE_INT }, \
+	{ "ifnet_relabel", CTLTYPE_INT }, \
+	{ "inpcb_check_deliver", CTLTYPE_INT }, \
+	{ "inpcb_create", CTLTYPE_INT }, \
+	{ "inpcb_create_mbuf", CTLTYPE_INT }, \
+	{ "inpcb_destroy_label", CTLTYPE_INT }, \
+	{ "inpcb_init_label", CTLTYPE_INT }, \
+	{ "inpcb_sosetlabel", CTLTYPE_INT }, \
+	{ "ipq_create", CTLTYPE_INT }, \
+	{ "ipq_destroy_label", CTLTYPE_INT }, \
+	{ "ipq_init_label", CTLTYPE_INT }, \
+	{ "ipq_match", CTLTYPE_INT }, \
+	{ "ipq_reassemble", CTLTYPE_INT }, \
+	{ "ipq_update", CTLTYPE_INT }, \
+	{ "mbuf_copy_label", CTLTYPE_INT }, \
+	{ "mbuf_destroy_label", CTLTYPE_INT }, \
+	{ "mbuf_init_label", CTLTYPE_INT }, \
+	{ "mount_check_stat", CTLTYPE_INT }, \
+	{ "mount_create", CTLTYPE_INT }, \
+	{ "mount_destroy_label", CTLTYPE_INT }, \
+	{ "mount_init_label", CTLTYPE_INT }, \
+	{ "netinet_arp_send", CTLTYPE_INT }, \
+	{ "netinet_fragment", CTLTYPE_INT }, \
+	{ "netinet_icmp_reply", CTLTYPE_INT }, \
+	{ "netinet_icmp_replyinplace", CTLTYPE_INT }, \
+	{ "netinet_igmp_send", CTLTYPE_INT }, \
+	{ "netinet_tcp_reply", CTLTYPE_INT }, \
+	{ "pipe_check_ioctl", CTLTYPE_INT }, \
+	{ "pipe_check_poll", CTLTYPE_INT }, \
+	{ "pipe_check_read", CTLTYPE_INT }, \
+	{ "pipe_check_relabel", CTLTYPE_INT }, \
+	{ "pipe_check_stat", CTLTYPE_INT }, \
+	{ "pipe_check_write", CTLTYPE_INT }, \
+	{ "pipe_copy_label", CTLTYPE_INT }, \
+	{ "pipe_create", CTLTYPE_INT }, \
+	{ "pipe_destroy_label", CTLTYPE_INT }, \
+	{ "pipe_externalize_label", CTLTYPE_INT }, \
+	{ "pipe_init_label", CTLTYPE_INT }, \
+	{ "pipe_internalize_label", CTLTYPE_INT }, \
+	{ "pipe_relabel", CTLTYPE_INT }, \
+	{ "proc_check_debug", CTLTYPE_INT }, \
+	{ "proc_check_sched", CTLTYPE_INT }, \
+	{ "proc_check_signal", CTLTYPE_INT }, \
+	{ "proc_check_setegid", CTLTYPE_INT }, \
+	{ "proc_check_euid", CTLTYPE_INT }, \
+	{ "proc_check_setregid", CTLTYPE_INT }, \
+	{ "proc_check_setreuid", CTLTYPE_INT }, \
+	{ "proc_check_setgid", CTLTYPE_INT }, \
+	{ "proc_check_setgroups", CTLTYPE_INT }, \
+	{ "proc_check_setresgid", CTLTYPE_INT }, \
+	{ "proc_check_setresuid", CTLTYPE_INT }, \
+	{ "proc_check_setuid", CTLTYPE_INT }, \
+	{ "proc_check_wait", CTLTYPE_INT }, \
+	{ "proc_destroy_label", CTLTYPE_INT }, \
+	{ "proc_init_label", CTLTYPE_INT }, \
+	{ "proc_userret", CTLTYPE_INT }, \
+	{ "socket_check_accept", CTLTYPE_INT }, \
+	{ "socket_check_bind", CTLTYPE_INT }, \
+	{ "socket_check_connect", CTLTYPE_INT }, \
+	{ "socket_check_listen", CTLTYPE_INT }, \
+	{ "socket_check_poll", CTLTYPE_INT }, \
+	{ "socket_check_receive", CTLTYPE_INT }, \
+	{ "socket_check_relabel", CTLTYPE_INT }, \
+	{ "socket_check_send", CTLTYPE_INT }, \
+	{ "socket_check_stat", CTLTYPE_INT }, \
+	{ "socket_check_visible", CTLTYPE_INT }, \
+	{ "socket_copy_label", CTLTYPE_INT }, \
+	{ "socket_create", CTLTYPE_INT }, \
+	{ "socket_create_mbuf", CTLTYPE_INT }, \
+	{ "socket_destroy_label", CTLTYPE_INT }, \
+	{ "socket_externalize_label", CTLTYPE_INT }, \
+	{ "socket_init_label", CTLTYPE_INT }, \
+	{ "socket_internalize_label", CTLTYPE_INT }, \
+	{ "socket_newconn", CTLTYPE_INT }, \
+	{ "socket_relabel", CTLTYPE_INT }, \
+	{ "socketpeer_destroy_label", CTLTYPE_INT }, \
+	{ "socketpeer_externalize_label", CTLTYPE_INT }, \
+	{ "socketpeer_init_label", CTLTYPE_INT }, \
+	{ "socketpeer_set_from_mbuf", CTLTYPE_INT }, \
+	{ "socketpeer_set_from_socket", CTLTYPE_INT }, \
+	{ "syncache_create", CTLTYPE_INT }, \
+	{ "syncache_create_mbuf", CTLTYPE_INT }, \
+	{ "syncache_destroy_label", CTLTYPE_INT }, \
+	{ "syncache_init_label", CTLTYPE_INT }, \
+	{ "system_check_acct", CTLTYPE_INT }, \
+	{ "system_check_reboot", CTLTYPE_INT }, \
+	{ "system_check_swapoff", CTLTYPE_INT }, \
+	{ "system_check_swapon", CTLTYPE_INT }, \
+	{ "system_check_sysctl", CTLTYPE_INT }, \
+	{ "sysvmsg_cleanup", CTLTYPE_INT }, \
+	{ "sysvmsg_create", CTLTYPE_INT }, \
+	{ "sysvmsg_init_label", CTLTYPE_INT }, \
+	{ "sysvmsq_check_msgmsq", CTLTYPE_INT }, \
+	{ "sysvmsq_check_msgrcv", CTLTYPE_INT }, \
+	{ "sysvmsq_check_msgrmid", CTLTYPE_INT }, \
+	{ "sysvmsq_check_msqget", CTLTYPE_INT }, \
+	{ "sysvmsq_check_msqsnd", CTLTYPE_INT }, \
+	{ "sysvmsq_check_msqrcv", CTLTYPE_INT }, \
+	{ "sysvmsq_check_msqctl", CTLTYPE_INT }, \
+	{ "sysvmsq_cleanup", CTLTYPE_INT }, \
+	{ "sysvmsq_create", CTLTYPE_INT }, \
+	{ "sysvmsq_init_label", CTLTYPE_INT }, \
+	{ "sysvsem_check_semctl", CTLTYPE_INT }, \
+	{ "sysvsem_check_semget", CTLTYPE_INT }, \
+	{ "sysvsem_check_semop", CTLTYPE_INT }, \
+	{ "sysvsem_cleanup", CTLTYPE_INT }, \
+	{ "sysvsem_create", CTLTYPE_INT }, \
+	{ "sysvsem_destroy_label", CTLTYPE_INT }, \
+	{ "sysvsem_init_label", CTLTYPE_INT }, \
+	{ "sysvshm_check_shmat", CTLTYPE_INT }, \
+	{ "sysvshm_check_shmctl", CTLTYPE_INT }, \
+	{ "sysvshm_check_shmdt", CTLTYPE_INT }, \
+	{ "sysvshm_check_shmget", CTLTYPE_INT }, \
+	{ "sysvshm_cleanup", CTLTYPE_INT }, \
+	{ "sysvshm_create", CTLTYPE_INT }, \
+	{ "sysvshm_destroy_label", CTLTYPE_INT }, \
+	{ "sysvshm_init_label", CTLTYPE_INT }, \
+	{ "vnode_associate_extattr", CTLTYPE_INT }, \
+	{ "vnode_associate_singlelabel", CTLTYPE_INT }, \
+	{ "vnode_check_access", CTLTYPE_INT }, \
+	{ "vnode_check_chdir", CTLTYPE_INT }, \
+	{ "vnode_check_chroot", CTLTYPE_INT }, \
+	{ "vnode_check_create", CTLTYPE_INT }, \
+	{ "vnode_check_deleteacl", CTLTYPE_INT }, \
+	{ "vnode_check_deleteextattr", CTLTYPE_INT }, \
+	{ "vnode_check_exec", CTLTYPE_INT }, \
+	{ "vnode_check_getacl", CTLTYPE_INT }, \
+	{ "vnode_check_getextattr", CTLTYPE_INT }, \
+	{ "vnode_check_link", CTLTYPE_INT }, \
+	{ "vnode_check_listextattr", CTLTYPE_INT }, \
+	{ "vnode_check_lookup", CTLTYPE_INT }, \
+	{ "vnode_check_mmap", CTLTYPE_INT }, \
+	{ "vnode_check_open", CTLTYPE_INT }, \
+	{ "vnode_check_poll", CTLTYPE_INT }, \
+	{ "vnode_check_read", CTLTYPE_INT }, \
+	{ "vnode_check_readdir", CTLTYPE_INT }, \
+	{ "vnode_check_readlink", CTLTYPE_INT }, \
+	{ "vnode_check_relabel", CTLTYPE_INT }, \
+	{ "vnode_check_rename_from", CTLTYPE_INT }, \
+	{ "vnode_check_rename_to", CTLTYPE_INT }, \
+	{ "vnode_check_revoke", CTLTYPE_INT }, \
+	{ "vnode_check_setacl", CTLTYPE_INT }, \
+	{ "vnode_check_setextattr", CTLTYPE_INT }, \
+	{ "vnode_check_setflags", CTLTYPE_INT }, \
+	{ "vnode_check_setmode", CTLTYPE_INT }, \
+	{ "vnode_check_setowner", CTLTYPE_INT }, \
+	{ "vnode_check_setutimes", CTLTYPE_INT }, \
+	{ "vnode_check_stat", CTLTYPE_INT }, \
+	{ "vnode_check_unlink", CTLTYPE_INT }, \
+	{ "vnode_check_write", CTLTYPE_INT }, \
+	{ "vnode_copy_label", CTLTYPE_INT }, \
+	{ "vnode_create_extattr", CTLTYPE_INT }, \
+	{ "vnode_destroy_label", CTLTYPE_INT }, \
+	{ "vnode_execve_transition", CTLTYPE_INT }, \
+	{ "vnode_execve_will_transition", CTLTYPE_INT }, \
+	{ "vnode_externalize_label", CTLTYPE_INT }, \
+	{ "vnode_init_label", CTLTYPE_INT }, \
+	{ "vnode_internalize_label", CTLTYPE_INT }, \
+	{ "vnode_relabel", CTLTYPE_INT }, \
+	{ "vnode_setlabel_extattr", CTLTYPE_INT }, \
 }
 
 /*

@@ -696,36 +696,555 @@ security_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 		case MAC_POLICY_ENABLED:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
 			    &mac_test_enabled));
-		case MAC_TEST_ACCEPT:
+		case MAC_TEST_BPFDESC_CHECK_RECEIVE:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
-			    &mac_test_accept));
-		case MAC_TEST_ACCEPTED:
+			    &mac_test_bpfdesc_check_receive));
+		case MAC_TEST_BPFDESC_CREATE:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
-			    &mac_test_accepted));
-		case MAC_TEST_BIND:
+			    &mac_test_bpfdesc_create));
+		case MAC_TEST_BPFDESC_CREATE_MBUF:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
-			    &mac_test_bind));
-		case MAC_TEST_CONNECT:
+			    &mac_test_bpfdesc_create_mbuf));
+		case MAC_TEST_BPFDESC_DESTROY_LABEL:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
-			    &mac_test_connect));
-		case MAC_TEST_LISTEN:
+			    &mac_test_bpfdesc_destroy_label));
+		case MAC_TEST_BPFDESC_INIT_LABEL:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
-			    &mac_test_listen));
-		case MAC_TEST_POLL:
+			    &mac_test_bpfdesc_init_label));
+		case MAC_TEST_CRED_CHECK_RELABEL:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
-			    &mac_test_poll));
-		case MAC_TEST_RECEIVE:
+			    &mac_test_cred_check_relabel));
+		case MAC_TEST_CRED_CHECK_VISIBLE:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
-			    &mac_test_receive));
-		case MAC_TEST_SEND:
+			    &mac_test_cred_check_visible));
+		case MAC_TEST_CRED_COPY_LABEL:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
-			    &mac_test_send));
-		case MAC_TEST_STAT:
+			    &mac_test_cred_copy_label));
+		case MAC_TEST_CRED_CREATE_INIT:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
-			    &mac_test_stat));
-		case MAC_TEST_BPF_RECEIVE:
+			    &mac_test_cred_create_init));
+		case MAC_TEST_CRED_CREATE_SWAPPER:
 			return (sysctl_int(oldp, oldlenp, newp, newlen,
-			    &mac_test_bpfdesc_receive));
+			    &mac_test_cred_create_swapper));
+		case MAC_TEST_CRED_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_cred_destroy_label));
+		case MAC_TEST_CRED_EXTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_cred_externalize_label));
+		case MAC_TEST_CRED_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_cred_init_label));
+		case MAC_TEST_CRED_INTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_cred_internalize_label));
+		case MAC_TEST_CRED_RELABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_cred_relabel));
+		case MAC_TEST_IFNET_CHECK_RELABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ifnet_check_relabel));
+		case MAC_TEST_IFNET_CHECK_TRANSMIT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ifnet_check_transmit));
+		case MAC_TEST_IFNET_COPY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ifnet_copy_label));
+		case MAC_TEST_IFNET_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ifnet_create));
+		case MAC_TEST_IFNET_CREATE_MBUF:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ifnet_create_mbuf));
+		case MAC_TEST_IFNET_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ifnet_destroy_label));
+		case MAC_TEST_IFNET_EXTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ifnet_externalize_label));
+		case MAC_TEST_IFNET_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ifnet_init_label));
+		case MAC_TEST_IFNET_INTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ifnet_internalize_label));
+		case MAC_TEST_IFNET_RELABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ifnet_relabel));
+		case MAC_TEST_INPCB_CHECK_DELIVER:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_inpcb_check_deliver));
+		case MAC_TEST_INPCB_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_inpcb_create));
+		case MAC_TEST_INPCB_CREATE_MBUF:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_inpcb_create_mbuf));
+		case MAC_TEST_INPCB_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_inpcb_destroy_label));
+		case MAC_TEST_INPCB_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_inpcb_init_label));
+		case MAC_TEST_INPCB_SOSETLABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_inpcb_sosetlabel));
+		case MAC_TEST_IPQ_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ipq_create));
+		case MAC_TEST_IPQ_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ipq_destroy_label));
+		case MAC_TEST_IPQ_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ipq_init_label));
+		case MAC_TEST_IPQ_MATCH:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ipq_match));
+		case MAC_TEST_IPQ_REASSEMBLE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ipq_reassemble));
+		case MAC_TEST_IPQ_UPDATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_ipq_update));
+		case MAC_TEST_MBUF_COPY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_mbuf_copy_label));
+		case MAC_TEST_MBUF_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_mbuf_destroy_label));
+		case MAC_TEST_MBUF_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_mbuf_init_label));
+		case MAC_TEST_MOUNT_CHECK_STAT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_mount_check_stat));
+		case MAC_TEST_MOUNT_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_mount_create));
+		case MAC_TEST_MOUNT_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_mount_destroy_label));
+		case MAC_TEST_MOUNT_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_mount_init_label));
+		case MAC_TEST_NETINET_ARP_SEND:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_netinet_arp_send));
+		case MAC_TEST_NETINET_FRAGMENT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_netinet_fragment));
+		case MAC_TEST_NETINET_ICMP_REPLY:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_netinet_icmp_reply));
+		case MAC_TEST_NETINET_ICMP_REPLYINPLACE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_netinet_icmp_replyinplace));
+		case MAC_TEST_NETINET_IGMP_SEND:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_netinet_igmp_send));
+		case MAC_TEST_NETINET_TCP_REPLY:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_netinet_tcp_reply));
+		case MAC_TEST_PIPE_CHECK_IOCTL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_check_ioctl));
+		case MAC_TEST_PIPE_CHECK_POLL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_check_poll));
+		case MAC_TEST_PIPE_CHECK_READ:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_check_read));
+		case MAC_TEST_PIPE_CHECK_RELABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_check_relabel));
+		case MAC_TEST_PIPE_CHECK_STAT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_check_stat));
+		case MAC_TEST_PIPE_CHECK_WRITE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_check_write));
+		case MAC_TEST_PIPE_COPY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_copy_label));
+		case MAC_TEST_PIPE_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_create));
+		case MAC_TEST_PIPE_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_destroy_label));
+		case MAC_TEST_PIPE_EXTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_externalize_label));
+		case MAC_TEST_PIPE_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_init_label));
+		case MAC_TEST_PIPE_INTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_internalize_label));
+		case MAC_TEST_PIPE_RELABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_pipe_relabel));
+		case MAC_TEST_PROC_CHECK_DEBUG:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_debug));
+		case MAC_TEST_PROC_CHECK_SCHED:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_sched));
+		case MAC_TEST_PROC_CHECK_SIGNAL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_signal));
+		case MAC_TEST_PROC_CHECK_SETEGID:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_setegid));
+		case MAC_TEST_PROC_CHECK_EUID:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_euid));
+		case MAC_TEST_PROC_CHECK_SETREGID:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_setregid));
+		case MAC_TEST_PROC_CHECK_SETREUID:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_setreuid));
+		case MAC_TEST_PROC_CHECK_SETGID:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_setgid));
+		case MAC_TEST_PROC_CHECK_SETGROUPS:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_setgroups));
+		case MAC_TEST_PROC_CHECK_SETRESGID:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_setresgid));
+		case MAC_TEST_PROC_CHECK_SETRESUID:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_setresuid));
+		case MAC_TEST_PROC_CHECK_SETUID:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_setuid));
+		case MAC_TEST_PROC_CHECK_WAIT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_check_wait));
+		case MAC_TEST_PROC_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_destroy_label));
+		case MAC_TEST_PROC_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_init_label));
+		case MAC_TEST_PROC_USERRET:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_proc_userret));
+		case MAC_TEST_SOCKET_CHECK_ACCEPT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_check_accept));
+		case MAC_TEST_SOCKET_CHECK_BIND:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_check_bind));
+		case MAC_TEST_SOCKET_CHECK_CONNECT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_check_connect));
+		case MAC_TEST_SOCKET_CHECK_LISTEN:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_check_listen));
+		case MAC_TEST_SOCKET_CHECK_POLL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_check_poll));
+		case MAC_TEST_SOCKET_CHECK_RECEIVE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_check_receive));
+		case MAC_TEST_SOCKET_CHECK_RELABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_check_relabel));
+		case MAC_TEST_SOCKET_CHECK_SEND:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_check_send));
+		case MAC_TEST_SOCKET_CHECK_STAT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_check_stat));
+		case MAC_TEST_SOCKET_CHECK_VISIBLE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_check_visible));
+		case MAC_TEST_SOCKET_COPY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_copy_label));
+		case MAC_TEST_SOCKET_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_create));
+		case MAC_TEST_SOCKET_CREATE_MBUF:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_create_mbuf));
+		case MAC_TEST_SOCKET_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_destroy_label));
+		case MAC_TEST_SOCKET_EXTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_externalize_label));
+		case MAC_TEST_SOCKET_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_init_label));
+		case MAC_TEST_SOCKET_INTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_internalize_label));
+		case MAC_TEST_SOCKET_NEWCONN:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_newconn));
+		case MAC_TEST_SOCKET_RELABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socket_relabel));
+		case MAC_TEST_SOCKETPEER_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socketpeer_destroy_label));
+		case MAC_TEST_SOCKETPEER_EXTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socketpeer_externalize_label));
+		case MAC_TEST_SOCKETPEER_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socketpeer_init_label));
+		case MAC_TEST_SOCKETPEER_SET_FROM_MBUF:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socketpeer_set_from_mbuf));
+		case MAC_TEST_SOCKETPEER_SET_FROM_SOCKET:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_socketpeer_set_from_socket));
+		case MAC_TEST_SYNCACHE_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_syncache_create));
+		case MAC_TEST_SYNCACHE_CREATE_MBUF:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_syncache_create_mbuf));
+		case MAC_TEST_SYNCACHE_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_syncache_destroy_label));
+		case MAC_TEST_SYNCACHE_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_syncache_init_label));
+		case MAC_TEST_SYSTEM_CHECK_ACCT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_system_check_acct));
+		case MAC_TEST_SYSTEM_CHECK_REBOOT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_system_check_reboot));
+		case MAC_TEST_SYSTEM_CHECK_SWAPOFF:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_system_check_swapoff));
+		case MAC_TEST_SYSTEM_CHECK_SWAPON:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_system_check_swapon));
+		case MAC_TEST_SYSTEM_CHECK_SYSCTL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_system_check_sysctl));
+		case MAC_TEST_SYSVMSG_CLEANUP:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsg_cleanup));
+		case MAC_TEST_SYSVMSG_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsg_create));
+		case MAC_TEST_SYSVMSG_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsg_init_label));
+		case MAC_TEST_SYSVMSQ_CHECK_MSGMSQ:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsq_check_msgmsq));
+		case MAC_TEST_SYSVMSQ_CHECK_MSGRCV:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsq_check_msgrcv));
+		case MAC_TEST_SYSVMSQ_CHECK_MSGRMID:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsq_check_msgrmid));
+		case MAC_TEST_SYSVMSQ_CHECK_MSQGET:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsq_check_msqget));
+		case MAC_TEST_SYSVMSQ_CHECK_MSQSND:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsq_check_msqsnd));
+		case MAC_TEST_SYSVMSQ_CHECK_MSQRCV:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsq_check_msqrcv));
+		case MAC_TEST_SYSVMSQ_CHECK_MSQCTL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsq_check_msqctl));
+		case MAC_TEST_SYSVMSQ_CLEANUP:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsq_cleanup));
+		case MAC_TEST_SYSVMSQ_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsq_create));
+		case MAC_TEST_SYSVMSQ_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvmsq_init_label));
+		case MAC_TEST_SYSVSEM_CHECK_SEMCTL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvsem_check_semctl));
+		case MAC_TEST_SYSVSEM_CHECK_SEMGET:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvsem_check_semget));
+		case MAC_TEST_SYSVSEM_CHECK_SEMOP:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvsem_check_semop));
+		case MAC_TEST_SYSVSEM_CLEANUP:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvsem_cleanup));
+		case MAC_TEST_SYSVSEM_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvsem_create));
+		case MAC_TEST_SYSVSEM_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvsem_destroy_label));
+		case MAC_TEST_SYSVSEM_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvsem_init_label));
+		case MAC_TEST_SYSVSHM_CHECK_SHMAT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvshm_check_shmat));
+		case MAC_TEST_SYSVSHM_CHECK_SHMCTL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvshm_check_shmctl));
+		case MAC_TEST_SYSVSHM_CHECK_SHMDT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvshm_check_shmdt));
+		case MAC_TEST_SYSVSHM_CHECK_SHMGET:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvshm_check_shmget));
+		case MAC_TEST_SYSVSHM_CLEANUP:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvshm_cleanup));
+		case MAC_TEST_SYSVSHM_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvshm_create));
+		case MAC_TEST_SYSVSHM_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvshm_destroy_label));
+		case MAC_TEST_SYSVSHM_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_sysvshm_init_label));
+		case MAC_TEST_VNODE_ASSOCIATE_EXTATTR:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_associate_extattr));
+		case MAC_TEST_VNODE_ASSOCIATE_SINGLELABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_associate_singlelabel));
+		case MAC_TEST_VNODE_CHECK_ACCESS:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_access));
+		case MAC_TEST_VNODE_CHECK_CHDIR:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_chdir));
+		case MAC_TEST_VNODE_CHECK_CHROOT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_chroot));
+		case MAC_TEST_VNODE_CHECK_CREATE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_create));
+		case MAC_TEST_VNODE_CHECK_DELETEACL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_deleteacl));
+		case MAC_TEST_VNODE_CHECK_DELETEEXTATTR:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_deleteextattr));
+		case MAC_TEST_VNODE_CHECK_EXEC:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_exec));
+		case MAC_TEST_VNODE_CHECK_GETACL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_getacl));
+		case MAC_TEST_VNODE_CHECK_GETEXTATTR:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_getextattr));
+		case MAC_TEST_VNODE_CHECK_LINK:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_link));
+		case MAC_TEST_VNODE_CHECK_LISTEXTATTR:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_listextattr));
+		case MAC_TEST_VNODE_CHECK_LOOKUP:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_lookup));
+		case MAC_TEST_VNODE_CHECK_MMAP:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_mmap));
+		case MAC_TEST_VNODE_CHECK_OPEN:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_open));
+		case MAC_TEST_VNODE_CHECK_POLL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_poll));
+		case MAC_TEST_VNODE_CHECK_READ:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_read));
+		case MAC_TEST_VNODE_CHECK_READDIR:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_readdir));
+		case MAC_TEST_VNODE_CHECK_READLINK:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_readlink));
+		case MAC_TEST_VNODE_CHECK_RELABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_relabel));
+		case MAC_TEST_VNODE_CHECK_RENAME_FROM:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_rename_from));
+		case MAC_TEST_VNODE_CHECK_RENAME_TO:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_rename_to));
+		case MAC_TEST_VNODE_CHECK_REVOKE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_revoke));
+		case MAC_TEST_VNODE_CHECK_SETACL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_setacl));
+		case MAC_TEST_VNODE_CHECK_SETEXTATTR:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_setextattr));
+		case MAC_TEST_VNODE_CHECK_SETFLAGS:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_setflags));
+		case MAC_TEST_VNODE_CHECK_SETMODE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_setmode));
+		case MAC_TEST_VNODE_CHECK_SETOWNER:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_setowner));
+		case MAC_TEST_VNODE_CHECK_SETUTIMES:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_setutimes));
+		case MAC_TEST_VNODE_CHECK_STAT:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_stat));
+		case MAC_TEST_VNODE_CHECK_UNLINK:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_unlink));
+		case MAC_TEST_VNODE_CHECK_WRITE:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_check_write));
+		case MAC_TEST_VNODE_COPY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_copy_label));
+		case MAC_TEST_VNODE_CREATE_EXTATTR:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_create_extattr));
+		case MAC_TEST_VNODE_DESTROY_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_destroy_label));
+		case MAC_TEST_VNODE_EXECVE_TRANSITION:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_execve_transition));
+		case MAC_TEST_VNODE_EXECVE_WILL_TRANSITION:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_execve_will_transition));
+		case MAC_TEST_VNODE_EXTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_externalize_label));
+		case MAC_TEST_VNODE_INIT_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_init_label));
+		case MAC_TEST_VNODE_INTERNALIZE_LABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_internalize_label));
+		case MAC_TEST_VNODE_RELABEL:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_relabel));
+		case MAC_TEST_VNODE_SETLABEL_EXTATTR:
+			return (sysctl_int(oldp, oldlenp, newp, newlen,
+			    &mac_test_vnode_setlabel_extattr));
 		default:
 			return (EOPNOTSUPP);
 		}
