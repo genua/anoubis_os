@@ -29,7 +29,7 @@
 
 #include <linux/eventdev.h>
 
-#define ANOUBISCORE_VERSION		0x00010001UL
+#define ANOUBISCORE_VERSION		0x00010002UL
 
 #define ANOUBIS_CS_LEN		32
 struct anoubis_ioctl_csum {
@@ -52,6 +52,7 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_SOURCE_SANDBOX	20
 #define ANOUBIS_SOURCE_SFS	30
 #define ANOUBIS_SOURCE_SFSEXEC	31
+#define ANOUBIS_SOURCE_SFSPATH	32
 #define ANOUBIS_SOURCE_PROCESS	40
 #define ANOUBIS_SOURCE_STAT	50
 #define ANOUBIS_SOURCE_IPC	60
@@ -173,6 +174,9 @@ struct anoubis_hooks {
 	DECLARE(file_permission);
 	DECLARE(file_mmap);
 	DECLARE(dentry_open);
+#ifdef CONFIG_SECURITY_PATH
+	DECLARE(path_link);
+#endif
 	DECLARE(bprm_set_security);
 	DECLARE(bprm_post_apply_creds);
 	DECLARE(ptrace);

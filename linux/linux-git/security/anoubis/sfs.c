@@ -63,6 +63,10 @@ static u_int64_t sfs_stat_csum_recalc;
 static u_int64_t sfs_stat_csum_recalc_fail;
 static u_int64_t sfs_stat_ev;
 static u_int64_t sfs_stat_ev_deny;
+#ifdef CONFIG_SECURITY_PATH
+static u_int64_t sfs_stat_path;
+static u_int64_t sfs_stat_path_deny;
+#endif
 static u_int64_t sfs_stat_late_alloc;
 
 struct anoubis_internal_stat_value sfs_stats[] = {
@@ -72,6 +76,10 @@ struct anoubis_internal_stat_value sfs_stats[] = {
 	    &sfs_stat_csum_recalc_fail },
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV, &sfs_stat_ev },
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_EV_DENY, &sfs_stat_ev_deny },
+#ifdef CONFIG_SECURITY_PATH
+	{ ANOUBIS_SOURCE_SFSPATH, SFS_STAT_PATH, &sfs_stat_path },
+	{ ANOUBIS_SOURCE_SFSPATH, SFS_STAT_PATH_DENY, &sfs_stat_path_deny },
+#endif
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_LATE_ALLOC, &sfs_stat_late_alloc },
 };
 
@@ -141,7 +149,6 @@ static const char * csnocache[] = {
 	"nfs2",
 	"nfs3",
 	"nfs4",
-	"smbfs",
 	"smbfs",
 	NULL
 };
@@ -545,7 +552,7 @@ static inline char * global_dpath(struct path * path, char * buf, int len)
 }
 
 /* We rely on the fact that GFP_KERNEL allocations cannot fail. */
-static struct sfs_open_message * sfs_fill_msg(struct file * file, int mask,
+static struct sfs_open_message * sfs_open_fill(struct file * file, int mask,
     int * lenp)
 {
 	struct sfs_open_message * msg;
@@ -616,7 +623,7 @@ static int sfs_open_checks(struct file * file, int mask)
 	err = sfs_check_syssig(file, mask);
 	if (err < 0)
 		return err;
-	msg = sfs_fill_msg(file, mask, &len);
+	msg = sfs_open_fill(file, mask, &len);
 	if (!msg)
 		return -ENOMEM;
 	if (msg->flags & ANOUBIS_OPEN_FLAG_CSUM) {
@@ -767,6 +774,105 @@ out:
 	return err;
 }
 
+#ifdef CONFIG_SECURITY_PATH
+/*
+ * LSM hooks that have VFS information (available in 2.6.29+)
+ * used for path-based permission checks
+ */
+
+/*
+ * Populate a sfs_path_message with an operation and one or two paths
+ */
+static struct sfs_path_message * sfs_path_fill(unsigned int op,
+	struct path *new_dir, struct dentry *new_dentry,
+	struct dentry *old_dentry, int * lenp)
+{
+	struct sfs_path_message * msg;
+	unsigned int pathlen[2] = { 0, 0 };
+	unsigned int pathcnt, i;
+	char * pathstr[2];
+	char * bufs[2] = { NULL, NULL };
+	int alloclen;
+
+	struct path paths[] = { 
+		{ new_dir->mnt, new_dentry },
+		{ new_dir->mnt, old_dentry }
+	};
+
+	if ((new_dir == NULL) || (new_dentry == NULL))
+		return NULL;
+	else if (old_dentry == NULL)
+		pathcnt = 1;
+	else
+		pathcnt = 2;
+
+	for (i=0; i<pathcnt; i++) {
+		bufs[i] = (char *)__get_free_page(GFP_KERNEL);
+		pathstr[i] = global_dpath(&paths[i], bufs[i], PAGE_SIZE);
+		if (pathstr[i] && !IS_ERR(pathstr[i])) {
+			pathlen[i] = PAGE_SIZE - (pathstr[i]-bufs[i]);
+		} else {
+			/* bail if the path cannot be resolved */
+			if (bufs[0])
+				free_page((unsigned long)bufs[0]);
+			if (bufs[1])
+				free_page((unsigned long)bufs[1]);
+			
+			return NULL;
+		}
+	}
+
+	alloclen = sizeof(struct sfs_path_message) + pathlen[0] + pathlen[1];
+
+	msg = kmalloc(alloclen, GFP_KERNEL);
+	msg->op = op;
+
+	msg->pathlen[0] =  pathlen[0];
+	msg->pathlen[1] =  pathlen[1];
+
+	memcpy(msg->paths, pathstr[0], pathlen[0]);
+	free_page((unsigned long)bufs[0]);
+
+	if (pathlen[1]) {
+		memcpy(msg->paths + pathlen[0], pathstr[1], pathlen[1]);
+		free_page((unsigned long)bufs[1]);
+	}
+
+	(*lenp) = alloclen;
+	return msg;
+}
+
+int sfs_path_checks(struct sfs_path_message * msg, int len)
+{
+	int ret;
+
+	sfs_stat_path++;
+
+	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFSPATH);
+
+	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
+		return 0;
+	if (ret)
+		sfs_stat_path_deny++;
+
+	return ret;
+}
+
+int sfs_path_link(struct dentry *old_dentry, struct path *parent_dir,
+    struct dentry *new_dentry)
+{
+	unsigned int op = ANOUBIS_PATH_OP_LINK;
+	struct sfs_path_message * msg;
+	int len;
+
+	msg = sfs_path_fill(op, parent_dir, new_dentry, old_dentry, &len);
+	if (!msg)
+		return -ENOMEM;
+
+	return sfs_path_checks(msg, len);
+}
+#endif
+
 /*
  * Part of the external interface:
  * Calculate the checksum of the file and return the result in @csum.
@@ -898,7 +1004,7 @@ static void sfs_bprm_post_apply_creds(struct linux_binprm * bprm)
 	struct sfs_open_message * msg;
 	int len;
 
-	msg = sfs_fill_msg(file, MAY_READ|MAY_EXEC, &len);
+	msg = sfs_open_fill(file, MAY_READ|MAY_EXEC, &len);
 	anoubis_notify(msg, len, ANOUBIS_SOURCE_SFSEXEC);
 }
 
@@ -916,6 +1022,9 @@ static struct anoubis_hooks sfs_ops = {
 	.dentry_open = sfs_dentry_open,
 	.inode_setxattr = sfs_inode_setxattr,
 	.inode_removexattr = sfs_inode_removexattr,
+#ifdef CONFIG_SECURITY_PATH
+	.path_link = sfs_path_link,
+#endif
 	.anoubis_stats = sfs_getstats,
 	.anoubis_getcsum = sfs_getcsum,
 };
@@ -968,5 +1077,5 @@ module_init(sfs_init);
 module_exit(sfs_exit);
 
 MODULE_AUTHOR("Christian Ehrhardt <ehrhardt@genua.de>");
-MODULE_DESCRIPTION("LSM Module for ANOUBIS");
+MODULE_DESCRIPTION("Anoubis SFS module");
 MODULE_LICENSE("Dual BSD/GPL");

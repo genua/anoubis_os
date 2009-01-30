@@ -47,6 +47,8 @@
 #define SFS_STAT_EV			14
 #define SFS_STAT_EV_DENY		16
 #define SFS_STAT_LATE_ALLOC		17
+#define SFS_STAT_PATH			18
+#define SFS_STAT_PATH_DENY		19
 
 struct sfs_open_message
 {
@@ -56,6 +58,23 @@ struct sfs_open_message
 	unsigned long flags;
 	u_int8_t csum[ANOUBIS_SFS_CS_LEN];
 	char pathhint[1];
+};
+
+#define ANOUBIS_PATH_OP_LINK		1
+#define ANOUBIS_PATH_OP_UNLINK		2
+#define ANOUBIS_PATH_OP_SLINK		3
+#define ANOUBIS_PATH_OP_MKDIR		4
+#define ANOUBIS_PATH_OP_RMDIR		5
+#define ANOUBIS_PATH_OP_MKNOD		6
+#define ANOUBIS_PATH_OP_RENAME		7
+#define ANOUBIS_PATH_OP_TRUNC		8
+
+struct sfs_path_message
+{
+	struct anoubis_event_common common;
+	unsigned int op;
+	unsigned int pathlen[2];
+	char paths[];
 };
 
 /*

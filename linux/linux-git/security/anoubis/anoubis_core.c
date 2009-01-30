@@ -808,6 +808,15 @@ static int ac_file_mmap(struct file * file, unsigned long reqprot,
 	return HOOKS(file_mmap, (file, reqprot, prot, flags, addr, fixed));
 }
 
+#ifdef CONFIG_SECURITY_PATH
+/* PATH */
+static int ac_path_link(struct dentry *old_dentry, struct path *new_dir,
+			struct dentry *new_dentry)
+{
+	return HOOKS(path_link, (old_dentry, new_dir, new_dentry));
+}
+#endif
+
 /* EXEC */
 static int ac_bprm_set_security(struct linux_binprm * bprm)
 {
@@ -1030,6 +1039,9 @@ static struct security_operations anoubis_core_ops = {
 	.file_permission = ac_file_permission,
 	.file_mmap = ac_file_mmap,
 	.dentry_open = ac_dentry_open,
+#ifdef CONFIG_SECURITY_PATH
+	.path_link = ac_path_link,
+#endif
 	.bprm_set_security = ac_bprm_set_security,
 	.bprm_post_apply_creds = ac_bprm_post_apply_creds,
 	.task_alloc_security = ac_task_alloc_security,
