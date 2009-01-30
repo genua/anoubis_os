@@ -2412,6 +2412,9 @@ vfs_mark_atime(struct vnode *vp, struct ucred *cred)
 {
 	struct vattr atimeattr;
 
+	/* Device vnodes don't have amount. */
+	if (!vp->v_mount)
+		return;
 	if ((vp->v_mount->mnt_flag & (MNT_NOATIME | MNT_RDONLY)) == 0) {
 		VATTR_NULL(&atimeattr);
 		atimeattr.va_vaflags |= VA_MARK_ATIME;
