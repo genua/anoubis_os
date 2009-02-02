@@ -176,6 +176,7 @@ struct anoubis_hooks {
 	DECLARE(dentry_open);
 #ifdef CONFIG_SECURITY_PATH
 	DECLARE(path_link);
+	DECLARE(path_rename);
 #endif
 	DECLARE(bprm_set_security);
 	DECLARE(bprm_post_apply_creds);

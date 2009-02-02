@@ -871,6 +871,20 @@ int sfs_path_link(struct dentry *old_dentry, struct path *parent_dir,
 
 	return sfs_path_checks(msg, len);
 }
+
+int sfs_path_rename(struct path *old_dir, struct dentry *old_dentry,
+    struct path *new_dir, struct dentry *new_dentry)
+{
+	unsigned int op = ANOUBIS_PATH_OP_RENAME;
+	struct sfs_path_message * msg;
+	int len;
+
+	msg = sfs_path_fill(op, new_dir, new_dentry, old_dentry, &len);
+	if (!msg)
+		return -ENOMEM;
+
+	return sfs_path_checks(msg, len);
+}
 #endif
 
 /*
@@ -1024,6 +1038,7 @@ static struct anoubis_hooks sfs_ops = {
 	.inode_removexattr = sfs_inode_removexattr,
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = sfs_path_link,
+	.path_rename = sfs_path_rename,
 #endif
 	.anoubis_stats = sfs_getstats,
 	.anoubis_getcsum = sfs_getcsum,
