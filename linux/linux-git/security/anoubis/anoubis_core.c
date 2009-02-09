@@ -821,6 +821,12 @@ static int ac_path_rename(struct path *old_dir, struct dentry *old_dentry,
 {
 	return HOOKS(path_rename, (old_dir, old_dentry, new_dir, new_dentry));
 }
+
+static int ac_path_truncate(struct path *path, loff_t length,
+    unsigned int time_attr)
+{
+	return HOOKS(path_truncate, (path, length, time_attr));
+}
 #endif
 
 /* EXEC */
@@ -1048,6 +1054,7 @@ static struct security_operations anoubis_core_ops = {
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = ac_path_link,
 	.path_rename = ac_path_rename,
+	.path_truncate = ac_path_truncate,
 #endif
 	.bprm_set_security = ac_bprm_set_security,
 	.bprm_post_apply_creds = ac_bprm_post_apply_creds,

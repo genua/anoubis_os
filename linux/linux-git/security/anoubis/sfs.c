@@ -552,7 +552,7 @@ static inline char * global_dpath(struct path * path, char * buf, int len)
 }
 
 /* We rely on the fact that GFP_KERNEL allocations cannot fail. */
-static struct sfs_open_message * sfs_open_fill(struct file * file, int mask,
+static struct sfs_open_message * sfs_open_fill(struct path * f_path, int mask,
     int * lenp)
 {
 	struct sfs_open_message * msg;
@@ -561,11 +561,11 @@ static struct sfs_open_message * sfs_open_fill(struct file * file, int mask,
 	struct kstat kstat;
 	struct sfs_inode_sec * sec;
 	int pathlen, alloclen;
-	struct dentry * dentry = file->f_path.dentry;
+	struct dentry * dentry = f_path->dentry;
 	struct inode * inode = dentry->d_inode;
 
 	buf = (char *)__get_free_page(GFP_KERNEL);
-	path = global_dpath(&file->f_path, buf, PAGE_SIZE);
+	path = global_dpath(f_path, buf, PAGE_SIZE);
 	if (path && !IS_ERR(path)) {
 		pathlen = PAGE_SIZE - (path-buf);
 	} else {
@@ -591,8 +591,8 @@ static struct sfs_open_message * sfs_open_fill(struct file * file, int mask,
 		free_page((unsigned long)buf);
 	msg->ino = 0;
 	msg->dev = 0;
-	if (file->f_path.mnt && dentry) {
-		int err = vfs_getattr(file->f_path.mnt, dentry, &kstat);
+	if (f_path->mnt && dentry) {
+		int err = vfs_getattr(f_path->mnt, dentry, &kstat);
 		if (err == 0) {
 			msg->ino = kstat.ino;
 			msg->dev = kstat.dev;
@@ -623,7 +623,7 @@ static int sfs_open_checks(struct file * file, int mask)
 	err = sfs_check_syssig(file, mask);
 	if (err < 0)
 		return err;
-	msg = sfs_open_fill(file, mask, &len);
+	msg = sfs_open_fill(&file->f_path, mask, &len);
 	if (!msg)
 		return -ENOMEM;
 	if (msg->flags & ANOUBIS_OPEN_FLAG_CSUM) {
@@ -885,6 +885,23 @@ int sfs_path_rename(struct path *old_dir, struct dentry *old_dentry,
 
 	return sfs_path_checks(msg, len);
 }
+
+/*
+ * Handle all truncate calls like open(O_TRUNC),
+ * this way the daemon needs no modifications
+ */
+int sfs_path_truncate(struct path *path, loff_t length,
+    unsigned int time_attrs)
+{
+	struct sfs_open_message * msg;
+	int len;
+
+	msg = sfs_open_fill(path, MAY_WRITE, &len);
+	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFS);
+	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
+		ret = 0;
+	return ret;
+}
 #endif
 
 /*
@@ -1018,7 +1035,7 @@ static void sfs_bprm_post_apply_creds(struct linux_binprm * bprm)
 	struct sfs_open_message * msg;
 	int len;
 
-	msg = sfs_open_fill(file, MAY_READ|MAY_EXEC, &len);
+	msg = sfs_open_fill(&file->f_path, MAY_READ|MAY_EXEC, &len);
 	anoubis_notify(msg, len, ANOUBIS_SOURCE_SFSEXEC);
 }
 
@@ -1039,6 +1056,7 @@ static struct anoubis_hooks sfs_ops = {
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = sfs_path_link,
 	.path_rename = sfs_path_rename,
+	.path_truncate = sfs_path_truncate,
 #endif
 	.anoubis_stats = sfs_getstats,
 	.anoubis_getcsum = sfs_getcsum,
