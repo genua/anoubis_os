@@ -80,6 +80,7 @@ struct ac_ipc_message {
 	u_int32_t		op;
 	anoubis_cookie_t	source;
 	anoubis_cookie_t	dest;
+	anoubis_cookie_t	conn_cookie;
 };
 
 struct anoubis_stat_value {
