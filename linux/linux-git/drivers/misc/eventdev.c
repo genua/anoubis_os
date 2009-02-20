@@ -387,7 +387,7 @@ static ssize_t eventdev_write(struct file * file, const char __user * buf,
 			break;
 		buf += sizeof(struct eventdev_reply);
 		len -= sizeof(struct eventdev_reply);
-		err = -EINVAL;
+		err = -ESRCH;
 		spin_lock_bh(&q->lock);
 		list_for_each_entry(m, &q->waiting, link) {
 			if (m->hdr.msg_token == rep.msg_token) {
