@@ -52,8 +52,11 @@
 #include <linux/anoubis_sfs.h>
 
 #define XATTR_ANOUBIS_SYSSIG_SUFFIX "anoubis_syssig"
+#define XATTR_ANOUBIS_SKIPSUM_SUFFIX "anoubis_skipsum"
 #define XATTR_ANOUBIS_SYSSIG XATTR_SECURITY_PREFIX XATTR_ANOUBIS_SYSSIG_SUFFIX
+#define XATTR_ANOUBIS_SKIPSUM XATTR_SECURITY_PREFIX XATTR_ANOUBIS_SKIPSUM_SUFFIX
 
+static unsigned int checksum_max_size = 0;
 static int ac_index = -1;
 
 /* Statistics */
@@ -374,6 +377,39 @@ out_allow_write:
 }
 
 /*
+ * Return true if checksum calculation for this file should be skipped.
+ * Configured either via the module parameter, or an extended attribute.
+ */
+static inline int skipsum_ok(struct inode * inode, struct dentry * dentry)
+{
+	struct sfs_inode_sec * sec;
+
+	if (!dentry || !inode)
+		return 0;
+	if (!S_ISREG(inode->i_mode))
+		return 0;
+	sec = ISEC(inode);
+	if (!sec)
+		return 0;
+
+	if (checksum_max_size && (i_size_read(inode) > checksum_max_size))
+		goto skip;
+	if (inode->i_op->getxattr &&
+	    (inode->i_op->getxattr(dentry, XATTR_ANOUBIS_SKIPSUM, NULL, 0) > 0))
+		goto skip;
+
+	spin_lock(&sec->lock);
+	sec->sfsmask |= SFS_CS_REQUIRED;
+	spin_unlock(&sec->lock);
+	return 0;
+skip:
+	spin_lock(&sec->lock);
+	sec->sfsmask ^= SFS_CS_REQUIRED;
+	spin_unlock(&sec->lock);
+	return 1;
+}
+
+/*
  * Return true if checksum calculation for this file is possible. The file
  * must be a regular file on a device backed file system. The latter
  * restriction basically excludes pseudo file systems like /proc and
@@ -486,8 +522,6 @@ static int sfs_check_syssig(struct file * file, int mask)
 	ret = sfs_read_syssig(dentry);
 	if (ret <= 0)
 		return ret;
-	if (ret == 0)
-		return 0;
 	if (!checksum_ok(inode))
 		return -EACCES;
 	/* We do have a system signature. */
@@ -667,6 +701,8 @@ static int sfs_dentry_open(struct file * file)
 		return -ENOMEM;
 	if (!checksum_ok(inode))
 		return 0;
+	if (skipsum_ok(inode, dentry))
+		return 0;
 	mask = 0;
 	if (file->f_mode & FMODE_READ)
 		mask |= MAY_READ;
@@ -794,7 +830,7 @@ static struct sfs_path_message * sfs_path_fill(unsigned int op,
 	char * bufs[2] = { NULL, NULL };
 	int alloclen;
 
-	struct path paths[] = { 
+	struct path paths[] = {
 		{ new_dir->mnt, new_dentry },
 		{ new_dir->mnt, old_dentry }
 	};
@@ -817,7 +853,7 @@ static struct sfs_path_message * sfs_path_fill(unsigned int op,
 				free_page((unsigned long)bufs[0]);
 			if (bufs[1])
 				free_page((unsigned long)bufs[1]);
-			
+
 			return NULL;
 		}
 	}
@@ -1107,6 +1143,9 @@ static int __init sfs_init(void)
 }
 
 module_init(sfs_init);
+module_param(checksum_max_size, int, 0644);
+MODULE_PARM_DESC(checksum_max_size,
+    "Maximum filesize for SFS checksum calculations");
 module_exit(sfs_exit);
 
 MODULE_AUTHOR("Christian Ehrhardt <ehrhardt@genua.de>");
