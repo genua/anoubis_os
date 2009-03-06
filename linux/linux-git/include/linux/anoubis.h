@@ -180,6 +180,8 @@ struct anoubis_hooks {
 	DECLARE(path_rename);
 	DECLARE(path_truncate);
 #endif
+	DECLARE(bprm_alloc_security);
+	DECLARE(bprm_free_security);
 	DECLARE(bprm_set_security);
 	DECLARE(bprm_post_apply_creds);
 	DECLARE(ptrace);

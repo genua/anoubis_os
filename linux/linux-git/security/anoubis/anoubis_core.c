@@ -830,6 +830,20 @@ static int ac_path_truncate(struct path *path, loff_t length,
 #endif
 
 /* EXEC */
+static int ac_bprm_alloc_security(struct linux_binprm * bprm)
+{
+	if ((bprm->security = ac_alloc_label(GFP_KERNEL)) == NULL)
+		return -ENOMEM;
+	return HOOKS(bprm_alloc_security, (bprm));
+}
+static void ac_bprm_free_security(struct linux_binprm * bprm)
+{
+	if (bprm->security == NULL)
+		return;
+	VOIDHOOKS(bprm_free_security, (bprm));
+	kfree(bprm->security);
+	bprm->security = NULL;
+}
 static int ac_bprm_set_security(struct linux_binprm * bprm)
 {
 	return HOOKS(bprm_set_security, (bprm));
@@ -1056,6 +1070,8 @@ static struct security_operations anoubis_core_ops = {
 	.path_rename = ac_path_rename,
 	.path_truncate = ac_path_truncate,
 #endif
+	.bprm_alloc_security = ac_bprm_alloc_security,
+	.bprm_free_security = ac_bprm_free_security,
 	.bprm_set_security = ac_bprm_set_security,
 	.bprm_post_apply_creds = ac_bprm_post_apply_creds,
 	.task_alloc_security = ac_task_alloc_security,

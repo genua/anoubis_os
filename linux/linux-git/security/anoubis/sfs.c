@@ -133,14 +133,23 @@ struct sfs_file_sec {
 	atomic_t denywrite;
 };
 
-/* Makros to access the security labels with their approriate type. */
+/* Bprm security label */
+struct sfs_bprm_sec {
+	spinlock_t lock;
+	struct sfs_open_message * msg;
+	int len;
+};
+
+/* Macros to access the security labels with their approriate type. */
 #define _SEC(TYPE,X) ((TYPE)anoubis_get_sublabel(&(X), ac_index))
 #define ISEC(X) _SEC(struct sfs_inode_sec *, (X)->i_security)
 #define FSEC(X) _SEC(struct sfs_file_sec *, (X)->f_security)
+#define BSEC(X) _SEC(struct sfs_bprm_sec *, (X)->security)
 
 #define _SETSEC(TYPE,X,V) ((TYPE)anoubis_set_sublabel(&(X), ac_index, (V)))
 #define SETISEC(X,V) _SETSEC(struct sfs_inode_sec *, ((X)->i_security), (V))
 #define SETFSEC(X,V) _SETSEC(struct sfs_file_sec *, ((X)->f_security), (V))
+#define SETBSEC(X,V) _SETSEC(struct sfs_bprm_sec *, ((X)->security), (V))
 
 /*
  * Allow checksum calculations on these filesystem types but do not cache
@@ -224,7 +233,7 @@ static spinlock_t late_alloc_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * Allocate inode security information for an inode that already existed
- * before the security modules was loaded. We have to be careful with regard
+ * before the security modules were loaded. We have to be careful with regards
  * to locking because several callers might try to allocate a new inode
  * structure at the same time.
  */
@@ -1028,21 +1037,76 @@ void anoubis_sfs_file_unlock(struct file * file)
 	anoubis_allow_write_access(file->f_path.dentry->d_inode);
 }
 
+static int sfs_bprm_alloc_security(struct linux_binprm * bprm)
+{
+	struct sfs_bprm_sec * sec, * old;
+
+	sec = kmalloc(sizeof(struct sfs_bprm_sec), GFP_KERNEL);
+	sec->msg = NULL;
+	old = SETBSEC(bprm, sec);
+	BUG_ON(old);
+	return 0;
+}
+
+static void sfs_bprm_free_security(struct linux_binprm * bprm)
+{
+	struct sfs_bprm_sec * sec = SETBSEC(bprm, NULL);
+
+	if (!sec)
+		return;
+	if (sec->msg != NULL)
+		kfree(sec->msg);
+	kfree(sec);
+}
+
+/*
+ * Inform anoubisd about exec calls using an open-request
+ * XXX: use security_bprm_set_creds(). for 2.6.29+
+ */
 static int sfs_bprm_set_security(struct linux_binprm * bprm)
 {
+	struct sfs_bprm_sec * sec = BSEC(bprm);
 	struct file * file = bprm->file;
 	struct inode * inode;
-	struct sfs_inode_sec * sec;
+	struct sfs_open_message * msg;
+	int len;
 
 	BUG_ON(!file);
 	BUG_ON(file->f_mode & FMODE_WRITE);
 	inode = file->f_path.dentry->d_inode;
-	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
 	if (checksum_ok(inode))
 		sfs_csum(file, inode);
+	if (sec->msg == NULL) {
+		msg = sfs_open_fill(&file->f_path, MAY_READ|MAY_EXEC, &len);
+		if (!msg)
+			return -ENOMEM;
+		sec->msg = msg;
+		sec->len = len;
+	}
 	return sfs_open_checks(file, MAY_READ|MAY_EXEC);
+}
+
+/*
+ * Inform anoubisd about exec systemcalls,
+ * so it can update the required attributes.
+ * XXX: use security_bprm_committed_creds() for 2.6.29+
+ */
+static void sfs_bprm_post_apply_creds(struct linux_binprm * bprm)
+{
+	struct sfs_bprm_sec * sec = BSEC(bprm);
+	struct file * file = bprm->file;
+	struct sfs_open_message * msg;
+	int len;
+
+	if (sec->msg != NULL) {
+		msg = sec->msg;
+		len = sec->len;
+		sec->msg = NULL;
+	} else
+		msg = sfs_open_fill(&file->f_path, MAY_READ|MAY_EXEC, &len);
+	anoubis_notify(msg, len, ANOUBIS_SOURCE_SFSEXEC);
 }
 
 
@@ -1065,16 +1129,6 @@ static int sfs_inode_removexattr(struct dentry *dentry, const char *name)
 	return 0;
 }
 
-static void sfs_bprm_post_apply_creds(struct linux_binprm * bprm)
-{
-	struct file * file = bprm->file;
-	struct sfs_open_message * msg;
-	int len;
-
-	msg = sfs_open_fill(&file->f_path, MAY_READ|MAY_EXEC, &len);
-	anoubis_notify(msg, len, ANOUBIS_SOURCE_SFSEXEC);
-}
-
 /* Security operations. */
 static struct anoubis_hooks sfs_ops = {
 	.version = ANOUBISCORE_VERSION,
@@ -1082,6 +1136,8 @@ static struct anoubis_hooks sfs_ops = {
 	.inode_free_security = sfs_inode_free_security,
 	.file_alloc_security = sfs_file_alloc_security,
 	.file_free_security = sfs_file_free_security,
+	.bprm_alloc_security = sfs_bprm_alloc_security,
+	.bprm_free_security = sfs_bprm_free_security,
 	.bprm_set_security = sfs_bprm_set_security,
 	.bprm_post_apply_creds = sfs_bprm_post_apply_creds,
 	.inode_permission = sfs_inode_permission,
