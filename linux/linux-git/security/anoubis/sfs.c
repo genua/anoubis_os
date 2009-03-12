@@ -932,11 +932,10 @@ int sfs_path_rename(struct path *old_dir, struct dentry *old_dentry,
 }
 
 /*
- * Handle all truncate calls like open(O_TRUNC),
- * this way the daemon needs no modifications
+ * XXX: SSP these aren't real opens but we'll treat
+ * them like that in the daemon for now
  */
-int sfs_path_truncate(struct path *path, loff_t length,
-    unsigned int time_attrs)
+int sfs_path_write(struct path *path)
 {
 	struct sfs_open_message * msg;
 	int len;
@@ -946,6 +945,27 @@ int sfs_path_truncate(struct path *path, loff_t length,
 	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
 		ret = 0;
 	return ret;
+}
+
+int sfs_path_unlink(struct path *dir, struct dentry *dentry)
+{
+	return sfs_path_write(dir);
+}
+
+int sfs_path_mkdir(struct path *dir, struct dentry *dentry, int mode)
+{
+	return sfs_path_write(dir);
+}
+
+int sfs_path_rmdir(struct path *dir, struct dentry *dentry)
+{
+	return sfs_path_write(dir);
+}
+
+int sfs_path_truncate(struct path *path, loff_t length,
+    unsigned int time_attrs)
+{
+	return sfs_path_write(path);
 }
 #endif
 
@@ -1147,6 +1167,9 @@ static struct anoubis_hooks sfs_ops = {
 	.inode_removexattr = sfs_inode_removexattr,
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = sfs_path_link,
+	.path_unlink = sfs_path_unlink,
+	.path_mkdir = sfs_path_mkdir,
+	.path_rmdir = sfs_path_rmdir,
 	.path_rename = sfs_path_rename,
 	.path_truncate = sfs_path_truncate,
 #endif

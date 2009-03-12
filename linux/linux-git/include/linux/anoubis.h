@@ -177,6 +177,9 @@ struct anoubis_hooks {
 	DECLARE(dentry_open);
 #ifdef CONFIG_SECURITY_PATH
 	DECLARE(path_link);
+	DECLARE(path_unlink);
+	DECLARE(path_mkdir);
+	DECLARE(path_rmdir);
 	DECLARE(path_rename);
 	DECLARE(path_truncate);
 #endif

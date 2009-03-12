@@ -816,6 +816,21 @@ static int ac_path_link(struct dentry *old_dentry, struct path *new_dir,
 	return HOOKS(path_link, (old_dentry, new_dir, new_dentry));
 }
 
+static int ac_path_unlink(struct path *dir, struct dentry *dentry)
+{
+	return HOOKS(path_unlink, (dir, dentry));
+}
+
+static int ac_path_mkdir(struct path *dir, struct dentry *dentry, int mode)
+{
+	return HOOKS(path_mkdir, (dir, dentry, mode));
+}
+
+static int ac_path_rmdir(struct path *dir, struct dentry *dentry)
+{
+	return HOOKS(path_rmdir, (dir, dentry));
+}
+
 static int ac_path_rename(struct path *old_dir, struct dentry *old_dentry,
 			  struct path *new_dir, struct dentry *new_dentry)
 {
@@ -1067,6 +1082,9 @@ static struct security_operations anoubis_core_ops = {
 	.dentry_open = ac_dentry_open,
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = ac_path_link,
+	.path_unlink = ac_path_unlink,
+	.path_mkdir = ac_path_mkdir,
+	.path_rmdir = ac_path_rmdir,
 	.path_rename = ac_path_rename,
 	.path_truncate = ac_path_truncate,
 #endif
