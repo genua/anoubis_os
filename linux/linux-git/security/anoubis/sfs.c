@@ -47,6 +47,11 @@
 #include <linux/scatterlist.h>
 #include <linux/security.h>
 #include <linux/xattr.h>
+#include <linux/net.h>
+#include <linux/socket.h>
+#include <linux/un.h>
+#include <net/sock.h>
+#include <net/af_unix.h>
 
 #include <linux/anoubis.h>
 #include <linux/anoubis_sfs.h>
@@ -819,12 +824,24 @@ out:
 	return err;
 }
 
-#ifdef CONFIG_SECURITY_PATH
 /*
  * LSM hooks that have VFS information (available in 2.6.29+)
  * used for path-based permission checks
  */
+int sfs_path_write(struct path *path)
+{
+	struct sfs_open_message * msg;
+	int len, ret;
 
+	msg = sfs_open_fill(path, MAY_WRITE, &len);
+	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFS);
+	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
+		ret = 0;
+	return ret;
+}
+
+
+#ifdef CONFIG_SECURITY_PATH
 /*
  * Populate a sfs_path_message with an operation and one or two paths
  */
@@ -935,18 +952,6 @@ int sfs_path_rename(struct path *old_dir, struct dentry *old_dentry,
  * XXX: SSP these aren't real opens but we'll treat
  * them like that in the daemon for now
  */
-int sfs_path_write(struct path *path)
-{
-	struct sfs_open_message * msg;
-	int len;
-
-	msg = sfs_open_fill(path, MAY_WRITE, &len);
-	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFS);
-	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
-		ret = 0;
-	return ret;
-}
-
 int sfs_path_unlink(struct path *dir, struct dentry *dentry)
 {
 	return sfs_path_write(dir);
@@ -1130,6 +1135,30 @@ static void sfs_bprm_post_apply_creds(struct linux_binprm * bprm)
 }
 
 
+/* Propagate local unix socket to Sandbox/SFS */
+static int sfs_socket_connect(struct socket * sock, struct sockaddr * address,
+    int addrlen)
+{
+	struct sockaddr_un *sunname = (struct sockaddr_un *)address;
+	struct nameidata nd;
+	int err = 0;
+
+	if (!sock || !sock->sk)
+		return -EBADF;
+	if (sock->sk->sk_family != AF_UNIX)
+		return 0;
+	if (sunname->sun_path[0] == 0)
+		return 0;
+
+ 	/* XXX: use kern_path() for 2.6.29+ */
+	err = path_lookup(sunname->sun_path, LOOKUP_FOLLOW, &nd);
+	if (err)
+		return 0;
+
+	return sfs_path_write(&nd.path);
+}
+
+
 /*
  * Deny access to the syssig security attribute while the SFS module
  * is loaded.
@@ -1173,6 +1202,7 @@ static struct anoubis_hooks sfs_ops = {
 	.path_rename = sfs_path_rename,
 	.path_truncate = sfs_path_truncate,
 #endif
+	.socket_connect = sfs_socket_connect,
 	.anoubis_stats = sfs_getstats,
 	.anoubis_getcsum = sfs_getcsum,
 };
