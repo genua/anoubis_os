@@ -871,6 +871,23 @@ mac_vnode_check_write(struct ucred *active_cred, struct ucred *file_cred,
 	return (error);
 }
 
+#ifdef ANOUBIS
+int
+mac_vnode_check_truncate(struct ucred *cred, struct vnode *vp,
+    struct vnode *dirvp, struct componentname *cnp)
+{
+	int error;
+	struct label *dirl = NULL;
+
+	ASSERT_VOP_LOCKED(vp, "mac_vnode_check_truncate");
+	if (dirvp)
+		dirl = dirvp->v_label;
+	MAC_CHECK(vnode_check_truncate, cred, vp, vp->v_label, dirvp,
+	    dirl, cnp);
+	return (error);
+}
+#endif
+
 void
 mac_vnode_relabel(struct ucred *cred, struct vnode *vp,
     struct label *newlabel)

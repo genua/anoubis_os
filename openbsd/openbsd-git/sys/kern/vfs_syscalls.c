@@ -2321,8 +2321,16 @@ sys_truncate(struct proc *p, void *v, register_t *retval)
 	struct vattr vattr;
 	int error;
 	struct nameidata nd;
+#ifdef ANOUBIS
+	struct componentname *cnp = NULL;
+	struct vnode *dirvp = NULL;
 
+	NDINIT(&nd, LOOKUP, FOLLOW | SAVENAME | SAVESTART,
+	    UIO_USERSPACE, SCARG(uap, path), p);
+#else
 	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path), p);
+#endif
+
 	if ((error = namei(&nd)) != 0)
 		return (error);
 	vp = nd.ni_vp;
@@ -2333,6 +2341,24 @@ sys_truncate(struct proc *p, void *v, register_t *retval)
 	    (error = VOP_ACCESS(vp, VWRITE, p->p_ucred, p)) == 0) {
 #ifdef MAC
 		/* XXX PM: vp is locked. */
+#ifdef ANOUBIS
+		dirvp = nd.ni_dvp;
+		VREF(dirvp);
+		cnp = &nd.ni_cnd;
+		if (nd.ni_startdir)
+			vrele(nd.ni_startdir);
+
+		error = mac_vnode_check_truncate(p->p_ucred, vp, dirvp, cnp);
+
+		vrele(dirvp);
+	        if (cnp->cn_flags & HASBUF)
+			pool_put(&namei_pool, cnp->cn_pnbuf);
+
+		if (error) {
+			vput(vp);
+			return (error);
+		}
+#endif
 		error = mac_vnode_check_write(p->p_ucred, NOCRED, vp);
 		if (error) {
 			vput(vp);
@@ -2379,6 +2405,14 @@ sys_ftruncate(struct proc *p, void *v, register_t *retval)
 	else if ((error = vn_writechk(vp)) == 0) {
 #ifdef MAC
 		/* XXX PM: vp is locked. */
+#ifdef ANOUBIS
+		error = mac_vnode_check_truncate(p->p_ucred, vp, NULL, NULL);
+		if (error) {
+			VOP_UNLOCK(vp, 0, p);
+			FRELE(fp);
+			return (error);
+		}
+#endif
 		error = mac_vnode_check_write(p->p_ucred, fp->f_cred, vp);
 		if (error) {
 			VOP_UNLOCK(vp, 0, p);

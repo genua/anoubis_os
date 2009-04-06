@@ -116,6 +116,10 @@ int			 mac_anoubis_sfs_vnode_open(struct ucred *,
 			     struct vnode *, struct label *, int,
 			     struct vnode *, struct label *,
 			     struct componentname *);
+int			 mac_anoubis_sfs_vnode_truncate(struct ucred *,
+			     struct vnode *, struct label *,
+			     struct vnode *, struct label *,
+			     struct componentname *);
 int			 mac_anoubis_sfs_file_open(struct ucred * active_cred,
 			     struct file *, struct vnode * vp,
 			     struct label * l, const char * pathhint);
@@ -419,6 +423,15 @@ fileopen:
 	if (pathhint)
 		free(bufp, M_MACTEMP);
 	return ret;
+}
+
+int
+mac_anoubis_sfs_vnode_truncate(struct ucred * cred, struct vnode * vp,
+    struct label * vplabel, struct vnode *dirvp,
+    struct label *dirlabel, struct componentname *cnp)
+{
+	return mac_anoubis_sfs_vnode_open(cred, vp, vplabel, VWRITE,
+	    dirvp, dirlabel, cnp);
 }
 
 int
@@ -773,6 +786,7 @@ struct mac_policy_ops mac_anoubis_sfs_ops =
 	.mpo_vnode_init_label = mac_anoubis_sfs_init_vnode_label,
 	.mpo_vnode_destroy_label = mac_anoubis_sfs_destroy_vnode_label,
 	.mpo_vnode_check_open = mac_anoubis_sfs_vnode_open,
+	.mpo_vnode_check_truncate = mac_anoubis_sfs_vnode_truncate,
 	.mpo_file_check_open = NULL /* mac_anoubis_sfs_file_open */,
 	.mpo_execve_prepare = mac_anoubis_sfs_execve_prepare,
 	.mpo_execve_success = mac_anoubis_sfs_execve_success,

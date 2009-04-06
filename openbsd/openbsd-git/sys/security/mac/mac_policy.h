@@ -629,6 +629,12 @@ typedef int	(*mpo_vnode_check_unlink_t)(struct ucred *cred,
 typedef int	(*mpo_vnode_check_write_t)(struct ucred *active_cred,
 		    struct ucred *file_cred, struct vnode *vp,
 		    struct label *vplabel);
+#ifdef ANOUBIS
+typedef int	(*mpo_vnode_check_truncate_t)(struct ucred *cred,
+		    struct vnode *vp, struct label *vplabel,
+		    struct vnode *dirvp, struct label *dirlabel,
+		    struct componentname *cnp);
+#endif
 
 #ifdef ACL
 typedef int	(*mpo_vnode_check_deleteacl_t)(struct ucred *, struct vnode *,
@@ -972,6 +978,9 @@ struct mac_policy_ops {
 	mpo_vnode_check_stat_t			mpo_vnode_check_stat;
 	mpo_vnode_check_unlink_t		mpo_vnode_check_unlink;
 	mpo_vnode_check_write_t			mpo_vnode_check_write;
+#ifdef ANOUBIS
+	mpo_vnode_check_truncate_t		mpo_vnode_check_truncate;
+#endif
 	mpo_vnode_associate_extattr_t		mpo_vnode_associate_extattr;
 	mpo_vnode_associate_singlelabel_t	mpo_vnode_associate_singlelabel;
 	mpo_vnode_destroy_label_t		mpo_vnode_destroy_label;
