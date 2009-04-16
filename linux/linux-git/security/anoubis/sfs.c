@@ -664,8 +664,6 @@ static int sfs_open_checks(struct file * file, int mask)
 {
 	int ret;
 	struct sfs_open_message * msg;
-	char reported_csum[ANOUBIS_SFS_CS_LEN];
-	int have_reported_csum = 0;
 	int err, len = 0;
 
 	err = sfs_check_syssig(file, mask);
@@ -674,25 +672,10 @@ static int sfs_open_checks(struct file * file, int mask)
 	msg = sfs_open_fill(&file->f_path, mask, &len);
 	if (!msg)
 		return -ENOMEM;
-	if (msg->flags & ANOUBIS_OPEN_FLAG_CSUM) {
-		memcpy(reported_csum, msg->csum, ANOUBIS_SFS_CS_LEN);
-		have_reported_csum = 1;
-	}
 	sfs_stat_ev++;
 	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFS);
 	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
 		return 0;
-	if (ret == -EOKWITHCHKSUM) {
-		/*
-		 * The following is an error in the userland application.
-		 * It should not return EOKWITHCHKSUM if no checksum was
-		 * reported.
-		 */
-		if (!have_reported_csum)
-			return -EIO;
-		BUG_ON(!file);
-		ret = anoubis_sfs_file_lock(file, reported_csum);
-	}
 	if (ret)
 		sfs_stat_ev_deny++;
 	return ret;
@@ -815,8 +798,6 @@ static int sfs_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 	memcpy(msg->csum, csum, ANOUBIS_SFS_CS_LEN);
 	err = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
 	if (err == -EPIPE /* XXX and mode != strict */)
-		err = 0;
-	else if (err == -EOKWITHCHKSUM)
 		err = 0;
 	return err;
 out:
@@ -1011,57 +992,6 @@ static int sfs_getcsum(struct file * file, u8 * csum)
 	return anoubis_sfs_get_csum(file, csum);
 }
 
-/*
- * Part of the external interface:
- * Lock the contents of a file into the revision given by @csum.
- * It is an error if the current contents do not match @csum or if the file
- * cannot be protected from writes (presumably because the file is already
- * open for writing.
- * The life time of the lock is limited to the life time of the file handle.
- */
-int anoubis_sfs_file_lock(struct file * file, u8 * csum)
-{
-	struct inode * inode = file->f_path.dentry->d_inode;
-	struct sfs_inode_sec * sec;
-	int err;
-
-	sec = sfs_late_inode_alloc_security(inode);
-	if (!sec)
-		return -ENOMEM;
-	if (!checksum_ok(inode))
-		return -EINVAL;
-	err = anoubis_deny_write_access(inode);
-	if (err < 0)
-		return -EBUSY;
-	spin_lock(&sec->lock);
-	if ((sec->sfsmask & SFS_CS_UPTODATE) == 0)
-		goto out_err;
-	if (memcmp(sec->hash, csum, ANOUBIS_SFS_CS_LEN) != 0)
-		goto out_err;
-	spin_unlock(&sec->lock);
-	atomic_inc(&FSEC(file)->denywrite);
-	return 0;
-out_err:
-	spin_unlock(&sec->lock);
-	anoubis_allow_write_access(inode);
-	return -EBUSY;
-}
-
-/*
- * Part of the external interface:
- * Release a lock on the contents of a file that has been aquired by
- * anoubis_sfs_file_lock. Successful locks and unlocks nest, i.e.
- * if multiple calls to lock have been made each of them must be release
- * indiviually in order to make the file writable again.
- */
-void anoubis_sfs_file_unlock(struct file * file)
-{
-	struct sfs_file_sec * fsec = FSEC(file);
-	BUG_ON(atomic_read(&fsec->denywrite) <= 0);
-	atomic_dec(&fsec->denywrite);
-	anoubis_allow_write_access(file->f_path.dentry->d_inode);
-}
-
 static int sfs_bprm_alloc_security(struct linux_binprm * bprm)
 {
 	struct sfs_bprm_sec * sec, * old;
@@ -1150,7 +1080,7 @@ static int sfs_socket_connect(struct socket * sock, struct sockaddr * address,
 	if (sunname->sun_path[0] == 0)
 		return 0;
 
- 	/* XXX: use kern_path() for 2.6.29+ */
+	/* XXX: use kern_path() for 2.6.29+ */
 	err = path_lookup(sunname->sun_path, LOOKUP_FOLLOW, &nd);
 	if (err)
 		return 0;

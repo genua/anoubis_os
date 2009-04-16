@@ -78,9 +78,6 @@ static struct anoubis_internal_stat_value alf_stats[] = {
 	{ ANOUBIS_SOURCE_ALF, ALF_STAT_RECEIVEMSG, &alf_stat_receivemsg },
 };
 
-static int alf_policy_matcher(struct anoubis_kernel_policy * policy,
-    void * data, int datalen);
-
 static void alf_get_stats(struct anoubis_internal_stat_value **ptr, int *cnt)
 {
 	(*ptr) = alf_stats;
@@ -129,7 +126,6 @@ static int alf_check_policy(int op, struct socket *sock,
 	int localport = 0;
 	struct alf_event *event;
 	int event_size;
-	struct anoubis_kernel_policy *p;
 
 	if (!sock || !sock->sk)
 		return -EBADF;
@@ -187,15 +183,6 @@ static int alf_check_policy(int op, struct socket *sock,
 		alf_stat_allowport++;
 		kfree(event);
 		return 0;
-	}
-
-	if ((p = anoubis_match_policy(event, event_size, ANOUBIS_SOURCE_ALF,
-	    alf_policy_matcher))
-	    != NULL) {
-		if (p->decision == POLICY_ALLOW)
-			return 0;
-		if (p->decision != POLICY_ASK)
-			return -EPERM;
 	}
 
 	return alf_ask(event);
@@ -327,64 +314,6 @@ static int alf_socket_skb_recv_datagram(struct sock * sk, struct sk_buff * skb)
 	alf_stat_receivemsg++;
 	return alf_check_policy(ALF_RECVMSG, sk->sk_socket,
 	    (struct sockaddr *)myaddress);
-}
-
-static int alf_policy_matcher(struct anoubis_kernel_policy * policy,
-    void * data, int datalen)
-{
-	struct alf_event *event = (struct alf_event*)data;
-	struct alf_rule *rule = (struct alf_rule*)(policy->rule);
-
-	if (datalen < sizeof(struct alf_event))
-		return POLICY_NOMATCH;
-
-	if (policy->rule_len < sizeof(struct alf_rule))
-		return POLICY_NOMATCH;
-
-	if ((rule->op != event->op) && (rule->op != ALF_ANY))
-		return POLICY_NOMATCH;
-
-	if ((rule->family != event->family) && (rule->family != AF_UNSPEC))
-		return POLICY_NOMATCH;
-
-	if ((rule->type != event->type) && (rule->type != ALF_ANY))
-		return POLICY_NOMATCH;
-
-	if ((rule->protocol != event->protocol) &&
-	    (rule->protocol != IPPROTO_IP))
-		return POLICY_NOMATCH;
-
-	if (rule->family == AF_INET) {
-		if ((event->local.in_addr.sin_port < rule->local.port_min) ||
-		    (event->local.in_addr.sin_port > rule->local.port_max))
-			return POLICY_NOMATCH;
-
-		if ((event->local.in_addr.sin_addr.s_addr &
-		     inet_make_mask(rule->local.prefixlen)) !=
-		    (rule->local.addr.in_addr.s_addr &
-		     inet_make_mask(rule->local.prefixlen)))
-			return POLICY_NOMATCH;
-
-		if ((event->peer.in_addr.sin_addr.s_addr &
-		     inet_make_mask(rule->peer.prefixlen)) !=
-		    (rule->peer.addr.in_addr.s_addr &
-		     inet_make_mask(rule->peer.prefixlen)))
-			return POLICY_NOMATCH;
-	} else if (rule->family == AF_INET6) {
-		if ((event->local.in6_addr.sin6_port < rule->local.port_min) ||
-		    (event->local.in6_addr.sin6_port > rule->local.port_max))
-			return POLICY_NOMATCH;
-
-		if (!ipv6_prefix_equal(&(event->local.in6_addr.sin6_addr),
-		    &(rule->local.addr.in6_addr), rule->local.prefixlen))
-			return POLICY_NOMATCH;
-
-		if (!ipv6_prefix_equal(&(event->peer.in6_addr.sin6_addr),
-		    &(rule->peer.addr.in6_addr), rule->peer.prefixlen))
-			return POLICY_NOMATCH;
-	}
-
-	return POLICY_MATCH;
 }
 
 /* Security operations. */

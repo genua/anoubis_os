@@ -77,18 +77,9 @@ struct sfs_path_message
 	char paths[];
 };
 
-/*
- * Used in eventdev replies: Access is ok provided that the Checksum
- * given in the open message remains intact. This should never be seen
- * as a system call error code in user space.
- */
-#define EOKWITHCHKSUM	0x2000UL
-
 #ifdef __KERNEL__
 
 int anoubis_sfs_get_csum(struct file * file, u_int8_t * csum);
-int anoubis_sfs_file_lock(struct file * file, u_int8_t * csum);
-void anoubis_sfs_file_unlock(struct file * file);
 
 #endif
 

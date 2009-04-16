@@ -239,9 +239,6 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 	struct eventdev_queue * q;
 	struct file * eventfile;
 	struct anoubis_task_label * l;
-	struct anoubis_kernel_policy_header policy_header;
-	struct anoubis_kernel_policy * policies;
-	struct task_struct *tsk;
 	int ret;
 
 	/* For now only root is allowed to do declare a queue or a listener. */
@@ -311,79 +308,16 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 		return ret;
 	case ANOUBIS_REQUEST_STATS:
 		return ac_stats();
-	case ANOUBIS_REPLACE_POLICY:
-		if (unlikely(!arg))
-			return -EINVAL;
-		if (!capable(CAP_SYS_ADMIN))
-			return -EPERM;
-
-		if (copy_from_user(&policy_header, (void *)arg,
-		    sizeof(policy_header)) != 0)
-			return -EFAULT;
-
-		if (policy_header.size == 0) {
-			policies = NULL;
-		} else {
-			struct anoubis_kernel_policy * p;
-
-			if (policy_header.size > PAGE_SIZE * 8)
-				return -EINVAL;
-
-			policies = kmalloc(policy_header.size, GFP_KERNEL);
-			if (!policies)
-				return -ENOMEM;
-
-			if (copy_from_user(policies, (void*)(arg +
-			    sizeof(policy_header)), policy_header.size) != 0) {
-				kfree(policies);
-				return -EFAULT;
-			}
-
-			p = policies;
-
-			while (p) {
-				if (p->rule_len >
-				    policy_header.size - ((unsigned char *)p -
-				    (unsigned char *)policies)) {
-					kfree(policies);
-					return -EINVAL;
-				}
-				p->next = (struct anoubis_kernel_policy *)
-				    (((char*)p) + p->rule_len +
-				    sizeof(struct anoubis_kernel_policy));
-				if ((char*)p->next >= ((char*)policies) +
-				    policy_header.size)
-					p->next = NULL;
-
-				p = p->next;
+	case ANOUBIS_OLD_REPLACE_POLICY:
+		{
+			static int do_print = 1;
+			if (do_print) {
+				do_print = 0;
+				printk(KERN_INFO "Old POLICY_REPLACE ioctl no "
+				    "longer supported. Update your anoubisd\n");
 			}
 		}
-
-		rcu_read_lock();
-		tsk = find_task_by_pid(policy_header.pid);
-		if (tsk)
-			get_task_struct(tsk);
-		rcu_read_unlock();
-
-		if (!tsk || !tsk->security) {
-			if (tsk)
-				put_task_struct(tsk);
-
-			if (policies)
-				kfree(policies);
-
-			return -EINVAL;
-		}
-
-		l = tsk->security;
-		write_lock(&l->policy_lock);
-		if (l->policy)
-			kfree(l->policy);
-		l->policy = policies;
-		write_unlock(&l->policy_lock);
-
-		put_task_struct(tsk);
-		break;
+		return 0;
 	case ANOUBIS_GETVERSION:
 		{
 			unsigned long version = ANOUBISCORE_VERSION;
@@ -607,40 +541,6 @@ void anoubis_unregister(int idx)
 	spin_lock(&hooks_lock);
 	blocked[idx] = 0;
 	spin_unlock(&hooks_lock);
-}
-
-/*
- * anoubis_match_policy calls the module specific policy matcher on every
- * policy rule attached to the current process until a match occurs and
- * either returns a pointer to the matching rule or NULL on no match
- */
-struct anoubis_kernel_policy * anoubis_match_policy(void *data, int datalen,
-    int source, int (*anoubis_policy_matcher)
-    (struct anoubis_kernel_policy * policy, void * data, int datalen))
-{
-	struct anoubis_task_label * l = current->security;
-	struct anoubis_kernel_policy * p;
-	time_t now;
-
-	if (unlikely(!l || !l->policy))
-		return NULL;
-
-	now = get_seconds();
-
-	read_lock(&l->policy_lock);
-	p = l->policy;
-	while(p) {
-		if ((p->anoubis_source == source) &&
-		    ((p->expire == 0) || p->expire < now)) {
-			if (anoubis_policy_matcher(p, data, datalen) ==
-			    POLICY_MATCH)
-				break;
-		}
-		p = p->next;
-	}
-	read_unlock(&l->policy_lock);
-
-	return p;
 }
 
 #define HOOKS(FUNC, ARGS) ({					\
@@ -887,8 +787,6 @@ static int ac_task_alloc_security(struct task_struct * p)
 	spin_lock(&task_cookie_lock);
 	l->task_cookie = task_cookie++;
 	spin_unlock(&task_cookie_lock);
-	l->policy = NULL;
-	rwlock_init(&l->policy_lock);
 	p->security = l;
 
 	msg = kmalloc(sizeof(struct ac_process_message), GFP_NOWAIT);
@@ -908,8 +806,6 @@ static void ac_task_free_security(struct task_struct * p)
 		struct anoubis_task_label * old = p->security;
 		struct ac_process_message * msg;
 		p->security = NULL;
-		if (likely(old->policy))
-			kfree(old->policy);
 		msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
 		if (msg) {
 			msg->task_cookie = old->task_cookie;
@@ -1165,7 +1061,6 @@ EXPORT_SYMBOL(anoubis_register);
 EXPORT_SYMBOL(anoubis_unregister);
 EXPORT_SYMBOL(anoubis_get_sublabel);
 EXPORT_SYMBOL(anoubis_set_sublabel);
-EXPORT_SYMBOL(anoubis_match_policy);
 
 security_initcall(anoubis_core_init);
 module_init(anoubis_core_init_late);
