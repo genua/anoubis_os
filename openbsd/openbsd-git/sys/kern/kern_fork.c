@@ -384,8 +384,6 @@ fork1(struct proc *p1, int exitsig, int flags, void *stack, size_t stacksize,
 	mtx_enter(&task_cookie_mutex);
 	p2->task_cookie = ++next_task_cookie;
 	mtx_leave(&task_cookie_mutex);
-	p2->policy = NULL;
-	rw_init(&(p2->policy_lock), "policylock");
 	{
 		struct ac_process_message * msg;
 		msg = malloc(sizeof(*msg), M_DEVBUF, M_WAITOK);

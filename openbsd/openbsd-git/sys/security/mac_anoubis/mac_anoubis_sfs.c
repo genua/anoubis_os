@@ -241,44 +241,6 @@ out:
 #define CHECKSUM_OK(VP)	((VP)->v_type == VREG)
 
 int
-anoubis_sfs_file_lock(struct file * file, u_int8_t * csum)
-{
-	struct vnode * vp = file->f_data;
-	struct sfs_label * sec;
-	int err;
-
-	if (!FPVNODE(file) || !CHECKSUM_OK(vp))
-		return EINVAL;
-	sec = SFS_LABEL(vp->v_label);
-	if (!sec)
-		return EINVAL;
-	err = deny_write_access(vp);
-	if (err)
-		return EBUSY;
-	mtx_enter(&sec->lock);
-	if ((sec->sfsmask & SFS_CS_UPTODATE) == 0)
-		goto out_err;
-	if (memcmp(sec->hash, csum, ANOUBIS_SFS_CS_LEN) != 0)
-		goto out_err;
-	file->denywrite++;
-	mtx_leave(&sec->lock);
-	return 0;
-out_err:
-	mtx_leave(&sec->lock);
-	allow_write_access(vp);
-	return EBUSY;
-}
-
-void
-anoubis_sfs_file_unlock(struct file * file)
-{
-	struct vnode * vp = file->f_data;
-	assert(FPVNODE(file) && CHECKSUM_OK(vp));
-	allow_write_access(vp);
-	file->denywrite--;
-}
-
-int
 sfs_csum(struct vnode * vp, struct sfs_label * sec)
 {
 	int required;
@@ -501,17 +463,6 @@ sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 	if (ret == EPIPE /* && openation_mode != strict XXX */)
 		return 0;
-	if (ret == EOKWITHCHKSUM) {
-		/*
-		 * XXX CEH: Note: Setting ret = EPERM here is a temporary
-		 * XXX CEH: hack to make things work. We should actually
-		 * XXX CEH: save the path somewhere and use it in mac_file_open
-		 */
-		if (file)
-			ret = anoubis_sfs_file_lock(file, reported_csum);
-		else
-			ret = EPERM;
-	}
 	if (ret)
 		sfs_stat_ev_deny++;
 	return ret;
@@ -723,8 +674,6 @@ mac_anoubis_sfs_check_follow_link(struct nameidata *ndp, char *buf, int buflen)
 	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
 	if (ret == EPIPE /* && openation_mode != strict XXX */)
 		return 0;
-	if (ret == EOKWITHCHKSUM)
-		return 0;
 	if (ret)
 		sfs_stat_ev_deny++;
 	return ret;
@@ -766,8 +715,6 @@ mac_anoubis_sfs_check_socket_connect(struct ucred *cred, struct socket *sock,
 	sfs_stat_ev++;
 	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
 	if (ret == EPIPE /* && openation_mode != strict XXX */)
-		return 0;
-	if (ret == EOKWITHCHKSUM)
 		return 0;
 	if (ret)
 		sfs_stat_ev_deny++;

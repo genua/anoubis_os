@@ -264,8 +264,6 @@ struct proc {
 	/* XXX This should move into a per process security attribute. */
 	int listener;		/* Process is an anoubis listener. */
 	anoubis_cookie_t task_cookie;	/* Unique cookie of the task. */
-	struct anoubis_kernel_policy *policy;	/* Policy of the task */
-	struct rwlock policy_lock;
 #endif
 };
 

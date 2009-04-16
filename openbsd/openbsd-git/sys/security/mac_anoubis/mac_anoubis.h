@@ -52,8 +52,4 @@ extern int alf_allow_port_max;
 int anoubis_raise(void * buf, size_t len, int src);
 int anoubis_notify(void * buf, size_t len, int src);
 
-extern struct anoubis_kernel_policy * anoubis_match_policy(void *data,
-    int datalen, int source, int (*anoubis_policy_matcher)
-    (struct anoubis_kernel_policy * policy, void * data, int datalen));
-
 #endif	/* _MAC_ANOUBIS_H_ */

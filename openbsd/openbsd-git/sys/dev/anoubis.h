@@ -43,7 +43,8 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_DECLARE_LISTENER	_IO('a',0x11)
 #define ANOUBIS_REQUEST_STATS		_IO('a',0x12)
 #define ANOUBIS_UNDECLARE_FD		_IO('a',0x13)
-#define ANOUBIS_REPLACE_POLICY		_IO('a',0x14)
+/* Old REPLACE_POLICY ioctl. Do not reuse. */
+#define ANOUBIS_OLD_REPLACE_POLICY	_IO('a',0x14)
 #define ANOUBIS_GETVERSION		_IOR('a',0x15, unsigned long)
 #define ANOUBIS_GETCSUM			_IOWR('a',0x16, \
 					    struct anoubis_ioctl_csum)
@@ -72,26 +73,6 @@ struct anoubis_stat_value {
 struct anoubis_stat_message {
 	struct anoubis_event_common common;
 	struct anoubis_stat_value vals[0];
-};
-
-#define POLICY_ALLOW	0
-#define POLICY_DENY	1
-#define POLICY_ASK	2
-
-struct anoubis_kernel_policy {
-	int anoubis_source;
-	int decision;
-	unsigned int rule_len;
-	time_t expire;
-
-	struct anoubis_kernel_policy *next;
-	/* Module specific rule, no type known at this time */
-	unsigned char rule[0];
-};
-
-struct anoubis_kernel_policy_header {
-	pid_t pid;
-	unsigned int size;
 };
 
 #define ANOUBIS_PROCESS_OP_FORK 0x0001UL
