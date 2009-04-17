@@ -395,8 +395,31 @@ int mac_anoubis_sfs_vnode_unlink(struct ucred * cred, struct vnode * dirvp,
     struct label * dirlabel, struct vnode *vp, struct label *vplabel,
     struct componentname *cnp)
 {
-	return mac_anoubis_sfs_vnode_open(cred, vp, vplabel, VWRITE,
-	    dirvp, dirlabel, cnp);
+	struct sfs_label * sec = SFS_LABEL(vplabel);
+	char *pathhint, *bufp;
+	int ret;
+
+	/* We don't handle directories yet */
+	if (!sfs_enable || !CHECKSUM_OK(vp))
+		return 0;
+
+	pathhint = NULL;
+
+	if (dirvp) {
+		/*
+		 * The reason for the VOP_UNLOCK is explained in the
+		 * comment above sfs_d_path
+		 */
+		VOP_UNLOCK(dirvp, 0, curproc);
+		VOP_UNLOCK(vp, 0, curproc);
+		pathhint = sfs_d_path(dirvp, cnp, &bufp);
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
+		vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
+	}
+	ret = sfs_open_checks(NULL, vp, sec, VWRITE, pathhint);
+	if (pathhint)
+		free(bufp, M_MACTEMP);
+	return ret;
 }
 
 int

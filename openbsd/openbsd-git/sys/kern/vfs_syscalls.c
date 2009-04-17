@@ -1531,8 +1531,18 @@ sys_unlink(struct proc *p, void *v, register_t *retval)
 	int error;
 	struct nameidata nd;
 
+#ifdef ANOUBIS
+	/*
+	* NOTE: We do not actually need SAVESTART but setting
+	* it explicitly will prevent VOP_* from freeing the name buffer.
+	*/
+	struct componentname *cnp = &nd.ni_cnd;
+	NDINIT(&nd, DELETE, LOCKPARENT | LOCKLEAF | SAVENAME | SAVESTART,
+	    UIO_USERSPACE, SCARG(uap, path), p);
+#else
 	NDINIT(&nd, DELETE, LOCKPARENT | LOCKLEAF, UIO_USERSPACE,
 	    SCARG(uap, path), p);
+#endif
 	if ((error = namei(&nd)) != 0)
 		return (error);
 	vp = nd.ni_vp;
@@ -1553,6 +1563,23 @@ sys_unlink(struct proc *p, void *v, register_t *retval)
 
 #ifdef MAC
 	error = mac_vnode_check_unlink(p->p_ucred, nd.ni_dvp, vp, &nd.ni_cnd);
+#ifdef ANOUBIS
+	/* relookup the vnode because the vfs_getcwd_common call
+	 * in SFS modifies ni_dvp->i_offset which is used by VOP_REMOVE
+	 * to unlink the vnode.
+	 * for now ignore the possible race, similar to ufs_vnops.c */
+	if (!error) {
+		if (nd.ni_dvp == vp)
+			vrele(vp);
+		else
+			vput(vp);
+		VOP_UNLOCK(nd.ni_dvp, 0, curproc);
+		if ((error = relookup(nd.ni_dvp, &vp, cnp)) != 0) {
+			VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
+			goto out;
+		}
+	}
+#endif
 	if (error) {
 		VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
 		if (nd.ni_dvp == vp)
@@ -1560,7 +1587,7 @@ sys_unlink(struct proc *p, void *v, register_t *retval)
 		else
 			vput(nd.ni_dvp);
 		vput(vp);
-		return (error);
+		goto out;
 	}
 #endif
 
@@ -1568,6 +1595,10 @@ sys_unlink(struct proc *p, void *v, register_t *retval)
 
 	error = VOP_REMOVE(nd.ni_dvp, nd.ni_vp, &nd.ni_cnd);
 out:
+#ifdef ANOUBIS
+	vrele(nd.ni_startdir);
+	pool_put(&namei_pool, cnp->cn_pnbuf);
+#endif
 	return (error);
 }
 
@@ -2664,6 +2695,8 @@ out:
 	if (!error)
 		error = mac_vnode_check_unlink(p->p_ucred, nd.ni_dvp, vp,
 		    &nd.ni_cnd);
+	/* using this hook for anoubis will require a relookup,
+	 * please read the comment in sys_unlink for more details */
 #endif
 	if (!error) {
 		error = VOP_RMDIR(nd.ni_dvp, nd.ni_vp, &nd.ni_cnd);

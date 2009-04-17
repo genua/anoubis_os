@@ -1417,7 +1417,8 @@ nfs_remove(v)
 			error = 0;
 	} else if (!np->n_sillyrename)
 		error = nfs_sillyrename(dvp, vp, cnp);
-	pool_put(&namei_pool, cnp->cn_pnbuf);
+	if ((cnp->cn_flags & SAVESTART) == 0)
+		pool_put(&namei_pool, cnp->cn_pnbuf);
 	np->n_attrstamp = 0;
 	vrele(dvp);
 	vrele(vp);
