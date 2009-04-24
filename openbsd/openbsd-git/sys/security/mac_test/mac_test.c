@@ -2625,10 +2625,17 @@ test_vnode_check_getextattr(struct ucred *cred, struct vnode *vp,
 }
 
 COUNTER_DECL(vnode_check_link);
+#ifdef ANOUBIS
 int
 test_vnode_check_link(struct ucred *cred, struct vnode *dvp,
     struct label *dvplabel, struct vnode *vp, struct label *vplabel,
+    struct componentname *cnp, struct vnode *sdvp, struct label *sdvplabel,
+    struct componentname *scnp)
+#else
+test_vnode_check_link(struct ucred *cred, struct vnode *dvp,
+    struct label *dvplabel, struct vnode *vp, struct label *vplabel,
     struct componentname *cnp)
+#endif
 {
 
 	LABEL_CHECK(cred->cr_label, MAGIC_CRED);

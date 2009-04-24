@@ -1418,11 +1418,22 @@ sys_link(struct proc *p, void *v, register_t *retval)
 	struct nameidata nd;
 	int error;
 	int flags;
+#ifdef ANOUBIS
+	struct nameidata snd;
+	struct componentname *scnp = &snd.ni_cnd;
+
+	NDINIT(&snd, LOOKUP, FOLLOW | WANTPARENT | SAVENAME, UIO_USERSPACE,
+	    SCARG(uap, path), p);
+	if ((error = namei(&snd)) != 0)
+		return (error);
+	vp = snd.ni_vp;
+#else
 
 	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path), p);
 	if ((error = namei(&nd)) != 0)
 		return (error);
 	vp = nd.ni_vp;
+#endif
 
 	flags = LOCKPARENT;
 	if (vp->v_type == VDIR) {
@@ -1443,14 +1454,23 @@ sys_link(struct proc *p, void *v, register_t *retval)
 		goto out;
 	}
 #ifdef MAC
+#ifdef ANOUBIS
+	error = mac_vnode_check_link(p->p_ucred, nd.ni_dvp, vp, &nd.ni_cnd, snd.ni_dvp, scnp);
+#else
 	error = mac_vnode_check_link(p->p_ucred, nd.ni_dvp, vp, &nd.ni_cnd);
+#endif
 	if (error) {
-		vrele(vp);
-		return (error);
+		VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
+		vput(nd.ni_dvp);
+		goto out;
 	}
 #endif
 	error = VOP_LINK(nd.ni_dvp, vp, &nd.ni_cnd);
 out:
+#ifdef ANOUBIS
+	vrele(snd.ni_dvp);
+	pool_put(&namei_pool, scnp->cn_pnbuf);
+#endif
 	vrele(vp);
 	return (error);
 }

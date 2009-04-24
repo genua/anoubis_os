@@ -50,6 +50,24 @@ struct sfs_open_message
 	char pathhint[1];
 };
 
+/* Defines for path comparisons only used for link and rename */
+#define ANOUBIS_PATH_OP_LINK		1
+#define ANOUBIS_PATH_OP_UNLINK		2
+#define ANOUBIS_PATH_OP_SLINK		3
+#define ANOUBIS_PATH_OP_MKDIR		4
+#define ANOUBIS_PATH_OP_RMDIR		5
+#define ANOUBIS_PATH_OP_MKNOD		6
+#define ANOUBIS_PATH_OP_RENAME		7
+#define ANOUBIS_PATH_OP_TRUNC		8
+
+struct sfs_path_message
+{
+	struct anoubis_event_common common;
+	unsigned int op;
+	unsigned int pathlen[2];
+	char paths[];
+};
+
 /* Statistic Keys for ANOUBIS_SOURCE_SFS */
 #define SFS_STAT_LOADTIME		10
 #define SFS_STAT_CSUM_RECALC		11

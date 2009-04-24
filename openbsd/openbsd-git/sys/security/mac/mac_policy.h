@@ -564,7 +564,12 @@ typedef int	(*mpo_vnode_check_exec_t)(struct ucred *cred,
 typedef int	(*mpo_vnode_check_link_t)(struct ucred *cred,
 		    struct vnode *dvp, struct label *dvplabel,
 		    struct vnode *vp, struct label *vplabel,
+#ifdef ANOUBIS
+		    struct componentname *cnp, struct vnode *sdvp,
+		    struct label *sdvplabel, struct componentname *scnp);
+#else
 		    struct componentname *cnp);
+#endif
 typedef int	(*mpo_vnode_check_lookup_t)(struct ucred *cred,
 		    struct vnode *dvp, struct label *dvplabel,
 		    struct componentname *cnp);

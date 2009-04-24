@@ -94,6 +94,8 @@ static u_int64_t sfs_stat_csum_recalc;
 static u_int64_t sfs_stat_csum_recalc_fail;
 static u_int64_t sfs_stat_ev;
 static u_int64_t sfs_stat_ev_deny;
+static u_int64_t sfs_stat_path;
+static u_int64_t sfs_stat_path_deny;
 static u_int64_t sfs_stat_disabled;
 
 struct anoubis_internal_stat_value sfs_stats[] = {
@@ -124,6 +126,12 @@ int			 mac_anoubis_sfs_vnode_unlink(struct ucred *,
 			     struct vnode *, struct label *,
 			     struct vnode *, struct label *,
 			     struct componentname *);
+int			 mac_anoubis_sfs_vnode_link(struct ucred *,
+			     struct vnode *, struct label *,
+			     struct vnode *, struct label *,
+			     struct componentname *,
+			     struct vnode *, struct label *,
+			     struct componentname *);
 int			 mac_anoubis_sfs_file_open(struct ucred * active_cred,
 			     struct file *, struct vnode * vp,
 			     struct label * l, const char * pathhint);
@@ -140,6 +148,10 @@ char			*sfs_d_path(struct vnode *dirvp,
 			     struct componentname *cnp, char **bufp);
 int			 sfs_open_checks(struct file *, struct vnode *,
 			     struct sfs_label * sec, int, const char *);
+struct sfs_path_message *sfs_path_fill(unsigned int, struct vnode *,
+			     struct componentname *, struct vnode *,
+			     struct componentname *,  int *);
+int			 sfs_path_checks(struct sfs_path_message *, int);
 struct sfs_open_message	*sfs_pack_to_message(struct pack_label *pl, int *lenp);
 void			 mac_anoubis_sfs_execve_success(struct exec_package *,
 			     struct label *);
@@ -410,11 +422,11 @@ int mac_anoubis_sfs_vnode_unlink(struct ucred * cred, struct vnode * dirvp,
 		 * The reason for the VOP_UNLOCK is explained in the
 		 * comment above sfs_d_path
 		 */
-		VOP_UNLOCK(dirvp, 0, curproc);
 		VOP_UNLOCK(vp, 0, curproc);
+		VOP_UNLOCK(dirvp, 0, curproc);
 		pathhint = sfs_d_path(dirvp, cnp, &bufp);
-		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 		vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 	}
 	ret = sfs_open_checks(NULL, vp, sec, VWRITE, pathhint);
 	if (pathhint)
@@ -429,6 +441,28 @@ mac_anoubis_sfs_vnode_truncate(struct ucred * cred, struct vnode * vp,
 {
 	return mac_anoubis_sfs_vnode_open(cred, vp, vplabel, VWRITE,
 	    dirvp, dirlabel, cnp);
+}
+
+int
+mac_anoubis_sfs_vnode_link(struct ucred * cred, struct vnode *dirvp,
+    struct label *dirlabel, struct vnode *vp, struct label *vplabel,
+    struct componentname *cnp, struct vnode *sdirvp, struct label *sdirlabel,
+    struct componentname *scnp)
+{
+	unsigned int op = ANOUBIS_PATH_OP_LINK;
+	struct sfs_path_message * msg;
+	int len, ret;
+
+	VOP_UNLOCK(dirvp, 0, curproc);
+	msg = sfs_path_fill(op, dirvp, cnp, sdirvp, scnp, &len);
+	vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
+
+	if (!msg)
+		ret = -ENOMEM;
+	else
+		ret = sfs_path_checks(msg, len);
+
+	return ret;
 }
 
 int
@@ -488,6 +522,70 @@ sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
 		return 0;
 	if (ret)
 		sfs_stat_ev_deny++;
+	return ret;
+}
+
+struct sfs_path_message *
+sfs_path_fill(unsigned int op, struct vnode *dirvp, struct componentname *cnp,
+    struct vnode *sdirvp, struct componentname *scnp,  int * lenp)
+{
+	struct sfs_path_message * msg;
+	unsigned int pathlen[2] = { 0, 0 };
+	char * pathstr[2];
+	char * bufp[2] = { NULL, NULL };
+	int alloclen;
+
+	pathstr[0] = sfs_d_path(dirvp, cnp, &bufp[0]);
+	pathstr[1] = sfs_d_path(sdirvp, scnp, &bufp[1]);
+
+	if (pathstr[0] && pathstr[1]) {
+		pathlen[0] = strlen(pathstr[0]) + 1;
+		pathlen[1] = strlen(pathstr[1]) + 1;
+	} else {
+		if (pathstr[0])
+			free(bufp[0], M_MACTEMP);
+		if (pathstr[1])
+			free(bufp[1], M_MACTEMP);
+		return NULL;
+	}
+
+	alloclen = sizeof(struct sfs_path_message) + pathlen[0] + pathlen[1];
+
+	msg = malloc(alloclen, M_DEVBUF, M_WAITOK);
+	if (!msg) {
+		free(bufp[0], M_MACTEMP);
+		free(bufp[1], M_MACTEMP);
+		return NULL;
+	}
+
+	msg->op = op;
+	msg->pathlen[0] = pathlen[0];
+	msg->pathlen[1] = pathlen[1];
+
+	memcpy(msg->paths, pathstr[0], pathlen[0]);
+	memcpy(msg->paths + pathlen[0], pathstr[1], pathlen[1]);
+
+	free(bufp[0], M_MACTEMP);
+	free(bufp[1], M_MACTEMP);
+
+	(*lenp) = alloclen;
+	return msg;
+}
+
+int
+sfs_path_checks(struct sfs_path_message * msg, int len)
+{
+	int ret;
+
+	sfs_stat_path++;
+
+	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFSPATH);
+
+	if (ret == EPIPE /* && openation_mode != strict XXX */)
+		return 0;
+	if (ret)
+		sfs_stat_path_deny++;
+
 	return ret;
 }
 
@@ -770,6 +868,7 @@ struct mac_policy_ops mac_anoubis_sfs_ops =
 	.mpo_vnode_check_open = mac_anoubis_sfs_vnode_open,
 	.mpo_vnode_check_truncate = mac_anoubis_sfs_vnode_truncate,
 	.mpo_vnode_check_unlink = mac_anoubis_sfs_vnode_unlink,
+	.mpo_vnode_check_link = mac_anoubis_sfs_vnode_link,
 	.mpo_file_check_open = NULL /* mac_anoubis_sfs_file_open */,
 	.mpo_execve_prepare = mac_anoubis_sfs_execve_prepare,
 	.mpo_execve_success = mac_anoubis_sfs_execve_success,

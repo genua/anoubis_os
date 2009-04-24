@@ -417,8 +417,14 @@ int	mac_vnode_check_getacl(struct ucred *cred, struct vnode *vp,
 	    acl_type_t type);
 int	mac_vnode_check_getextattr(struct ucred *cred, struct vnode *vp,
 	    int attrnamespace, const char *name, struct uio *uio);
+#ifdef ANOUBIS
+int	mac_vnode_check_link(struct ucred *cred, struct vnode *dvp,
+	    struct vnode *vp, struct componentname *cnp,
+	    struct vnode *sdvp, struct componentname *scnp);
+#else
 int	mac_vnode_check_link(struct ucred *cred, struct vnode *dvp,
 	    struct vnode *vp, struct componentname *cnp);
+#endif
 int	mac_vnode_check_listextattr(struct ucred *cred, struct vnode *vp,
 	    int attrnamespace);
 int	mac_vnode_check_lookup(struct ucred *cred, struct vnode *dvp,

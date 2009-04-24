@@ -462,8 +462,14 @@ int	test_vnode_check_getacl(struct ucred *, struct vnode *, struct label *,
 	    acl_type_t);
 int	test_vnode_check_getextattr(struct ucred *, struct vnode *,
 	    struct label *, int, const char *, struct uio *);
+#ifdef ANOUBIS
+int	test_vnode_check_link(struct ucred *, struct vnode *, struct label *,
+	    struct vnode *, struct label *, struct componentname *,
+	    struct vnode *, struct label *, struct componentname *);
+#else
 int	test_vnode_check_link(struct ucred *, struct vnode *, struct label *,
 	    struct vnode *, struct label *, struct componentname *);
+#endif
 int	test_vnode_check_listextattr(struct ucred *, struct vnode *,
 	    struct label *, int);
 int	test_vnode_check_lookup(struct ucred *, struct vnode *, struct label *,

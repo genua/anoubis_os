@@ -505,6 +505,24 @@ mac_vnode_check_getextattr(struct ucred *cred, struct vnode *vp,
 	return (error);
 }
 
+#ifdef ANOUBIS
+int
+mac_vnode_check_link(struct ucred *cred, struct vnode *dvp,
+    struct vnode *vp, struct componentname *cnp,
+    struct vnode *sdvp, struct componentname *scnp)
+{
+	int error;
+
+	ASSERT_VOP_LOCKED(dvp, "mac_vnode_check_link");
+#if 0 /* XXX PM: In OpenBSD, 'vp' is not locked. */
+	ASSERT_VOP_LOCKED(vp, "mac_vnode_check_link");
+#endif
+
+	MAC_CHECK(vnode_check_link, cred, dvp, dvp->v_label, vp,
+	    vp->v_label, cnp, sdvp, sdvp->v_label, scnp);
+	return (error);
+}
+#else
 int
 mac_vnode_check_link(struct ucred *cred, struct vnode *dvp,
     struct vnode *vp, struct componentname *cnp)
@@ -520,6 +538,7 @@ mac_vnode_check_link(struct ucred *cred, struct vnode *dvp,
 	    vp->v_label, cnp);
 	return (error);
 }
+#endif
 
 int
 mac_vnode_check_listextattr(struct ucred *cred, struct vnode *vp,
