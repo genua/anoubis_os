@@ -2584,6 +2584,11 @@ sys_rename(struct proc *p, void *v, register_t *retval)
 	else
 		error = mac_vnode_check_rename_to(p->p_ucred, tdvp, tvp,
 		    fromnd.ni_dvp == tdvp, &tond.ni_cnd);
+#ifdef ANOUBIS
+	if (!error)
+		error = mac_vnode_check_rename_an(p->p_ucred, tdvp, tvp,
+		    fromnd.ni_dvp, &tond.ni_cnd, &fromnd.ni_cnd);
+#endif
 #endif
 out:
 	if (!error) {

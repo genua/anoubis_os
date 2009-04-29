@@ -766,6 +766,25 @@ mac_vnode_check_rename_to(struct ucred *cred, struct vnode *dvp,
 	return (error);
 }
 
+#ifdef ANOUBIS
+int
+mac_vnode_check_rename_an(struct ucred *cred, struct vnode *dvp,
+    struct vnode *vp, struct vnode *sdvp,
+    struct componentname *cnp, struct componentname *scnp)
+{
+	int error;
+
+	ASSERT_VOP_LOCKED(dvp, "mac_vnode_check_rename_an");
+	/* XXX PM: vp can be NULL. */
+	if (vp != NULL)
+		ASSERT_VOP_LOCKED(vp, "mac_vnode_check_rename_an");
+
+	MAC_CHECK(vnode_check_rename_an, cred, dvp, dvp->v_label, vp,
+	    vp != NULL ? vp->v_label : NULL, sdvp, sdvp->v_label, cnp, scnp);
+	return (error);
+}
+#endif
+
 int
 mac_vnode_check_revoke(struct ucred *cred, struct vnode *vp)
 {

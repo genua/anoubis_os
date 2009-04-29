@@ -132,6 +132,11 @@ int			 mac_anoubis_sfs_vnode_link(struct ucred *,
 			     struct componentname *,
 			     struct vnode *, struct label *,
 			     struct componentname *);
+int			 mac_anoubis_sfs_vnode_rename(struct ucred *,
+			     struct vnode *, struct label *,
+			     struct vnode *, struct label *,
+			     struct vnode *, struct label *,
+			     struct componentname *, struct componentname *);
 int			 mac_anoubis_sfs_file_open(struct ucred * active_cred,
 			     struct file *, struct vnode * vp,
 			     struct label * l, const char * pathhint);
@@ -456,6 +461,32 @@ mac_anoubis_sfs_vnode_link(struct ucred * cred, struct vnode *dirvp,
 	VOP_UNLOCK(dirvp, 0, curproc);
 	msg = sfs_path_fill(op, dirvp, cnp, sdirvp, scnp, &len);
 	vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
+
+	if (!msg)
+		ret = -ENOMEM;
+	else
+		ret = sfs_path_checks(msg, len);
+
+	return ret;
+}
+
+int
+mac_anoubis_sfs_vnode_rename(struct ucred * cred, struct vnode *dirvp,
+    struct label *dirlabel, struct vnode *vp, struct label *vplabel,
+    struct vnode *sdirvp, struct label *sdirlabel,
+    struct componentname *cnp, struct componentname *scnp)
+{
+	unsigned int op = ANOUBIS_PATH_OP_RENAME;
+	struct sfs_path_message * msg;
+	int len, ret;
+
+	if (vp != NULL)
+		VOP_UNLOCK(vp, 0, curproc);
+	VOP_UNLOCK(dirvp, 0, curproc);
+	msg = sfs_path_fill(op, dirvp, cnp, sdirvp, scnp, &len);
+	vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
+	if (vp != NULL)
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 
 	if (!msg)
 		ret = -ENOMEM;
@@ -869,6 +900,7 @@ struct mac_policy_ops mac_anoubis_sfs_ops =
 	.mpo_vnode_check_truncate = mac_anoubis_sfs_vnode_truncate,
 	.mpo_vnode_check_unlink = mac_anoubis_sfs_vnode_unlink,
 	.mpo_vnode_check_link = mac_anoubis_sfs_vnode_link,
+	.mpo_vnode_check_rename_an = mac_anoubis_sfs_vnode_rename,
 	.mpo_file_check_open = NULL /* mac_anoubis_sfs_file_open */,
 	.mpo_execve_prepare = mac_anoubis_sfs_execve_prepare,
 	.mpo_execve_success = mac_anoubis_sfs_execve_success,

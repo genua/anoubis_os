@@ -454,6 +454,11 @@ int	mac_vnode_check_rename_from(struct ucred *cred, struct vnode *dvp,
 	    struct vnode *vp, struct componentname *cnp);
 int	mac_vnode_check_rename_to(struct ucred *cred, struct vnode *dvp,
 	    struct vnode *vp, int samedir, struct componentname *cnp);
+#ifdef ANOUBIS
+int	mac_vnode_check_rename_an(struct ucred *cred, struct vnode *dvp,
+	    struct vnode *vp, struct vnode *sdvp,
+	    struct componentname *cnp, struct componentname *scnp);
+#endif
 int	mac_vnode_check_revoke(struct ucred *cred, struct vnode *vp);
 int	mac_vnode_check_setacl(struct ucred *cred, struct vnode *vp,
 	    acl_type_t type, struct acl *acl);

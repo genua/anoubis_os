@@ -612,6 +612,13 @@ typedef int	(*mpo_vnode_check_rename_to_t)(struct ucred *cred,
 		    struct vnode *dvp, struct label *dvplabel,
 		    struct vnode *vp, struct label *vplabel, int samedir,
 		    struct componentname *cnp);
+#ifdef ANOUBIS
+typedef int	(*mpo_vnode_check_rename_an_t)(struct ucred *cred,
+		    struct vnode *dvp, struct label *dvplabel,
+		    struct vnode *vp, struct label *vplabel,
+		    struct vnode *sdvp, struct label *sdvplabel,
+		    struct componentname *cnp, struct componentname *scnp);
+#endif
 typedef int	(*mpo_vnode_check_revoke_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel);
 typedef int	(*mpo_vnode_check_setflags_t)(struct ucred *cred,
@@ -975,6 +982,7 @@ struct mac_policy_ops {
 	mpo_vnode_check_relabel_t		mpo_vnode_check_relabel;
 	mpo_vnode_check_rename_from_t		mpo_vnode_check_rename_from;
 	mpo_vnode_check_rename_to_t		mpo_vnode_check_rename_to;
+	mpo_vnode_check_rename_an_t		mpo_vnode_check_rename_an;
 	mpo_vnode_check_revoke_t		mpo_vnode_check_revoke;
 	mpo_vnode_check_setflags_t		mpo_vnode_check_setflags;
 	mpo_vnode_check_setmode_t		mpo_vnode_check_setmode;
