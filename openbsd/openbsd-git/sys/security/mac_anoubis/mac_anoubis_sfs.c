@@ -186,6 +186,8 @@ mac_anoubis_sfs_destroy_vnode_label(struct label * label)
 }
 
 #define CSUM_BUFSIZE PAGE_SIZE
+#define CSUM_NOCACHE(VP) ((VP)->v_tag == VT_NFS || (VP)->v_tag == VT_AFS || \
+				(VP)->v_tag == VT_PORTAL)
 
 int
 sfs_do_csum(struct vnode * vp, struct sfs_label * sec)
@@ -203,7 +205,7 @@ sfs_do_csum(struct vnode * vp, struct sfs_label * sec)
 	if (err)
 		return err;
 	mtx_enter(&sec->lock);
-	if (sec->sfsmask & SFS_CS_UPTODATE) {
+	if ((sec->sfsmask & SFS_CS_UPTODATE) && !CSUM_NOCACHE(vp)) {
 		mtx_leave(&sec->lock);
 		goto out;
 	}
