@@ -601,7 +601,7 @@ eventdevopen(dev_t dev, int oflags, int mode, struct proc *p)
 	q = malloc(sizeof(struct eventdev_queue), M_DEVBUF, M_WAITOK);
 	if (!q)
 		return ENOMEM;
-	mtx_init(&q->lock, 0);
+	mtx_init(&q->lock, IPL_SOFTNET);
 	TAILQ_INIT(&q->messages);
 	TAILQ_INIT(&q->waiting);
 	q->users = 1;

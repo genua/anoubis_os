@@ -42,6 +42,8 @@
 
 int mac_anoubis_ipc_slot;
 
+#define IPC_LABEL(x) ((anoubis_cookie_t *)mac_label_get(x, mac_anoubis_ipc_slot))
+
 void	mac_anoubis_ipc_init(struct mac_policy_conf *conf);
 void	mac_anoubis_ipc_socket_destroy_label(struct label *);
 int	mac_anoubis_ipc_socket_init_label(struct label *, int flag);
@@ -59,23 +61,18 @@ mac_anoubis_ipc_init(struct mac_policy_conf *conf)
 void
 mac_anoubis_ipc_socket_destroy_label(struct label *label)
 {
-	anoubis_cookie_t	*cookie;
-	struct ac_ipc_message	*buf;
-
-	cookie = (anoubis_cookie_t *)mac_label_get(label,
-	    mac_anoubis_ipc_slot);
+	anoubis_cookie_t *cookie = IPC_LABEL(label);
+	struct ac_ipc_message   *buf;
 
 	buf = malloc(sizeof(*buf), M_DEVBUF, M_WAITOK | M_ZERO);
 	if (buf) {
 		buf->op = ANOUBIS_SOCKET_OP_DESTROY;
-		buf->source =
-		    *(anoubis_cookie_t *)mac_label_get(label,
-		    mac_anoubis_ipc_slot);
+		buf->source = *IPC_LABEL(label);
 		anoubis_notify(buf, sizeof(*buf), ANOUBIS_SOURCE_IPC);
 	}
 
-	free(cookie, M_MACTEMP);
 	mac_label_set(label, mac_anoubis_ipc_slot, NULL);
+	free(cookie, M_MACTEMP);
 }
 
 int
@@ -113,10 +110,8 @@ mac_anoubis_ipc_socket_newconn(struct socket *oldso, struct label *oldsolabel,
 {
 	anoubis_cookie_t	*src, *dst;
 
-	src = (anoubis_cookie_t *)mac_label_get(oldsolabel,
-	    mac_anoubis_ipc_slot);
-	dst = (anoubis_cookie_t *)mac_label_get(newsolabel,
-	    mac_anoubis_ipc_slot);
+	src = IPC_LABEL(oldsolabel);
+	dst = IPC_LABEL(newsolabel);
 
 	*dst = *src;
 }
@@ -128,20 +123,16 @@ mac_anoubis_ipc_socketpeer_set_from_socket(struct socket *oldso, struct label
 	struct ac_ipc_message	*buf;
 	anoubis_cookie_t	*src, *dst;
 
-	src = (anoubis_cookie_t *)mac_label_get(oldsolabel,
-	    mac_anoubis_ipc_slot);
-	dst = (anoubis_cookie_t *)mac_label_get(newpeerlabel,
-	    mac_anoubis_ipc_slot);
+	src = IPC_LABEL(oldsolabel);
+	dst = IPC_LABEL(newpeerlabel);
 	*dst = *src;
 
 	buf = malloc(sizeof(*buf), M_DEVBUF, M_WAITOK | M_ZERO);
 	if (!buf)
 		return;
 	buf->op = ANOUBIS_SOCKET_OP_CONNECT;
-	buf->source = *(anoubis_cookie_t *)mac_label_get(newso->so_label,
-	    mac_anoubis_ipc_slot);
-	buf->dest =  *(anoubis_cookie_t *)mac_label_get(newso->so_peerlabel,
-	    mac_anoubis_ipc_slot);
+	buf->source = *IPC_LABEL(newso->so_label);
+	buf->dest =  *IPC_LABEL(newso->so_peerlabel);
 	anoubis_notify(buf, sizeof(*buf), ANOUBIS_SOURCE_IPC);
 }
 
