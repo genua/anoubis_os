@@ -65,7 +65,6 @@ static spinlock_t hooks_lock = SPIN_LOCK_UNLOCKED;
 extern struct security_operations * security_ops;
 
 static struct security_operations * original_ops;
-static struct security_operations * secondary_ops;
 
 /*
  * Wrapper around eventdev_enqueue. Removes the queue if it turns out
@@ -547,8 +546,8 @@ void anoubis_unregister(int idx)
 	int i;							\
 	int ret = 0, ret2;					\
 	unsigned int mymagic, lastmagic = 0;			\
-	if (secondary_ops->FUNC)				\
-		ret = secondary_ops->FUNC ARGS;			\
+	if (original_ops->FUNC)					\
+		ret = original_ops->FUNC ARGS;			\
 	for(i=0; i<MAX_ANOUBIS_MODULES; ++i) {			\
 		typeof(hooks[i]->FUNC) _func;			\
 		struct anoubis_hooks * h;			\
@@ -576,8 +575,8 @@ void anoubis_unregister(int idx)
 
 #define VOIDHOOKS(FUNC, ARGS) ({				\
 	int i;							\
-	if (secondary_ops->FUNC)				\
-		secondary_ops->FUNC ARGS;			\
+	if (original_ops)					\
+		original_ops->FUNC ARGS;			\
 	for(i=0; i<MAX_ANOUBIS_MODULES; ++i) {			\
 		typeof(hooks[i]->FUNC) _func;			\
 		struct anoubis_hooks * h;			\
@@ -659,10 +658,9 @@ static void ac_inode_free_security(struct inode * inode)
 	kfree(inode->i_security);
 	inode->i_security = NULL;
 }
-static int ac_inode_permission(struct inode * inode, int mask,
-    struct nameidata * nd)
+static int ac_inode_permission(struct inode * inode, int mask)
 {
-	return HOOKS(inode_permission, (inode, mask, nd));
+	return HOOKS(inode_permission, (inode, mask));
 }
 static int ac_inode_setxattr(struct dentry * dentry, const char * name,
     const void * value, size_t size, int flags)
@@ -679,33 +677,9 @@ static int ac_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 }
 
 /* FILES and DENTRIES*/
-static int ac_file_alloc_security(struct file * file)
-{
-	if ((file->f_security = ac_alloc_label(GFP_KERNEL)) == NULL)
-		return -ENOMEM;
-	return HOOKS(file_alloc_security, (file));
-}
-static void ac_file_free_security(struct file * file)
-{
-	if (!file->f_security)
-		return;
-	VOIDHOOKS(file_free_security, (file));
-	kfree(file->f_security);
-	file->f_security = NULL;
-}
 static int ac_dentry_open(struct file *file)
 {
 	return HOOKS(dentry_open, (file));
-}
-static int ac_file_permission(struct file * file, int mask)
-{
-	return HOOKS(file_permission, (file, mask));
-}
-static int ac_file_mmap(struct file * file, unsigned long reqprot,
-    unsigned long prot, unsigned long flags, unsigned long addr,
-    unsigned long fixed)
-{
-	return HOOKS(file_mmap, (file, reqprot, prot, flags, addr, fixed));
 }
 
 #ifdef CONFIG_SECURITY_PATH
@@ -818,143 +792,6 @@ static void ac_task_free_security(struct task_struct * p)
 	}
 }
 
-static int ac_register_security(const char *name,
-				 struct security_operations *ops)
-{
-	void ** primary, ** secondary;
-	int i;
-
-	if (secondary_ops != original_ops) {
-		printk(KERN_ERR "anoubis_core: Cannot register secondary "
-		       "security module\n");
-		return -EINVAL;
-	}
-
-	primary = (void**)security_ops;
-	secondary = (void**)ops;
-
-	for (i=0; i<sizeof(struct security_operations)/sizeof(void*); ++i) {
-		if (secondary[i] && !primary[i]) {
-			printk(KERN_ERR "anoubis_core: Secondary module %s "
-			       "cannot be stacked with anoubis_core\n", name);
-			return -EINVAL;
-		}
-	}
-
-	secondary_ops = ops;
-
-	printk(KERN_INFO "anoubis_core: Secondary security module %s "
-	       "registered\n", name);
-
-	return 0;
-}
-
-static int ac_ptrace(struct task_struct *parent, struct task_struct *child)
-{
-	return HOOKS(ptrace, (parent, child));
-}
-
-static int ac_capget(struct task_struct *target, kernel_cap_t *effective,
-		     kernel_cap_t *inheritable, kernel_cap_t *permitted)
-{
-	return HOOKS(capget, (target, effective, inheritable, permitted));
-}
-
-static int ac_capset_check(struct task_struct *target, kernel_cap_t *effective,
-			   kernel_cap_t *inheritable, kernel_cap_t *permitted)
-{
-	return HOOKS(capset_check, (target, effective, inheritable, permitted));
-}
-
-static void ac_capset_set(struct task_struct *target, kernel_cap_t *effective,
-			 kernel_cap_t *inheritable, kernel_cap_t *permitted)
-{
-	VOIDHOOKS(capset_set, (target, effective, inheritable, permitted));
-}
-
-static int ac_capable(struct task_struct *task, int cap)
-{
-	return HOOKS(capable, (task, cap));
-}
-
-static int ac_settime(struct timespec *ts, struct timezone *tz)
-{
-	return HOOKS(settime, (ts, tz));
-}
-
-static int ac_netlink_send(struct sock *sk, struct sk_buff *skb)
-{
-	return HOOKS(netlink_send, (sk, skb));
-}
-
-static int ac_netlink_recv(struct sk_buff *skb, int cap)
-{
-	return HOOKS(netlink_recv, (skb, cap));
-}
-
-static void ac_bprm_apply_creds(struct linux_binprm *bprm, int unsafe)
-{
-	VOIDHOOKS(bprm_apply_creds, (bprm, unsafe));
-}
-
-static int ac_bprm_secureexec(struct linux_binprm *bprm)
-{
-	return HOOKS(bprm_secureexec, (bprm));
-}
-
-static int ac_inode_need_killpriv(struct dentry *dentry)
-{
-	return HOOKS(inode_need_killpriv, (dentry));
-}
-
-static int ac_inode_killpriv(struct dentry *dentry)
-{
-	return HOOKS(inode_killpriv, (dentry));
-}
-
-static int ac_task_kill(struct task_struct *p, struct siginfo *info,
-		       int sig, u32 secid)
-{
-	return HOOKS(task_kill, (p, info, sig, secid));
-}
-
-static int ac_task_setscheduler(struct task_struct *p, int policy,
-				struct sched_param *lp)
-{
-	return HOOKS(task_setscheduler, (p, policy, lp));
-}
-
-static int ac_task_setioprio(struct task_struct *p, int ioprio)
-{
-	return HOOKS(task_setioprio, (p, ioprio));
-}
-
-static int ac_task_setnice(struct task_struct *p, int nice)
-{
-	return HOOKS(task_setnice, (p, nice));
-}
-
-static int ac_task_post_setuid(uid_t old_ruid, uid_t old_euid, uid_t old_suid,
-				int flags)
-{
-	return HOOKS(task_post_setuid, (old_ruid, old_euid, old_suid, flags));
-}
-
-static void ac_task_reparent_to_init(struct task_struct *p)
-{
-	VOIDHOOKS(task_reparent_to_init, (p));
-}
-
-static int ac_syslog(int type)
-{
-	return HOOKS(syslog, (type));
-}
-
-static int ac_vm_enough_memory(struct mm_struct *mm, long pages)
-{
-	return HOOKS(vm_enough_memory, (mm, pages));
-}
-
 static struct security_operations anoubis_core_ops = {
 	.unix_stream_connect = ac_unix_stream_connect,
 	.socket_post_create = ac_socket_post_create,
@@ -971,10 +808,6 @@ static struct security_operations anoubis_core_ops = {
 	.inode_setxattr = ac_inode_setxattr,
 	.inode_removexattr = ac_inode_removexattr,
 	.inode_follow_link = ac_inode_follow_link,
-	.file_alloc_security = ac_file_alloc_security,
-	.file_free_security = ac_file_free_security,
-	.file_permission = ac_file_permission,
-	.file_mmap = ac_file_mmap,
 	.dentry_open = ac_dentry_open,
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = ac_path_link,
@@ -990,34 +823,6 @@ static struct security_operations anoubis_core_ops = {
 	.bprm_post_apply_creds = ac_bprm_post_apply_creds,
 	.task_alloc_security = ac_task_alloc_security,
 	.task_free_security = ac_task_free_security,
-	.register_security = ac_register_security,
-
-	/* Capability support */
-	.ptrace = ac_ptrace,
-	.capget = ac_capget,
-	.capset_check = ac_capset_check,
-	.capset_set = ac_capset_set,
-	.capable = ac_capable,
-	.settime = ac_settime,
-	.netlink_send = ac_netlink_send,
-	.netlink_recv = ac_netlink_recv,
-
-	.bprm_apply_creds = ac_bprm_apply_creds,
-	.bprm_secureexec = ac_bprm_secureexec,
-
-	.inode_need_killpriv = ac_inode_need_killpriv,
-	.inode_killpriv = ac_inode_killpriv,
-
-	.task_kill = ac_task_kill,
-	.task_setscheduler = ac_task_setscheduler,
-	.task_setioprio = ac_task_setioprio,
-	.task_setnice = ac_task_setnice,
-	.task_post_setuid = ac_task_post_setuid,
-	.task_reparent_to_init = ac_task_reparent_to_init,
-
-	.syslog = ac_syslog,
-
-	.vm_enough_memory = ac_vm_enough_memory,
 };
 
 /*
@@ -1030,8 +835,8 @@ static int __init anoubis_core_init(void)
 	spin_lock_init(&queuelock);
 	spin_lock_init(&task_cookie_lock);
 	task_cookie = 1;
-	original_ops = secondary_ops = security_ops;
-	if (!secondary_ops)
+	original_ops = security_ops;
+	if (!original_ops)
 		panic ("anoubis_core: No initial security operatons\n");
 	rc = register_security(&anoubis_core_ops);
 	if (rc < 0) {

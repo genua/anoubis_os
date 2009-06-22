@@ -133,11 +133,6 @@ struct sfs_inode_sec {
 	u8 syssig[ANOUBIS_SFS_CS_LEN];
 };
 
-/* File security label */
-struct sfs_file_sec {
-	atomic_t denywrite;
-};
-
 /* Bprm security label */
 struct sfs_bprm_sec {
 	spinlock_t lock;
@@ -148,12 +143,10 @@ struct sfs_bprm_sec {
 /* Macros to access the security labels with their approriate type. */
 #define _SEC(TYPE,X) ((TYPE)anoubis_get_sublabel(&(X), ac_index))
 #define ISEC(X) _SEC(struct sfs_inode_sec *, (X)->i_security)
-#define FSEC(X) _SEC(struct sfs_file_sec *, (X)->f_security)
 #define BSEC(X) _SEC(struct sfs_bprm_sec *, (X)->security)
 
 #define _SETSEC(TYPE,X,V) ((TYPE)anoubis_set_sublabel(&(X), ac_index, (V)))
 #define SETISEC(X,V) _SETSEC(struct sfs_inode_sec *, ((X)->i_security), (V))
-#define SETFSEC(X,V) _SETSEC(struct sfs_file_sec *, ((X)->f_security), (V))
 #define SETBSEC(X,V) _SETSEC(struct sfs_bprm_sec *, ((X)->security), (V))
 
 /*
@@ -265,40 +258,6 @@ static void sfs_inode_free_security (struct inode * inode)
 	if (!sec)
 		return;
 	kfree (sec);
-}
-
-static int sfs_file_alloc_security(struct file * file)
-{
-	struct sfs_file_sec * sec;
-
-	sec = kmalloc(sizeof(struct sfs_file_sec), GFP_KERNEL);
-	atomic_set(&sec->denywrite, 0);
-	sec = SETFSEC(file, sec);
-	BUG_ON(sec);
-	return 0;
-}
-
-static void sfs_file_free_security(struct file * file)
-{
-	struct sfs_file_sec * sec = SETFSEC(file, NULL);
-	struct inode * inode;
-	int cnt;
-
-	if (!sec)
-		return;
-	if (file->f_path.dentry) {
-		inode = file->f_path.dentry->d_inode;
-		/*
-		 * At this point we are the only one that has access to
-		 * the security label.
-		 */
-		cnt = atomic_read(&sec->denywrite);
-		while(cnt--)
-			anoubis_allow_write_access(inode);
-	} else {
-		BUG_ON(atomic_read(&sec->denywrite) != 0);
-	}
-	kfree(sec);
 }
 
 static inline int csum_uptodate(struct sfs_inode_sec * sec)
@@ -564,8 +523,7 @@ static int sfs_check_syssig(struct file * file, int mask)
  * if SFS_CS_CACHEOK is not set. The latter will suck wrt. performance
  * on SFS but this is as good as we can do for now.
  */
-static int sfs_inode_permission(struct inode * inode, int mask,
-				struct nameidata * nd)
+static int sfs_inode_permission(struct inode * inode, int mask)
 {
 	struct sfs_inode_sec * sec;
 	sec = sfs_late_inode_alloc_security(inode);
@@ -1113,8 +1071,6 @@ static struct anoubis_hooks sfs_ops = {
 	.version = ANOUBISCORE_VERSION,
 	.inode_alloc_security = sfs_inode_alloc_security,
 	.inode_free_security = sfs_inode_free_security,
-	.file_alloc_security = sfs_file_alloc_security,
-	.file_free_security = sfs_file_free_security,
 	.bprm_alloc_security = sfs_bprm_alloc_security,
 	.bprm_free_security = sfs_bprm_free_security,
 	.bprm_set_security = sfs_bprm_set_security,
