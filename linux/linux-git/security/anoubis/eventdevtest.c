@@ -89,7 +89,7 @@ static int lookup_xattr(struct dentry * dentry)
 	return EVENT_NONE;
 }
 
-static int eventdevtest_dentry_open (struct file *fp)
+static int eventdevtest_dentry_open (struct file *fp, const struct cred * cred)
 {
 	int xattr, err;
 	struct eventdevtest_event * buf;

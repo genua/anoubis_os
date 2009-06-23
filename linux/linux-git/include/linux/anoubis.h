@@ -155,13 +155,15 @@ struct anoubis_hooks {
 	DECLARE(path_rename);
 	DECLARE(path_truncate);
 #endif
-	DECLARE(bprm_alloc_security);
-	DECLARE(bprm_free_security);
-	DECLARE(bprm_set_security);
-	DECLARE(bprm_post_apply_creds);
+	DECLARE(cred_prepare);
+	DECLARE(cred_free);
+	DECLARE(bprm_set_creds);
+	DECLARE(bprm_committing_creds);
 };
 #undef DECLARE
 
+extern int anoubis_task_alloc_security(struct task_struct *);
+extern void anoubis_task_free_security(struct task_struct *);
 extern int anoubis_register(struct anoubis_hooks *, int *);
 extern void anoubis_unregister(int idx);
 extern void * anoubis_set_sublabel(void ** labelp, int idx, void * subl);

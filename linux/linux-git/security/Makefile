@@ -11,7 +11,8 @@ subdir-$(CONFIG_SECURITY_ANOUBIS)	+= anoubis
 obj-y		+= commoncap.o
 
 # Object file lists
-obj-$(CONFIG_SECURITY)			+= security.o capability.o inode.o
+obj-$(CONFIG_SECURITY)			+= security.o capability.o
+obj-$(CONFIG_SECURITYFS)		+= inode.o
 # Must precede capability.o in order to stack properly.
 obj-$(CONFIG_SECURITY_SELINUX)		+= selinux/built-in.o
 obj-$(CONFIG_SECURITY_SMACK)		+= smack/built-in.o

@@ -677,9 +677,9 @@ static int ac_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 }
 
 /* FILES and DENTRIES*/
-static int ac_dentry_open(struct file *file)
+static int ac_dentry_open(struct file *file, const struct cred *cred)
 {
-	return HOOKS(dentry_open, (file));
+	return HOOKS(dentry_open, (file, cred));
 }
 
 #ifdef CONFIG_SECURITY_PATH
@@ -719,28 +719,28 @@ static int ac_path_truncate(struct path *path, loff_t length,
 #endif
 
 /* EXEC */
-static int ac_bprm_alloc_security(struct linux_binprm * bprm)
+static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 {
-	if ((bprm->security = ac_alloc_label(GFP_KERNEL)) == NULL)
+	if ((nc->security = ac_alloc_label(gfp)) == NULL)
 		return -ENOMEM;
-	return HOOKS(bprm_alloc_security, (bprm));
+	return HOOKS(cred_prepare, (nc, old, gfp));
 }
-static void ac_bprm_free_security(struct linux_binprm * bprm)
+static void ac_cred_free(struct cred * cred)
 {
-	if (bprm->security == NULL)
+	if (cred->security == NULL)
 		return;
-	VOIDHOOKS(bprm_free_security, (bprm));
-	kfree(bprm->security);
-	bprm->security = NULL;
+	VOIDHOOKS(cred_free, (cred));
+	kfree(cred->security);
+	cred->security = NULL;
 }
-static int ac_bprm_set_security(struct linux_binprm * bprm)
+static int ac_bprm_set_creds(struct linux_binprm * bprm)
 {
-	return HOOKS(bprm_set_security, (bprm));
+	return HOOKS(bprm_set_creds, (bprm));
 }
 
-void ac_bprm_post_apply_creds(struct linux_binprm *bprm)
+void ac_bprm_committing_creds(struct linux_binprm *bprm)
 {
-	VOIDHOOKS(bprm_post_apply_creds, (bprm));
+	VOIDHOOKS(bprm_committing_creds, (bprm));
 }
 
 /* TASK STRUCTURE */
@@ -749,14 +749,16 @@ void ac_bprm_post_apply_creds(struct linux_binprm *bprm)
  * events and should not be blocked waiting for security events.
  */
 
-static int ac_task_alloc_security(struct task_struct * p)
+int anoubis_task_alloc_security(struct task_struct * p)
 {
 	struct anoubis_task_label * l;
 	struct ac_process_message * msg;
 
 	l = kmalloc(sizeof(struct anoubis_task_label), GFP_KERNEL);
-	if (!l)
+	if (!l) {
+		p->security = NULL;
 		return -ENOMEM;
+	}
 	l->listener = 0;
 	spin_lock(&task_cookie_lock);
 	l->task_cookie = task_cookie++;
@@ -774,7 +776,7 @@ static int ac_task_alloc_security(struct task_struct * p)
 	return 0;
 }
 
-static void ac_task_free_security(struct task_struct * p)
+void anoubis_task_free_security(struct task_struct * p)
 {
 	if (likely(p->security)) {
 		struct anoubis_task_label * old = p->security;
@@ -817,12 +819,10 @@ static struct security_operations anoubis_core_ops = {
 	.path_rename = ac_path_rename,
 	.path_truncate = ac_path_truncate,
 #endif
-	.bprm_alloc_security = ac_bprm_alloc_security,
-	.bprm_free_security = ac_bprm_free_security,
-	.bprm_set_security = ac_bprm_set_security,
-	.bprm_post_apply_creds = ac_bprm_post_apply_creds,
-	.task_alloc_security = ac_task_alloc_security,
-	.task_free_security = ac_task_free_security,
+	.cred_prepare = ac_cred_prepare,
+	.cred_free = ac_cred_free,
+	.bprm_set_creds = ac_bprm_set_creds,
+	.bprm_committing_creds = ac_bprm_committing_creds,
 };
 
 /*

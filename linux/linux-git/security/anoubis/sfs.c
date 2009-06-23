@@ -143,11 +143,12 @@ struct sfs_bprm_sec {
 /* Macros to access the security labels with their approriate type. */
 #define _SEC(TYPE,X) ((TYPE)anoubis_get_sublabel(&(X), ac_index))
 #define ISEC(X) _SEC(struct sfs_inode_sec *, (X)->i_security)
-#define BSEC(X) _SEC(struct sfs_bprm_sec *, (X)->security)
+#define BSEC(X) _SEC(struct sfs_bprm_sec *, (X)->cred->security)
 
 #define _SETSEC(TYPE,X,V) ((TYPE)anoubis_set_sublabel(&(X), ac_index, (V)))
 #define SETISEC(X,V) _SETSEC(struct sfs_inode_sec *, ((X)->i_security), (V))
-#define SETBSEC(X,V) _SETSEC(struct sfs_bprm_sec *, ((X)->security), (V))
+#define SETBSEC(X,V) _SETSEC(struct sfs_bprm_sec *, ((X)->cred->security), (V))
+#define SETCSEC(X,V) _SETSEC(struct sfs_bprm_sec *, ((X)->security), (V))
 
 /*
  * Allow checksum calculations on these filesystem types but do not cache
@@ -639,7 +640,7 @@ static int sfs_open_checks(struct file * file, int mask)
 	return ret;
 }
 
-static int sfs_dentry_open(struct file * file)
+static int sfs_dentry_open(struct file * file, const struct cred * cred)
 {
 	struct sfs_inode_sec * sec;
 	struct dentry * dentry = file->f_path.dentry;
@@ -772,6 +773,18 @@ int sfs_path_write(struct path *path)
 	struct sfs_open_message * msg;
 	int len, ret;
 
+	/*
+	 * If the target file exists make sure it does not have a system
+	 * signature.
+	 */
+	if (path->dentry && path->dentry->d_inode &&
+	    checksum_ok(path->dentry->d_inode)) {
+		ret = sfs_read_syssig(path->dentry);
+		if (ret < 0)
+			return ret;
+		if (ret > 0)
+			return -EACCES;
+	}
 	msg = sfs_open_fill(path, MAY_WRITE, &len);
 	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFS);
 	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
@@ -950,20 +963,23 @@ static int sfs_getcsum(struct file * file, u8 * csum)
 	return anoubis_sfs_get_csum(file, csum);
 }
 
-static int sfs_bprm_alloc_security(struct linux_binprm * bprm)
+static int sfs_cred_prepare(struct cred * cred, const struct cred *ocred,
+				gfp_t gfp)
 {
 	struct sfs_bprm_sec * sec, * old;
 
-	sec = kmalloc(sizeof(struct sfs_bprm_sec), GFP_KERNEL);
+	sec = kmalloc(sizeof(struct sfs_bprm_sec), gfp);
+	if (!sec)
+		return -ENOMEM;
 	sec->msg = NULL;
-	old = SETBSEC(bprm, sec);
+	old = SETCSEC(cred, sec);
 	BUG_ON(old);
 	return 0;
 }
 
-static void sfs_bprm_free_security(struct linux_binprm * bprm)
+static void sfs_cred_free(struct cred * cred)
 {
-	struct sfs_bprm_sec * sec = SETBSEC(bprm, NULL);
+	struct sfs_bprm_sec * sec = SETCSEC(cred, NULL);
 
 	if (!sec)
 		return;
@@ -974,9 +990,8 @@ static void sfs_bprm_free_security(struct linux_binprm * bprm)
 
 /*
  * Inform anoubisd about exec calls using an open-request
- * XXX: use security_bprm_set_creds(). for 2.6.29+
  */
-static int sfs_bprm_set_security(struct linux_binprm * bprm)
+static int sfs_bprm_set_creds(struct linux_binprm * bprm)
 {
 	struct sfs_bprm_sec * sec = BSEC(bprm);
 	struct file * file = bprm->file;
@@ -1004,9 +1019,8 @@ static int sfs_bprm_set_security(struct linux_binprm * bprm)
 /*
  * Inform anoubisd about exec systemcalls,
  * so it can update the required attributes.
- * XXX: use security_bprm_committed_creds() for 2.6.29+
  */
-static void sfs_bprm_post_apply_creds(struct linux_binprm * bprm)
+static void sfs_bprm_committing_creds(struct linux_binprm * bprm)
 {
 	struct sfs_bprm_sec * sec = BSEC(bprm);
 	struct file * file = bprm->file;
@@ -1071,10 +1085,10 @@ static struct anoubis_hooks sfs_ops = {
 	.version = ANOUBISCORE_VERSION,
 	.inode_alloc_security = sfs_inode_alloc_security,
 	.inode_free_security = sfs_inode_free_security,
-	.bprm_alloc_security = sfs_bprm_alloc_security,
-	.bprm_free_security = sfs_bprm_free_security,
-	.bprm_set_security = sfs_bprm_set_security,
-	.bprm_post_apply_creds = sfs_bprm_post_apply_creds,
+	.cred_prepare = sfs_cred_prepare,
+	.cred_free = sfs_cred_free,
+	.bprm_set_creds = sfs_bprm_set_creds,
+	.bprm_committing_creds = sfs_bprm_committing_creds,
 	.inode_permission = sfs_inode_permission,
 	.inode_follow_link = sfs_inode_follow_link,
 	.dentry_open = sfs_dentry_open,
