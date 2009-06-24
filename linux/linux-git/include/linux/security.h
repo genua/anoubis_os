@@ -32,6 +32,7 @@
 #include <linux/sched.h>
 #include <linux/key.h>
 #include <linux/xfrm.h>
+#include <linux/gfp.h>
 #include <net/flow.h>
 
 /* Maximum number of letters for an LSM name string */
@@ -880,11 +881,6 @@ static inline void security_free_mnt_opts(struct security_mnt_opts *opts)
  *	@sock contains the listening socket structure.
  *	@newsock contains the newly created server socket for connection.
  *	Return 0 if permission is granted.
- * @socket_post_accept:
- *	This hook allows a security module to copy security
- *	information into the newly created socket's inode.
- *	@sock contains the listening socket structure.
- *	@newsock contains the newly created server socket for connection.
  * @socket_accepted:
  *	Check permission after accepting a new connection.
  *	@sock contains the listening socket structure.
@@ -1564,8 +1560,6 @@ struct security_operations {
 			       struct sockaddr *address, int addrlen);
 	int (*socket_listen) (struct socket *sock, int backlog);
 	int (*socket_accept) (struct socket *sock, struct socket *newsock);
-	void (*socket_post_accept) (struct socket *sock,
-				    struct socket *newsock);
 	int (*socket_accepted) (struct socket * sock, struct socket * newsock);
 	int (*socket_sendmsg) (struct socket *sock,
 			       struct msghdr *msg, int size);
@@ -2549,7 +2543,6 @@ int security_socket_bind(struct socket *sock, struct sockaddr *address, int addr
 int security_socket_connect(struct socket *sock, struct sockaddr *address, int addrlen);
 int security_socket_listen(struct socket *sock, int backlog);
 int security_socket_accept(struct socket *sock, struct socket *newsock);
-void security_socket_post_accept(struct socket *sock, struct socket *newsock);
 int security_socket_accepted(struct socket * sock, struct socket * newsock);
 int security_socket_sendmsg(struct socket *sock, struct msghdr *msg, int size);
 int security_socket_recvmsg(struct socket *sock, struct msghdr *msg,
@@ -2628,11 +2621,6 @@ static inline int security_socket_accept(struct socket *sock,
 					 struct socket *newsock)
 {
 	return 0;
-}
-
-static inline void security_socket_post_accept(struct socket *sock,
-					       struct socket *newsock)
-{
 }
 
 static inline int security_socket_accepted(struct socket * sock,
@@ -2991,6 +2979,29 @@ static inline void securityfs_remove(struct dentry *dentry)
 {}
 
 #endif
+
+#ifdef CONFIG_SECURITY
+
+static inline char *alloc_secdata(void)
+{
+	return (char *)get_zeroed_page(GFP_KERNEL);
+}
+
+static inline void free_secdata(void *secdata)
+{
+	free_page((unsigned long)secdata);
+}
+
+#else
+
+static inline char *alloc_secdata(void)
+{
+        return (char *)1;
+}
+
+static inline void free_secdata(void *secdata)
+{ }
+#endif /* CONFIG_SECURITY */
 
 #endif /* ! __LINUX_SECURITY_H */
 
