@@ -566,7 +566,7 @@ static struct sfs_open_message * sfs_open_fill(struct path * f_path, int mask,
 	char * path = NULL;
 	char * buf = NULL;
 	struct kstat kstat;
-	struct sfs_inode_sec * sec;
+	struct sfs_inode_sec * sec = NULL;
 	int pathlen, alloclen;
 	struct dentry * dentry = f_path->dentry;
 	struct inode * inode = dentry->d_inode;
@@ -598,7 +598,7 @@ static struct sfs_open_message * sfs_open_fill(struct path * f_path, int mask,
 		free_page((unsigned long)buf);
 	msg->ino = 0;
 	msg->dev = 0;
-	if (f_path->mnt && dentry) {
+	if (f_path->mnt && dentry && inode) {
 		int err = vfs_getattr(f_path->mnt, dentry, &kstat);
 		if (err == 0) {
 			msg->ino = kstat.ino;
@@ -606,7 +606,8 @@ static struct sfs_open_message * sfs_open_fill(struct path * f_path, int mask,
 			msg->flags |= ANOUBIS_OPEN_FLAG_STATDATA;
 		}
 	}
-	sec = ISEC(inode);
+	if (inode)
+		sec = ISEC(inode);
 	if (sec) {
 		spin_lock(&sec->lock);
 		if (sec->sfsmask & SFS_CS_UPTODATE) {
@@ -906,17 +907,15 @@ int sfs_path_rename(struct path *old_dir, struct dentry *old_dentry,
  */
 int sfs_path_unlink(struct path *dir, struct dentry *dentry)
 {
-	return sfs_path_write(dir);
-}
+	struct path file = { dir->mnt, dentry };
 
-int sfs_path_mkdir(struct path *dir, struct dentry *dentry, int mode)
-{
-	return sfs_path_write(dir);
-}
+	/* We don't handle directories yet */
+	if (!dentry || !dentry->d_inode)
+		return 0;
+	if (!S_ISREG(dentry->d_inode->i_mode))
+		return 0;
 
-int sfs_path_rmdir(struct path *dir, struct dentry *dentry)
-{
-	return sfs_path_write(dir);
+	return sfs_path_write(&file);
 }
 
 int sfs_path_truncate(struct path *path, loff_t length,
@@ -1097,8 +1096,6 @@ static struct anoubis_hooks sfs_ops = {
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = sfs_path_link,
 	.path_unlink = sfs_path_unlink,
-	.path_mkdir = sfs_path_mkdir,
-	.path_rmdir = sfs_path_rmdir,
 	.path_rename = sfs_path_rename,
 	.path_truncate = sfs_path_truncate,
 #endif
