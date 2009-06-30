@@ -89,8 +89,10 @@ static int __anoubis_event_common(void * buf, size_t len, int src, int wait,
 	if (q)
 		__eventdev_get_queue(q);
 	rcu_read_unlock();
-	if (!q)
+	if (!q) {
+		kfree(buf);
 		return -EPIPE;
+	}
 	if (wait) {
 		err = eventdev_enqueue_wait(q, src, buf, len, &ret, gfp);
 	} else {

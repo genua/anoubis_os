@@ -107,11 +107,19 @@ static inline int alf_ask(struct alf_event *event)
 		}
 #endif
 		alf_stat_forced_notify++;
-		return anoubis_notify_atomic((char *)event, sizeof(*event),
+		ret = anoubis_notify_atomic((char *)event, sizeof(*event),
+		    ANOUBIS_SOURCE_ALF);
+	} else {
+		alf_stat_ask++;
+		ret =  anoubis_raise((char *)event, sizeof(*event),
 		    ANOUBIS_SOURCE_ALF);
 	}
-	alf_stat_ask++;
-	ret =  anoubis_raise((char *)event, sizeof(*event), ANOUBIS_SOURCE_ALF);
+	/*
+	 * Translate EPIPE (no eventdev queue) into a reasonable error
+	 * code. EPIPE confuses NFS.
+	 */
+	if (ret == -EPIPE)
+		ret = -EHOSTUNREACH;
 	if (ret != 0)
 		alf_stat_ask_deny++;
 	return ret;
