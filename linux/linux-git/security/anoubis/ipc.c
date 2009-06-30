@@ -107,19 +107,16 @@ static int ipc_socket_post_create(struct socket *sock, int family, int type,
     int protocol, int kern)
 {
 	struct anoubis_sock_label *sl, *old;
-	struct anoubis_task_label *tl = current->security;
+	anoubis_cookie_t tcookie = anoubis_get_task_cookie();
 
-	if (family != AF_UNIX || tl == NULL)
+	if (family != AF_UNIX || tcookie == 0)
 		return 0;
 
 	sl = kmalloc(sizeof(struct anoubis_sock_label), GFP_ATOMIC);
 	if (!sl)
 		return -ENOMEM;
 
-	if (likely(tl))
-		sl->task_cookie = tl->task_cookie;
-	else
-		sl->task_cookie = 0;
+	sl->task_cookie = tcookie;
 	sl->peer_cookie = 0;
 	sl->conn_cookie = 0;
 	spin_lock_init(&sl->lock);

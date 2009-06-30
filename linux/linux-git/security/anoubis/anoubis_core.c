@@ -24,6 +24,8 @@
  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <linux/cred.h>
 #include <linux/dcache.h>
 #include <linux/file.h>
 #include <linux/fs.h>
@@ -66,6 +68,38 @@ extern struct security_operations * security_ops;
 
 static struct security_operations * original_ops;
 
+struct anoubis_label {
+	spinlock_t label_lock; /* XXX Use RCU? */
+	void * labels[MAX_ANOUBIS_MODULES];
+	unsigned int magic[MAX_ANOUBIS_MODULES];
+};
+
+struct anoubis_cred_label {
+	struct anoubis_label	_l;
+	anoubis_cookie_t	task_cookie;
+	unsigned int		listener:1;
+};
+
+/*
+ * Get the credentials label associated with the current task.
+ */
+static struct anoubis_cred_label * ac_current_label(void)
+{
+	const struct cred * cred = __task_cred(current);
+	if (unlikely(cred == NULL))
+		return NULL;
+	return cred->security;
+}
+
+anoubis_cookie_t anoubis_get_task_cookie(void)
+{
+	struct anoubis_cred_label *cred = ac_current_label();
+
+	if (unlikely(!cred))
+		return 0;
+	return cred->task_cookie;
+}
+
 /*
  * Wrapper around eventdev_enqueue. Removes the queue if it turns out
  * to be dead.
@@ -75,12 +109,12 @@ static int __anoubis_event_common(void * buf, size_t len, int src, int wait,
 {
 	int put, err, ret = 0;
 	struct eventdev_queue * q;
-	struct anoubis_task_label * l = current->security;
+	struct anoubis_cred_label * sec = ac_current_label();
 	struct anoubis_event_common * common = buf;
 
 	BUG_ON(len < sizeof(struct anoubis_event_common));
-	if (likely(l)) {
-		common->task_cookie = l->task_cookie;
+	if (likely(sec)) {
+		common->task_cookie = sec->task_cookie;
 	} else {
 		common->task_cookie = 0;
 	}
@@ -140,9 +174,9 @@ int anoubis_notify_atomic(void * buf, size_t len, int src)
 int anoubis_raise(void * buf, size_t len, int src)
 {
 	int wait = 1;
-	if (likely(current->security)) {
-		struct anoubis_task_label * l = current->security;
-		if (unlikely(l->listener))
+	struct anoubis_cred_label * sec = ac_current_label();
+	if (likely(sec)) {
+		if (unlikely(sec->listener))
 			wait = 0;
 	}
 	return __anoubis_event_common(buf, len, src, wait, GFP_KERNEL);
@@ -239,7 +273,7 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 {
 	struct eventdev_queue * q;
 	struct file * eventfile;
-	struct anoubis_task_label * l;
+	struct anoubis_cred_label * sec;
 	int ret;
 
 	/* For now only root is allowed to do declare a queue or a listener. */
@@ -259,10 +293,10 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 			return -EPERM;
 		}
 		eventdev_put_queue(q);
-		l = current->security;
-		if(unlikely(!current->security))
+		sec = ac_current_label();
+		if(unlikely(!sec))
 			return -EINVAL;
-		l->listener = 1;
+		sec->listener = 1;
 		break;
 	case ANOUBIS_DECLARE_FD:
 		if (!capable(CAP_SYS_ADMIN))
@@ -366,20 +400,14 @@ static struct miscdevice anoubis_device = {
 	.fops	= &anoubis_fops,
 };
 
-struct anoubis_label {
-	spinlock_t label_lock; /* XXX Use RCU? */
-	void * labels[MAX_ANOUBIS_MODULES];
-	unsigned int magic[MAX_ANOUBIS_MODULES];
-};
-
 static spinlock_t late_alloc_lock = SPIN_LOCK_UNLOCKED;
 
-static struct anoubis_label * ac_alloc_label(int gfp)
+static void * __ac_alloc_label(int gfp, size_t len)
 {
 	int i;
 	struct anoubis_label * sec;
 
-	sec = kmalloc(sizeof (struct anoubis_label), gfp);
+	sec = kmalloc(len, gfp);
 	if (!sec)
 		return NULL;
 	spin_lock_init(&sec->label_lock);
@@ -388,6 +416,11 @@ static struct anoubis_label * ac_alloc_label(int gfp)
 		sec->labels[i] = NULL;
 	}
 	return sec;
+}
+
+static struct anoubis_label * ac_alloc_label(int gfp)
+{
+	return __ac_alloc_label(gfp, sizeof(struct anoubis_label));
 }
 
 void * anoubis_get_sublabel(void ** lp, int idx)
@@ -723,18 +756,75 @@ static int ac_path_truncate(struct path *path, loff_t length,
 /* EXEC */
 static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 {
-	if ((nc->security = ac_alloc_label(gfp)) == NULL)
+	struct anoubis_cred_label	*cl;
+	struct ac_process_message	*msg;
+
+	cl = __ac_alloc_label(gfp, sizeof (struct anoubis_cred_label));
+	if (cl == NULL)
 		return -ENOMEM;
+	spin_lock(&task_cookie_lock);
+	cl->task_cookie = task_cookie++;
+	spin_unlock(&task_cookie_lock);
+	cl->listener = 0;
+	nc->security = &cl->_l;
+	msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
+	if (msg) {
+		msg->task_cookie = cl->task_cookie;
+		msg->op = ANOUBIS_PROCESS_OP_FORK;
+		anoubis_notify_atomic(msg, sizeof(struct ac_process_message),
+		    ANOUBIS_SOURCE_PROCESS);
+	}
+
 	return HOOKS(cred_prepare, (nc, old, gfp));
 }
+
 static void ac_cred_free(struct cred * cred)
 {
-	if (cred->security == NULL)
+	struct anoubis_cred_label	*sec = cred->security;
+	struct ac_process_message	*msg;
+
+	if (sec == NULL)
 		return;
 	VOIDHOOKS(cred_free, (cred));
-	kfree(cred->security);
 	cred->security = NULL;
+	msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
+	if (msg) {
+		msg->task_cookie = sec->task_cookie;
+		msg->op = ANOUBIS_PROCESS_OP_EXIT;
+		anoubis_notify_atomic(msg,
+		    sizeof(struct ac_process_message),
+		    ANOUBIS_SOURCE_PROCESS);
+	}
+	kfree(sec);
 }
+
+/*
+ * We reported a new process with the label in new. However, it turns
+ * out that new will now replace old without creating a new process.
+ * Thus we need to do the following:
+ * - Set the task cookie of new to that of old
+ * - Report this to the daemon and let the daemon do the accounting.
+ */
+static void ac_cred_commit(struct cred *nc, const struct cred* old)
+{
+	struct anoubis_cred_label	*nsec = nc->security;
+	struct anoubis_cred_label	*osec = old->security;
+	struct ac_process_message	*msg;
+
+	if (nsec && osec) {
+		msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
+		if (msg) {
+			msg->task_cookie = nsec->task_cookie;
+			msg->op = ANOUBIS_PROCESS_OP_REPLACE;
+			anoubis_notify_atomic(msg,
+			    sizeof(struct ac_process_message),
+			    ANOUBIS_SOURCE_PROCESS);
+		}
+		nsec->task_cookie = osec->task_cookie;
+		nsec->listener = osec->listener;
+	}
+}
+
 static int ac_bprm_set_creds(struct linux_binprm * bprm)
 {
 	return HOOKS(bprm_set_creds, (bprm));
@@ -743,57 +833,6 @@ static int ac_bprm_set_creds(struct linux_binprm * bprm)
 void ac_bprm_committing_creds(struct linux_binprm *bprm)
 {
 	VOIDHOOKS(bprm_committing_creds, (bprm));
-}
-
-/* TASK STRUCTURE */
-/*
- * These hooks are only used to track processes that listen to anobuis
- * events and should not be blocked waiting for security events.
- */
-
-int anoubis_task_alloc_security(struct task_struct * p)
-{
-	struct anoubis_task_label * l;
-	struct ac_process_message * msg;
-
-	l = kmalloc(sizeof(struct anoubis_task_label), GFP_KERNEL);
-	if (!l) {
-		p->security = NULL;
-		return -ENOMEM;
-	}
-	l->listener = 0;
-	spin_lock(&task_cookie_lock);
-	l->task_cookie = task_cookie++;
-	spin_unlock(&task_cookie_lock);
-	p->security = l;
-
-	msg = kmalloc(sizeof(struct ac_process_message), GFP_NOWAIT);
-	if (msg) {
-		msg->task_cookie = l->task_cookie;
-		msg->op = ANOUBIS_PROCESS_OP_FORK;
-		anoubis_notify_atomic(msg, sizeof(struct ac_process_message),
-		    ANOUBIS_SOURCE_PROCESS);
-	}
-
-	return 0;
-}
-
-void anoubis_task_free_security(struct task_struct * p)
-{
-	if (likely(p->security)) {
-		struct anoubis_task_label * old = p->security;
-		struct ac_process_message * msg;
-		p->security = NULL;
-		msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
-		if (msg) {
-			msg->task_cookie = old->task_cookie;
-			msg->op = ANOUBIS_PROCESS_OP_EXIT;
-			anoubis_notify_atomic(msg,
-			    sizeof(struct ac_process_message),
-			    ANOUBIS_SOURCE_PROCESS);
-		}
-		kfree(old);
-	}
 }
 
 static struct security_operations anoubis_core_ops = {
@@ -823,6 +862,7 @@ static struct security_operations anoubis_core_ops = {
 #endif
 	.cred_prepare = ac_cred_prepare,
 	.cred_free = ac_cred_free,
+	.cred_commit = ac_cred_commit,
 	.bprm_set_creds = ac_bprm_set_creds,
 	.bprm_committing_creds = ac_bprm_committing_creds,
 };
@@ -868,6 +908,7 @@ EXPORT_SYMBOL(anoubis_register);
 EXPORT_SYMBOL(anoubis_unregister);
 EXPORT_SYMBOL(anoubis_get_sublabel);
 EXPORT_SYMBOL(anoubis_set_sublabel);
+EXPORT_SYMBOL(anoubis_get_task_cookie);
 
 security_initcall(anoubis_core_init);
 module_init(anoubis_core_init_late);

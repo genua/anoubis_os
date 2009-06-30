@@ -29,7 +29,7 @@
 
 #include <linux/eventdev.h>
 
-#define ANOUBISCORE_VERSION		0x00010002UL
+#define ANOUBISCORE_VERSION		0x00010003UL
 
 #define ANOUBIS_CS_LEN		32
 struct anoubis_ioctl_csum {
@@ -64,8 +64,9 @@ struct anoubis_event_common {
 	anoubis_cookie_t task_cookie;
 };
 
-#define ANOUBIS_PROCESS_OP_FORK	0x0001UL
-#define ANOUBIS_PROCESS_OP_EXIT	0x0002UL
+#define ANOUBIS_PROCESS_OP_FORK		0x0001UL
+#define ANOUBIS_PROCESS_OP_EXIT		0x0002UL
+#define ANOUBIS_PROCESS_OP_REPLACE	0x0003UL
 
 struct ac_process_message {
 	struct anoubis_event_common common;
@@ -162,12 +163,11 @@ struct anoubis_hooks {
 };
 #undef DECLARE
 
-extern int anoubis_task_alloc_security(struct task_struct *);
-extern void anoubis_task_free_security(struct task_struct *);
 extern int anoubis_register(struct anoubis_hooks *, int *);
 extern void anoubis_unregister(int idx);
 extern void * anoubis_set_sublabel(void ** labelp, int idx, void * subl);
 extern void * anoubis_get_sublabel(void ** labelp, int idx);
+extern anoubis_cookie_t anoubis_get_task_cookie(void);
 
 #endif
 
