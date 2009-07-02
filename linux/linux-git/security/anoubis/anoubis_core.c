@@ -716,6 +716,10 @@ static int ac_dentry_open(struct file *file, const struct cred *cred)
 {
 	return HOOKS(dentry_open, (file, cred));
 }
+static int ac_file_lock(struct file *file, unsigned int cmd)
+{
+	return HOOKS(file_lock, (file, cmd));
+}
 
 #ifdef CONFIG_SECURITY_PATH
 /* PATH */
@@ -852,6 +856,7 @@ static struct security_operations anoubis_core_ops = {
 	.inode_removexattr = ac_inode_removexattr,
 	.inode_follow_link = ac_inode_follow_link,
 	.dentry_open = ac_dentry_open,
+	.file_lock = ac_file_lock,
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = ac_path_link,
 	.path_unlink = ac_path_unlink,

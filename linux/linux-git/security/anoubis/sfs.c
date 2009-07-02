@@ -124,6 +124,7 @@ static inline void anoubis_allow_write_access(struct inode * inode)
 #define SFS_CS_OK		0x10UL	/* Checksum calculation possible */
 #define SFS_CS_CACHEOK		0x20UL	/* Checksum caching possible */
 #define SFS_ALWAYSFOLLOW	0x40UL	/* Always follow this link */
+#define SFS_LOCKWATCH		0x80UL	/* Report lock events for this file */
 
 /* Inode security label */
 struct sfs_inode_sec {
@@ -646,7 +647,7 @@ static int sfs_dentry_open(struct file * file, const struct cred * cred)
 	struct sfs_inode_sec * sec;
 	struct dentry * dentry = file->f_path.dentry;
 	struct inode * inode;
-	int mask;
+	int mask, ret;
 
 	if (!dentry)
 		return 0;
@@ -672,7 +673,16 @@ static int sfs_dentry_open(struct file * file, const struct cred * cred)
 	} else {
 		sfs_csum(file, inode);
 	}
-	return sfs_open_checks(file, mask);
+
+	ret = sfs_open_checks(file, mask);
+
+	if (ret & ANOUBIS_OPEN_RET_LOCKWATCH) {
+		spin_lock(&sec->lock);
+		sec->sfsmask |= SFS_LOCKWATCH;
+		spin_unlock(&sec->lock);
+	}
+
+	return (ret & MAX_ERRNO);
 }
 
 static int sfs_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
@@ -794,7 +804,6 @@ int sfs_path_write(struct path *path)
 }
 
 
-#ifdef CONFIG_SECURITY_PATH
 /*
  * Populate a sfs_path_message with an operation and one or two paths
  */
@@ -873,6 +882,7 @@ int sfs_path_checks(struct sfs_path_message * msg, int len)
 	return ret;
 }
 
+#ifdef CONFIG_SECURITY_PATH
 int sfs_path_link(struct dentry *old_dentry, struct path *parent_dir,
     struct dentry *new_dentry)
 {
@@ -924,6 +934,41 @@ int sfs_path_truncate(struct path *path, loff_t length,
 	return sfs_path_write(path);
 }
 #endif
+
+/*
+ * send flock messages if the file was marked via LOCKWATCH
+ */
+static int sfs_file_lock(struct file * file, unsigned int cmd) {
+	struct dentry * dentry = file->f_path.dentry;
+	struct inode * inode;
+	struct sfs_path_message * msg;
+	unsigned int op = ANOUBIS_PATH_OP_LOCK;
+	int len, ret;
+	struct sfs_inode_sec * sec;
+
+	if (!dentry)
+		return 0;
+	inode = dentry->d_inode;
+	if (!inode)
+		return 0;
+	sec = sfs_late_inode_alloc_security(inode);
+	if (!sec)
+		return -ENOMEM;
+
+	spin_lock(&sec->lock);
+	ret = sec->sfsmask;
+	spin_unlock(&sec->lock);
+
+	if (!(ret & SFS_LOCKWATCH))
+		return 0;
+
+	msg = sfs_path_fill(op, &file->f_path, dentry, NULL, &len);
+	if (!msg)
+		return -ENOMEM;
+
+	return sfs_path_checks(msg, len);
+}
+
 
 /*
  * Part of the external interface:
@@ -1093,6 +1138,7 @@ static struct anoubis_hooks sfs_ops = {
 	.dentry_open = sfs_dentry_open,
 	.inode_setxattr = sfs_inode_setxattr,
 	.inode_removexattr = sfs_inode_removexattr,
+	.file_lock = sfs_file_lock,
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = sfs_path_link,
 	.path_unlink = sfs_path_unlink,

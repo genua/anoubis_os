@@ -40,6 +40,9 @@
 #define ANOUBIS_OPEN_FLAG_STATDATA	0x0040UL
 #define ANOUBIS_OPEN_FLAG_CSUM		0x0080UL
 
+/* flags returned via open */
+#define ANOUBIS_OPEN_RET_LOCKWATCH	1<<16
+
 /* Statistic Keys for ANOUBIS_SOURCE_SFS */
 #define SFS_STAT_LOADTIME		10
 #define SFS_STAT_CSUM_RECALC		11
@@ -68,6 +71,8 @@ struct sfs_open_message
 #define ANOUBIS_PATH_OP_MKNOD		6
 #define ANOUBIS_PATH_OP_RENAME		7
 #define ANOUBIS_PATH_OP_TRUNC		8
+#define ANOUBIS_PATH_OP_LOCK		9
+#define ANOUBIS_PATH_OP_UNLOCK		10
 
 struct sfs_path_message
 {

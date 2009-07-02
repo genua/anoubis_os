@@ -29,7 +29,7 @@
 
 #include <linux/eventdev.h>
 
-#define ANOUBISCORE_VERSION		0x00010003UL
+#define ANOUBISCORE_VERSION		0x00010004UL
 
 #define ANOUBIS_CS_LEN		32
 struct anoubis_ioctl_csum {
@@ -148,6 +148,7 @@ struct anoubis_hooks {
 	DECLARE(inode_removexattr);
 	DECLARE(inode_follow_link);
 	DECLARE(dentry_open);
+	DECLARE(file_lock);
 #ifdef CONFIG_SECURITY_PATH
 	DECLARE(path_link);
 	DECLARE(path_unlink);

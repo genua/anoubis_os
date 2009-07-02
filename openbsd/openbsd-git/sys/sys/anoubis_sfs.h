@@ -40,6 +40,9 @@
 #define ANOUBIS_OPEN_FLAG_STATDATA	0x0040UL
 #define ANOUBIS_OPEN_FLAG_CSUM		0x0080UL
 
+/* Additional options returned via open */
+#define ANOUBIS_OPEN_RET_LOCKWATCH	1<<16
+
 struct sfs_open_message
 {
 	struct anoubis_event_common common;
@@ -59,6 +62,8 @@ struct sfs_open_message
 #define ANOUBIS_PATH_OP_MKNOD		6
 #define ANOUBIS_PATH_OP_RENAME		7
 #define ANOUBIS_PATH_OP_TRUNC		8
+#define ANOUBIS_PATH_OP_LOCK		9
+#define ANOUBIS_PATH_OP_UNLOCK		10
 
 struct sfs_path_message
 {
