@@ -64,6 +64,11 @@ struct anoubis_event_common {
 	anoubis_cookie_t task_cookie;
 };
 
+/* flags returned via anoubis_raise */
+#define ANOUBIS_RET_CLEAN(x)		(x & 0xffff)
+#define ANOUBIS_RET_FLAGS(x)		(x & ~0xffff)
+#define ANOUBIS_RET_OPEN_LOCKWATCH	(1<<16)
+
 #define ANOUBIS_PROCESS_OP_FORK		0x0001UL
 #define ANOUBIS_PROCESS_OP_EXIT		0x0002UL
 #define ANOUBIS_PROCESS_OP_REPLACE	0x0003UL
@@ -119,11 +124,6 @@ extern int anoubis_raise(void * buf, size_t len, int src);
 extern int anoubis_raise_flags(void * buf, size_t len, int src, int *flags);
 extern int anoubis_notify(void * buf, size_t len, int src);
 extern int anoubis_notify_atomic(void * buf, size_t len, int src);
-
-/* flags returned via anoubis_raise */
-#define ANOUBIS_RET_CLEAN(x)		(x & 0xffff)
-#define ANOUBIS_RET_FLAGS(x)		(x & ~0xffff)
-#define ANOUBIS_RET_OPEN_LOCKWATCH	(1<<16)
 
 /*
  * Module mulitplexor functions
