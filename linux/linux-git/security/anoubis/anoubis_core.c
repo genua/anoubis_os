@@ -105,7 +105,7 @@ anoubis_cookie_t anoubis_get_task_cookie(void)
  * to be dead.
  */
 static int __anoubis_event_common(void * buf, size_t len, int src, int wait,
-    gfp_t gfp)
+    int *flags, gfp_t gfp)
 {
 	int put, err, ret = 0;
 	struct eventdev_queue * q;
@@ -133,6 +133,13 @@ static int __anoubis_event_common(void * buf, size_t len, int src, int wait,
 		err = eventdev_enqueue_nowait(q, src, buf, len, gfp);
 	}
 	if (!err) {
+		/* daemon replies returned via eventdev_wait are
+		 * negative (or 0 if no flags are set) */
+		if (ret < 0) {
+			if (flags)
+				*flags = ANOUBIS_RET_FLAGS(-ret);
+			ret = -(ANOUBIS_RET_CLEAN(-ret));
+		}
 		/* EPIPE is reserved for "no queue" */
 		if (ret == -EPIPE)
 			ret = -EIO;
@@ -163,12 +170,12 @@ out:
 int anoubis_notify(void * buf, size_t len, int src)
 {
 	might_sleep();
-	return __anoubis_event_common(buf, len, src, 0, GFP_KERNEL);
+	return __anoubis_event_common(buf, len, src, 0, NULL, GFP_KERNEL);
 }
 
 int anoubis_notify_atomic(void * buf, size_t len, int src)
 {
-	return __anoubis_event_common(buf, len, src, 0, GFP_NOWAIT);
+	return __anoubis_event_common(buf, len, src, 0, NULL, GFP_NOWAIT);
 }
 
 int anoubis_raise(void * buf, size_t len, int src)
@@ -179,7 +186,18 @@ int anoubis_raise(void * buf, size_t len, int src)
 		if (unlikely(sec->listener))
 			wait = 0;
 	}
-	return __anoubis_event_common(buf, len, src, wait, GFP_KERNEL);
+	return __anoubis_event_common(buf, len, src, wait, NULL, GFP_KERNEL);
+}
+
+int anoubis_raise_flags(void * buf, size_t len, int src, int *flags)
+{
+	int wait = 1;
+	struct anoubis_cred_label * sec = ac_current_label();
+	if (likely(sec)) {
+		if (unlikely(sec->listener))
+			wait = 0;
+	}
+	return __anoubis_event_common(buf, len, src, wait, flags, GFP_KERNEL);
 }
 
 static int anoubis_open(struct inode * inode, struct file * file)
@@ -750,6 +768,12 @@ static int ac_path_rename(struct path *old_dir, struct dentry *old_dentry,
 	return HOOKS(path_rename, (old_dir, old_dentry, new_dir, new_dentry));
 }
 
+static int ac_path_symlink(struct path *dir, struct dentry *dentry,
+    const char *old_name)
+{
+	return HOOKS(path_symlink, (dir, dentry, old_name));
+}
+
 static int ac_path_truncate(struct path *path, loff_t length,
     unsigned int time_attr)
 {
@@ -863,6 +887,7 @@ static struct security_operations anoubis_core_ops = {
 	.path_mkdir = ac_path_mkdir,
 	.path_rmdir = ac_path_rmdir,
 	.path_rename = ac_path_rename,
+	.path_symlink = ac_path_symlink,
 	.path_truncate = ac_path_truncate,
 #endif
 	.cred_prepare = ac_cred_prepare,
@@ -907,6 +932,7 @@ static int __init anoubis_core_init_late(void)
 }
 
 EXPORT_SYMBOL(anoubis_raise);
+EXPORT_SYMBOL(anoubis_raise_flags);
 EXPORT_SYMBOL(anoubis_notify);
 EXPORT_SYMBOL(anoubis_notify_atomic);
 EXPORT_SYMBOL(anoubis_register);

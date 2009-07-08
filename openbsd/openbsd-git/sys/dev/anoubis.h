@@ -59,6 +59,11 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_SOURCE_STAT	50
 #define ANOUBIS_SOURCE_IPC	60
 
+/* flags returned via anoubis_raise */
+#define ANOUBIS_RET_CLEAN(x)		(x & 0xffff)
+#define ANOUBIS_RET_FLAGS(x)		(x & ~0xffff)
+#define ANOUBIS_RET_OPEN_LOCKWATCH	(1<<16)
+
 typedef u_int64_t anoubis_cookie_t;
 
 struct anoubis_event_common {

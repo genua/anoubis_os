@@ -40,9 +40,6 @@
 #define ANOUBIS_OPEN_FLAG_STATDATA	0x0040UL
 #define ANOUBIS_OPEN_FLAG_CSUM		0x0080UL
 
-/* flags returned via open */
-#define ANOUBIS_OPEN_RET_LOCKWATCH	1<<16
-
 /* Statistic Keys for ANOUBIS_SOURCE_SFS */
 #define SFS_STAT_LOADTIME		10
 #define SFS_STAT_CSUM_RECALC		11

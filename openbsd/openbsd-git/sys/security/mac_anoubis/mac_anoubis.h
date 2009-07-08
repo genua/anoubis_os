@@ -50,6 +50,7 @@ extern int alf_allow_port_min;
 extern int alf_allow_port_max;
 
 int anoubis_raise(void * buf, size_t len, int src);
+int anoubis_raise_flags(void * buf, size_t len, int src, int *flags);
 int anoubis_notify(void * buf, size_t len, int src);
 
 #endif	/* _MAC_ANOUBIS_H_ */

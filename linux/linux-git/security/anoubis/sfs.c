@@ -621,7 +621,7 @@ static struct sfs_open_message * sfs_open_fill(struct path * f_path, int mask,
 	return msg;
 }
 
-static int sfs_open_checks(struct file * file, int mask)
+static int sfs_open_checks(struct file * file, int mask, int *flags)
 {
 	int ret;
 	struct sfs_open_message * msg;
@@ -634,7 +634,7 @@ static int sfs_open_checks(struct file * file, int mask)
 	if (!msg)
 		return -ENOMEM;
 	sfs_stat_ev++;
-	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFS);
+	ret = anoubis_raise_flags(msg, len, ANOUBIS_SOURCE_SFS, flags);
 	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
 		return 0;
 	if (ret)
@@ -647,7 +647,7 @@ static int sfs_dentry_open(struct file * file, const struct cred * cred)
 	struct sfs_inode_sec * sec;
 	struct dentry * dentry = file->f_path.dentry;
 	struct inode * inode;
-	int mask, ret;
+	int mask, ret, flags;
 
 	if (!dentry)
 		return 0;
@@ -674,15 +674,15 @@ static int sfs_dentry_open(struct file * file, const struct cred * cred)
 		sfs_csum(file, inode);
 	}
 
-	ret = sfs_open_checks(file, mask);
+	ret = sfs_open_checks(file, mask, &flags);
 
-	if (ret & ANOUBIS_OPEN_RET_LOCKWATCH) {
+	if (flags & ANOUBIS_RET_OPEN_LOCKWATCH) {
 		spin_lock(&sec->lock);
 		sec->sfsmask |= SFS_LOCKWATCH;
 		spin_unlock(&sec->lock);
 	}
 
-	return (ret & MAX_ERRNO);
+	return ret;
 }
 
 static int sfs_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
@@ -886,14 +886,19 @@ int sfs_path_checks(struct sfs_path_message * msg, int len)
 int sfs_path_link(struct dentry *old_dentry, struct path *parent_dir,
     struct dentry *new_dentry)
 {
+	struct path link;
 	unsigned int op = ANOUBIS_PATH_OP_LINK;
 	struct sfs_path_message * msg;
-	int len;
+	int ret, len;
+
+	link.mnt = parent_dir->mnt;
+	link.dentry = new_dentry;
+	if ((ret = sfs_path_write(&link)) != 0)
+		return ret;
 
 	msg = sfs_path_fill(op, parent_dir, new_dentry, old_dentry, &len);
 	if (!msg)
 		return -ENOMEM;
-
 	return sfs_path_checks(msg, len);
 }
 
@@ -902,13 +907,26 @@ int sfs_path_rename(struct path *old_dir, struct dentry *old_dentry,
 {
 	unsigned int op = ANOUBIS_PATH_OP_RENAME;
 	struct sfs_path_message * msg;
-	int len;
+	struct path file;
+	int len, ret;
+
+	file.mnt = old_dir->mnt;
+	file.dentry = old_dentry;
+	if ((ret = sfs_path_write(&file)) != 0)
+		return ret;
+	file.mnt = new_dir->mnt;
+	file.dentry = new_dentry;
+	if ((ret = sfs_path_write(&file)) != 0)
+		return ret;
 
 	msg = sfs_path_fill(op, new_dir, new_dentry, old_dentry, &len);
 	if (!msg)
 		return -ENOMEM;
 
-	return sfs_path_checks(msg, len);
+	if ((ret = sfs_path_checks(msg, len)) != 0)
+		return ret;
+
+	return ret;
 }
 
 /*
@@ -926,6 +944,13 @@ int sfs_path_unlink(struct path *dir, struct dentry *dentry)
 		return 0;
 
 	return sfs_path_write(&file);
+}
+
+int sfs_path_symlink(struct path *dir, struct dentry *dentry,
+    const char *old_name)
+{
+	struct path symlink = { dir->mnt, dentry };
+	return sfs_path_write(&symlink);
 }
 
 int sfs_path_truncate(struct path *path, loff_t length,
@@ -1057,7 +1082,7 @@ static int sfs_bprm_set_creds(struct linux_binprm * bprm)
 		sec->msg = msg;
 		sec->len = len;
 	}
-	return sfs_open_checks(file, MAY_READ|MAY_EXEC);
+	return sfs_open_checks(file, MAY_READ|MAY_EXEC, NULL);
 }
 
 /*
@@ -1143,6 +1168,7 @@ static struct anoubis_hooks sfs_ops = {
 	.path_link = sfs_path_link,
 	.path_unlink = sfs_path_unlink,
 	.path_rename = sfs_path_rename,
+	.path_symlink = sfs_path_symlink,
 	.path_truncate = sfs_path_truncate,
 #endif
 	.socket_connect = sfs_socket_connect,

@@ -51,9 +51,11 @@ int alf_enable = 1;
 int alf_allow_port_min = -1;
 int alf_allow_port_max = -1;
 
-int __anoubis_event_common(void * buf, size_t len, int src, int wait);
+int __anoubis_event_common(void * buf, size_t len, int src, int wait,
+    int *flags);
 
-int __anoubis_event_common(void * buf, size_t len, int src, int wait)
+int __anoubis_event_common(void * buf, size_t len, int src, int wait,
+    int *flags)
 {
 	int put, err, ret = 0;
 	struct eventdev_queue * q;
@@ -76,6 +78,13 @@ int __anoubis_event_common(void * buf, size_t len, int src, int wait)
 		err = eventdev_enqueue_nowait(q, src, buf, len, M_WAITOK);
 	}
 	if (!err) {
+		/* daemon replies returned via eventdev_wait are
+		 * positive (or 0 if no flags are set) */
+		if (ret > 0) {
+			if (flags)
+				*flags = ANOUBIS_RET_FLAGS(ret);
+			ret = ANOUBIS_RET_CLEAN(ret);
+		}
 		/* EPIPE is reserved for "no queue" */
 		if (ret == EPIPE)
 			ret = EIO;
@@ -103,12 +112,23 @@ out:
 
 int anoubis_notify(void * buf, size_t len, int src)
 {
-	return __anoubis_event_common(buf, len, src, 0);
+	return __anoubis_event_common(buf, len, src, 0, NULL);
 }
 
 int anoubis_raise(void * buf, size_t len, int src)
 {
+	int ret;
 	if (curproc->listener)
-		return __anoubis_event_common(buf, len, src, 0);
-	return __anoubis_event_common(buf, len, src, 1);
+		return __anoubis_event_common(buf, len, src, 0, NULL);
+	ret = __anoubis_event_common(buf, len, src, 1, NULL);
+	return ret;
+}
+
+int anoubis_raise_flags(void * buf, size_t len, int src, int *flags)
+{
+	int ret;
+	if (curproc->listener)
+		return __anoubis_event_common(buf, len, src, 0, flags);
+	ret = __anoubis_event_common(buf, len, src, 1, flags);
+	return ret;
 }

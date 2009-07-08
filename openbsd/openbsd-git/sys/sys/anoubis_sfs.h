@@ -40,9 +40,6 @@
 #define ANOUBIS_OPEN_FLAG_STATDATA	0x0040UL
 #define ANOUBIS_OPEN_FLAG_CSUM		0x0080UL
 
-/* Additional options returned via open */
-#define ANOUBIS_OPEN_RET_LOCKWATCH	1<<16
-
 struct sfs_open_message
 {
 	struct anoubis_event_common common;

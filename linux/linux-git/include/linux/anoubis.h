@@ -116,8 +116,14 @@ struct anoubis_task_label {
  * to be dead.
  */
 extern int anoubis_raise(void * buf, size_t len, int src);
+extern int anoubis_raise_flags(void * buf, size_t len, int src, int *flags);
 extern int anoubis_notify(void * buf, size_t len, int src);
 extern int anoubis_notify_atomic(void * buf, size_t len, int src);
+
+/* flags returned via anoubis_raise */
+#define ANOUBIS_RET_CLEAN(x)		(x & 0xffff)
+#define ANOUBIS_RET_FLAGS(x)		(x & ~0xffff)
+#define ANOUBIS_RET_OPEN_LOCKWATCH	(1<<16)
 
 /*
  * Module mulitplexor functions
@@ -155,6 +161,7 @@ struct anoubis_hooks {
 	DECLARE(path_mkdir);
 	DECLARE(path_rmdir);
 	DECLARE(path_rename);
+	DECLARE(path_symlink);
 	DECLARE(path_truncate);
 #endif
 	DECLARE(cred_prepare);
