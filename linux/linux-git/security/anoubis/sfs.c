@@ -961,13 +961,13 @@ int sfs_path_truncate(struct path *path, loff_t length,
 #endif
 
 /*
- * send flock messages if the file was marked via LOCKWATCH
+ * send (un)lock messages if the file was marked via LOCKWATCH
  */
 static int sfs_file_lock(struct file * file, unsigned int cmd) {
 	struct dentry * dentry = file->f_path.dentry;
 	struct inode * inode;
 	struct sfs_path_message * msg;
-	unsigned int op = ANOUBIS_PATH_OP_LOCK;
+	unsigned int op;
 	int len, ret;
 	struct sfs_inode_sec * sec;
 
@@ -987,13 +987,17 @@ static int sfs_file_lock(struct file * file, unsigned int cmd) {
 	if (!(ret & SFS_LOCKWATCH))
 		return 0;
 
+	if (cmd == F_UNLCK)
+		op = ANOUBIS_PATH_OP_UNLOCK;
+	else
+		op = ANOUBIS_PATH_OP_LOCK;
+
 	msg = sfs_path_fill(op, &file->f_path, dentry, NULL, &len);
 	if (!msg)
 		return -ENOMEM;
 
 	return sfs_path_checks(msg, len);
 }
-
 
 /*
  * Part of the external interface:
