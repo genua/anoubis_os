@@ -118,6 +118,8 @@ static int __anoubis_event_common(void * buf, size_t len, int src, int wait,
 	} else {
 		common->task_cookie = 0;
 	}
+	if (flags)
+		(*flags) = 0;
 	rcu_read_lock();
 	q = rcu_dereference(anoubis_queue);
 	if (q)
