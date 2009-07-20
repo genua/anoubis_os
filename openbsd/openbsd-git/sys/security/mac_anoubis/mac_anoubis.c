@@ -61,6 +61,8 @@ int __anoubis_event_common(void * buf, size_t len, int src, int wait,
 	struct eventdev_queue * q;
 	struct anoubis_event_common * common = buf;
 
+	if (flags)
+		*flags = 0;
 	assert(len >= sizeof(struct anoubis_event_common));
 	common->task_cookie = curproc->task_cookie;
 	mtx_enter(&anoubis_lock);

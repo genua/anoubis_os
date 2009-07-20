@@ -646,6 +646,9 @@ typedef int	(*mpo_vnode_check_truncate_t)(struct ucred *cred,
 		    struct vnode *vp, struct label *vplabel,
 		    struct vnode *dirvp, struct label *dirlabel,
 		    struct componentname *cnp);
+typedef int	(*mpo_vnode_check_lock_t)(struct ucred *cred,
+		    struct vnode *vp, struct label *vplabel,
+		    unsigned int op);
 #endif
 
 #ifdef ACL
@@ -993,6 +996,7 @@ struct mac_policy_ops {
 	mpo_vnode_check_write_t			mpo_vnode_check_write;
 #ifdef ANOUBIS
 	mpo_vnode_check_truncate_t		mpo_vnode_check_truncate;
+	mpo_vnode_check_lock_t			mpo_vnode_check_lock;
 #endif
 	mpo_vnode_associate_extattr_t		mpo_vnode_associate_extattr;
 	mpo_vnode_associate_singlelabel_t	mpo_vnode_associate_singlelabel;

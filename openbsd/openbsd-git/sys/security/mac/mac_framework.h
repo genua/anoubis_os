@@ -438,6 +438,8 @@ int	mac_vnode_check_mprotect(struct ucred *cred, struct vnode *vp,
 #ifdef ANOUBIS
 int	mac_vnode_check_truncate(struct ucred *cred, struct vnode *vp,
 	    struct vnode *dirvp, struct componentname *cnp);
+int	mac_vnode_check_lock(struct ucred *cred, struct vnode *vp,
+	    unsigned int op);
 int	mac_vnode_check_open(struct ucred *cred, struct vnode *vp,
 	    int acc_mode, struct vnode *dirvp, struct componentname *cnp);
 #else

@@ -924,6 +924,15 @@ mac_vnode_check_truncate(struct ucred *cred, struct vnode *vp,
 	    dirl, cnp);
 	return (error);
 }
+
+int
+mac_vnode_check_lock(struct ucred *cred, struct vnode *vp, unsigned int op)
+{
+	int error;
+
+	MAC_CHECK(vnode_check_lock, cred, vp, vp->v_label, op);
+	return (error);
+}
 #endif
 
 void

@@ -31,7 +31,7 @@
 #include <sys/ioccom.h>
 #include <sys/types.h>
 
-#define ANOUBISCORE_VERSION		0x00010001UL
+#define ANOUBISCORE_VERSION		0x00010004UL
 
 #define ANOUBIS_CS_LEN		32
 struct anoubis_ioctl_csum {

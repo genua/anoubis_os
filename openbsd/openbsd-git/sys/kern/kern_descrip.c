@@ -64,6 +64,10 @@
 
 #include <sys/pipe.h>
 
+#ifdef MAC
+#include <security/mac/mac_framework.h>
+#endif
+
 /*
  * Descriptor management.
  */
@@ -430,6 +434,11 @@ restart:
 				error = EBADF;
 				goto out;
 			}
+#ifdef ANOUBIS
+			error = mac_vnode_check_lock(p->p_ucred, vp, fl.l_type);
+			if (error)
+				goto out;
+#endif
 			atomic_setbits_int(&fdp->fd_flags, FD_ADVLOCK);
 			error = VOP_ADVLOCK(vp, fdp, F_SETLK, &fl, flg);
 			break;
@@ -439,11 +448,21 @@ restart:
 				error = EBADF;
 				goto out;
 			}
+#ifdef ANOUBIS
+			error = mac_vnode_check_lock(p->p_ucred, vp, fl.l_type);
+			if (error)
+				goto out;
+#endif
 			atomic_setbits_int(&fdp->fd_flags, FD_ADVLOCK);
 			error = VOP_ADVLOCK(vp, fdp, F_SETLK, &fl, flg);
 			break;
 
 		case F_UNLCK:
+#ifdef ANOUBIS
+			error = mac_vnode_check_lock(p->p_ucred, vp, fl.l_type);
+			if (error)
+				goto out;
+#endif
 			error = VOP_ADVLOCK(vp, fdp, F_UNLCK, &fl, F_POSIX);
 			goto out;
 
@@ -1145,6 +1164,11 @@ sys_flock(struct proc *p, void *v, register_t *retval)
 	if (how & LOCK_UN) {
 		lf.l_type = F_UNLCK;
 		fp->f_flag &= ~FHASLOCK;
+#ifdef ANOUBIS
+		error = mac_vnode_check_lock(p->p_ucred, vp, lf.l_type);
+		if (error)
+			goto out;
+#endif
 		error = VOP_ADVLOCK(vp, (caddr_t)fp, F_UNLCK, &lf, F_FLOCK);
 		goto out;
 	}
@@ -1156,6 +1180,11 @@ sys_flock(struct proc *p, void *v, register_t *retval)
 		error = EINVAL;
 		goto out;
 	}
+#ifdef ANOUBIS
+	error = mac_vnode_check_lock(p->p_ucred, vp, lf.l_type);
+	if (error)
+		goto out;
+#endif
 	fp->f_flag |= FHASLOCK;
 	if (how & LOCK_NB)
 		error = VOP_ADVLOCK(vp, (caddr_t)fp, F_SETLK, &lf, F_FLOCK);
