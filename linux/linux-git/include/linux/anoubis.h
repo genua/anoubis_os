@@ -72,6 +72,8 @@ struct anoubis_event_common {
 #define ANOUBIS_PROCESS_OP_FORK		0x0001UL
 #define ANOUBIS_PROCESS_OP_EXIT		0x0002UL
 #define ANOUBIS_PROCESS_OP_REPLACE	0x0003UL
+#define ANOUBIS_PROCESS_OP_CREATE	0x0004UL
+#define ANOUBIS_PROCESS_OP_DESTROY	0x0005UL
 
 struct ac_process_message {
 	struct anoubis_event_common common;
@@ -124,6 +126,8 @@ extern int anoubis_raise(void * buf, size_t len, int src);
 extern int anoubis_raise_flags(void * buf, size_t len, int src, int *flags);
 extern int anoubis_notify(void * buf, size_t len, int src);
 extern int anoubis_notify_atomic(void * buf, size_t len, int src);
+extern void anoubis_task_create(struct task_struct *tsk);
+extern void anoubis_task_destroy(struct task_struct *tsk);
 
 /*
  * Module mulitplexor functions

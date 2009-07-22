@@ -784,10 +784,23 @@ static int ac_path_truncate(struct path *path, loff_t length,
 #endif
 
 /* EXEC */
+
+static void ac_process_message(int op, anoubis_cookie_t cookie)
+{
+	struct ac_process_message	*msg;
+
+	msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
+	if (!msg)
+		return;
+	msg->task_cookie = cookie;
+	msg->op = op;
+	anoubis_notify_atomic(msg, sizeof(struct ac_process_message),
+	    ANOUBIS_SOURCE_PROCESS);
+}
+
 static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 {
 	struct anoubis_cred_label	*cl;
-	struct ac_process_message	*msg;
 
 	cl = __ac_alloc_label(gfp, sizeof (struct anoubis_cred_label));
 	if (cl == NULL)
@@ -797,13 +810,7 @@ static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 	spin_unlock(&task_cookie_lock);
 	cl->listener = 0;
 	nc->security = &cl->_l;
-	msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
-	if (msg) {
-		msg->task_cookie = cl->task_cookie;
-		msg->op = ANOUBIS_PROCESS_OP_FORK;
-		anoubis_notify_atomic(msg, sizeof(struct ac_process_message),
-		    ANOUBIS_SOURCE_PROCESS);
-	}
+	ac_process_message(ANOUBIS_PROCESS_OP_FORK, cl->task_cookie);
 
 	return HOOKS(cred_prepare, (nc, old, gfp));
 }
@@ -811,20 +818,12 @@ static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 static void ac_cred_free(struct cred * cred)
 {
 	struct anoubis_cred_label	*sec = cred->security;
-	struct ac_process_message	*msg;
 
 	if (sec == NULL)
 		return;
 	VOIDHOOKS(cred_free, (cred));
 	cred->security = NULL;
-	msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
-	if (msg) {
-		msg->task_cookie = sec->task_cookie;
-		msg->op = ANOUBIS_PROCESS_OP_EXIT;
-		anoubis_notify_atomic(msg,
-		    sizeof(struct ac_process_message),
-		    ANOUBIS_SOURCE_PROCESS);
-	}
+	ac_process_message(ANOUBIS_PROCESS_OP_EXIT, sec->task_cookie);
 	kfree(sec);
 }
 
@@ -839,20 +838,33 @@ static void ac_cred_commit(struct cred *nc, const struct cred* old)
 {
 	struct anoubis_cred_label	*nsec = nc->security;
 	struct anoubis_cred_label	*osec = old->security;
-	struct ac_process_message	*msg;
 
 	if (nsec && osec) {
-		msg = kmalloc(sizeof(struct ac_process_message), GFP_ATOMIC);
-		if (msg) {
-			msg->task_cookie = nsec->task_cookie;
-			msg->op = ANOUBIS_PROCESS_OP_REPLACE;
-			anoubis_notify_atomic(msg,
-			    sizeof(struct ac_process_message),
-			    ANOUBIS_SOURCE_PROCESS);
-		}
+		ac_process_message(ANOUBIS_PROCESS_OP_REPLACE,
+		    nsec->task_cookie);
 		nsec->task_cookie = osec->task_cookie;
 		nsec->listener = osec->listener;
 	}
+}
+
+void anoubis_task_create(struct task_struct *tsk)
+{
+	const struct cred		*cred = tsk->real_cred;
+	struct anoubis_cred_label	*sec = cred->security;
+
+	if (!sec)
+		return;
+	ac_process_message(ANOUBIS_PROCESS_OP_CREATE, sec->task_cookie);
+}
+
+void anoubis_task_destroy(struct task_struct *tsk)
+{
+	const struct cred		*cred = tsk->real_cred;
+	struct anoubis_cred_label	*sec = cred->security;
+
+	if (!sec)
+		return;
+	ac_process_message(ANOUBIS_PROCESS_OP_DESTROY, sec->task_cookie);
 }
 
 static int ac_bprm_set_creds(struct linux_binprm * bprm)
