@@ -1456,6 +1456,17 @@ sys_link(struct proc *p, void *v, register_t *retval)
 #ifdef MAC
 #ifdef ANOUBIS
 	error = mac_vnode_check_link(p->p_ucred, nd.ni_dvp, vp, &nd.ni_cnd, snd.ni_dvp, scnp);
+	/* relookup the vnode because the vfs_getcwd_common call
+	 * in SFS modifies ni_dvp->i_offset which is used by VOP_LINK
+	 * to link the vnode.
+	 * for now ignore the possible race, similar to ufs_vnops.c */
+	if (!error) {
+		VOP_UNLOCK(nd.ni_dvp, 0, curproc);
+		if ((error = relookup(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd)) != 0) {
+			VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
+			goto out;
+		}
+	}
 #else
 	error = mac_vnode_check_link(p->p_ucred, nd.ni_dvp, vp, &nd.ni_cnd);
 #endif
@@ -2588,6 +2599,28 @@ sys_rename(struct proc *p, void *v, register_t *retval)
 	if (!error)
 		error = mac_vnode_check_rename_an(p->p_ucred, tdvp, tvp,
 		    fromnd.ni_dvp, &tond.ni_cnd, &fromnd.ni_cnd);
+	/* relookup the vnode because the vfs_getcwd_common call
+	 * in SFS modifies ni_dvp->i_offset which is used by VOP_RENAME
+	 * to rename the vnode.
+	 * for now ignore the possible race, similar to ufs_vnops.c */
+	if (!error) {
+		vrele(fvp);
+		if ((error = relookup(fromnd.ni_dvp, &fvp, &fromnd.ni_cnd)) != 0) {
+			VOP_ABORTOP(fromnd.ni_dvp, &fromnd.ni_cnd);
+			goto out;
+		}
+	}
+	if (!error) {
+		if (tdvp == tvp)
+			vrele(tvp);
+		else if (tvp)
+			vput(tvp);
+		VOP_UNLOCK(tdvp, 0, curproc);
+		if ((error = relookup(tdvp, &tvp, &tond.ni_cnd)) != 0) {
+			VOP_ABORTOP(tdvp, &tond.ni_cnd);
+			goto out;
+		}
+	}
 #endif
 #endif
 out:
