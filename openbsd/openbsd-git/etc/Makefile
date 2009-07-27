@@ -1,7 +1,7 @@
 #	$OpenBSD: todd $
 
 TZDIR=		/usr/share/zoneinfo
-LOCALTIME=	Canada/Mountain
+LOCALTIME=	Europe/Berlin
 
 NOOBJ=
 
