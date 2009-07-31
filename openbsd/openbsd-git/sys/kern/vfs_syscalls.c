@@ -2606,7 +2606,7 @@ sys_rename(struct proc *p, void *v, register_t *retval)
 	if (!error) {
 		vrele(fvp);
 		if ((error = relookup(fromnd.ni_dvp, &fvp, &fromnd.ni_cnd)) != 0) {
-			VOP_ABORTOP(fromnd.ni_dvp, &fromnd.ni_cnd);
+			fvp = NULL;
 			goto out;
 		}
 	}
@@ -2617,7 +2617,6 @@ sys_rename(struct proc *p, void *v, register_t *retval)
 			vput(tvp);
 		VOP_UNLOCK(tdvp, 0, curproc);
 		if ((error = relookup(tdvp, &tvp, &tond.ni_cnd)) != 0) {
-			VOP_ABORTOP(tdvp, &tond.ni_cnd);
 			goto out;
 		}
 	}
@@ -2640,7 +2639,8 @@ out:
 			vput(tvp);
 		VOP_ABORTOP(fromnd.ni_dvp, &fromnd.ni_cnd);
 		vrele(fromnd.ni_dvp);
-		vrele(fvp);
+		if (fvp)
+			vrele(fvp);
 	}
 	vrele(tond.ni_startdir);
 	pool_put(&namei_pool, tond.ni_cnd.cn_pnbuf);
