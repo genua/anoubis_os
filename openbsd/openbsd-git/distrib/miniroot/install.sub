@@ -961,7 +961,8 @@ __EOT
 		*.tgz)	ftp $FTPOPTS -o - -m "$_src/$_f" | tar zxphf - -C /mnt
 			# save the content of the distribution sets to a file
 			if [ $_f != "site$VERSION.tgz" ]; then
-				tar tfz "$_src/$_f" >> /mnt/files_to_update
+				ftp $FTPOPTS -o - "$_src/$_f" | tar tfz - \
+					>> /mnt/files_to_update
 			fi
 			;;
 		*)	ftp $FTPOPTS -o "/mnt/$_f" -m "$_src/$_f"
