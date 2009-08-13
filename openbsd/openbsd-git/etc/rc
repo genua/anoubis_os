@@ -342,6 +342,11 @@ if [ -d /var/empty ]; then
 fi
 syslogd ${syslogd_flags}
 
+# upgrade /var/lib/anoubis/sfs if necessary
+if [ -x /usr/share/anoubisd/upgrade_sfs.pl ]; then
+	/usr/share/anoubisd/upgrade_sfs.pl
+fi
+
 # start anoubisd
 if [ -x /sbin/anoubisd ]; then
 	echo ' anoubisd'
