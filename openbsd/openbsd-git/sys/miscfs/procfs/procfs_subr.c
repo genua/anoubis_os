@@ -1,4 +1,4 @@
-/*	$OpenBSD: hshoexer $	*/
+/*	$OpenBSD: deraadt $	*/
 /*	$NetBSD: procfs_subr.c,v 1.15 1996/02/12 15:01:42 christos Exp $	*/
 
 /*

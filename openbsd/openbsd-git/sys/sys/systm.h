@@ -80,7 +80,8 @@ extern const char osversion[];
 extern const char osrelease[];
 extern int cold;		/* cold start flag initialized in locore */
 
-extern int ncpus;		/* number of CPUs */
+extern int ncpus;		/* number of CPUs used */
+extern int ncpusfound;		/* number of CPUs found */
 extern int nblkdev;		/* number of entries in bdevsw */
 extern int nchrdev;		/* number of entries in cdevsw */
 

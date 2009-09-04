@@ -46,6 +46,7 @@
 #include <sys/socketvar.h>
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
+#include <net/route.h>
 #include <sys/pool.h>
 #include <sys/mac.h>
 
@@ -190,7 +191,7 @@ solisten(struct socket *so, int backlog)
 void
 sofree(struct socket *so)
 {
-	splassert(IPL_SOFTNET);
+	splsoftassert(IPL_SOFTNET);
 
 	if (so->so_pcb || (so->so_state & SS_NOFDREF) == 0)
 		return;
@@ -276,7 +277,7 @@ discard:
 int
 soabort(struct socket *so)
 {
-	splassert(IPL_SOFTNET);
+	splsoftassert(IPL_SOFTNET);
 
 	return (*so->so_proto->pr_usrreq)(so, PRU_ABORT, NULL, NULL, NULL,
 	   curproc);
@@ -562,7 +563,8 @@ out:
  */
 int
 soreceive(struct socket *so, struct mbuf **paddr, struct uio *uio,
-    struct mbuf **mp0, struct mbuf **controlp, int *flagsp)
+    struct mbuf **mp0, struct mbuf **controlp, int *flagsp,
+    socklen_t controllen)
 {
 	struct mbuf *m, **mp;
 	int flags, len, error, s, offset;
@@ -727,7 +729,8 @@ dontblock:
 				if (pr->pr_domain->dom_externalize &&
 				    mtod(m, struct cmsghdr *)->cmsg_type ==
 				    SCM_RIGHTS)
-				   error = (*pr->pr_domain->dom_externalize)(m);
+				   error = (*pr->pr_domain->dom_externalize)(m,
+				       controllen);
 				*controlp = m;
 				so->so_rcv.sb_mb = m->m_next;
 				m->m_next = 0;
@@ -1013,6 +1016,7 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 	} else {
 		switch (optname) {
 		case SO_BINDANY:
+		case SO_RDOMAIN:
 			if ((error = suser(curproc, 0)) != 0)	/* XXX */
 				goto bad;
 			break;
@@ -1069,7 +1073,7 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 
 			case SO_SNDBUF:
 				if (sbcheckreserve(cnt, so->so_snd.sb_hiwat) ||
-				    sbreserve(&so->so_snd, cnt) == 0) {
+				    sbreserve(&so->so_snd, cnt)) {
 					error = ENOBUFS;
 					goto bad;
 				}
@@ -1077,7 +1081,7 @@ sosetopt(struct socket *so, int level, int optname, struct mbuf *m0)
 
 			case SO_RCVBUF:
 				if (sbcheckreserve(cnt, so->so_rcv.sb_hiwat) ||
-				    sbreserve(&so->so_rcv, cnt) == 0) {
+				    sbreserve(&so->so_rcv, cnt)) {
 					error = ENOBUFS;
 					goto bad;
 				}

@@ -1,4 +1,4 @@
-/*	$OpenBSD: deraadt $	*/
+/*	$OpenBSD: guenther $	*/
 /*	$NetBSD: kern_prot.c,v 1.33 1996/02/09 18:59:42 christos Exp $	*/
 
 /*
@@ -75,13 +75,10 @@ sys_getpid(struct proc *p, void *v, register_t *retval)
 #ifdef RTHREADS
 /* ARGSUSED */
 int
-sys_getthrid(p, v, retval)
-	struct proc *p;
-	void *v;
-	register_t *retval;
+sys_getthrid(struct proc *p, void *v, register_t *retval)
 {
 
-	*retval = p->p_pid;
+	*retval = p->p_pid + (p->p_flag & P_THREAD ? 0 : THREAD_PID_OFFSET);
 	return (0);
 }
 #endif

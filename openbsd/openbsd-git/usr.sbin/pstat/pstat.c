@@ -1,4 +1,4 @@
-/*	$OpenBSD: deraadt $	*/
+/*	$OpenBSD: thib $	*/
 /*	$NetBSD: pstat.c,v 1.27 1996/10/23 22:50:06 cgd Exp $	*/
 
 /*-
@@ -40,7 +40,7 @@ static char copyright[] =
 #if 0
 from: static char sccsid[] = "@(#)pstat.c	8.9 (Berkeley) 2/16/94";
 #else
-static char *rcsid = "$OpenBSD: deraadt $";
+static char *rcsid = "$OpenBSD: thib $";
 #endif
 #endif /* not lint */
 
@@ -53,9 +53,7 @@ static char *rcsid = "$OpenBSD: deraadt $";
 #include <sys/file.h>
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
-#define NFS
 #include <sys/mount.h>
-#undef NFS
 #undef _KERNEL
 #include <sys/stat.h>
 #include <nfs/nfsproto.h>

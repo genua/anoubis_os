@@ -1,4 +1,4 @@
-/*	$OpenBSD: thib $	*/
+/*	$OpenBSD: guenther $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -215,7 +215,8 @@ filt_procattach(struct knote *kn)
 	 * Fail if it's not owned by you, or the last exec gave us
 	 * setuid/setgid privs (unless you're root).
 	 */
-	if ((p->p_cred->p_ruid != curproc->p_cred->p_ruid ||
+	if (p->p_p != curproc->p_p &&
+	    (p->p_cred->p_ruid != curproc->p_cred->p_ruid ||
 	    (p->p_flag & P_SUGID)) && suser(curproc, 0) != 0)
 		return (EACCES);
 

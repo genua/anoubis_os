@@ -68,7 +68,6 @@
 #include <uvm/uvm_extern.h>
 
 #include <machine/trap.h>
-#include <machine/psl.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
 #include <machine/autoconf.h>
@@ -86,20 +85,20 @@
 #include <ddb/db_sym.h>
 #endif
 
-#include <sys/cdefs.h>
 #include <sys/syslog.h>
 
 #include "systrace.h"
 #include <dev/systrace.h>
 
+#define	USERMODE(ps)	(((ps) & SR_KSU_MASK) == SR_KSU_USER)
+
 #ifdef MAC
 #include <security/mac/mac_framework.h>
 #endif
 
-int	want_resched;	/* resched() was called */
 struct	proc *machFPCurProcPtr;		/* pointer to last proc to use FP */
 
-char	*trap_type[] = {
+const char *trap_type[] = {
 	"external interrupt",
 	"TLB modification",
 	"TLB miss (load or instr. fetch)",
@@ -131,33 +130,30 @@ char	*trap_type[] = {
 	"reserved 28",
 	"reserved 29",
 	"reserved 30",
-	"virtual coherency data",
+	"virtual coherency data"
 };
 
 #if defined(DDB) || defined(DEBUG)
-extern register_t *tlbtrcptr;
 struct trapdebug trapdebug[TRAPSIZE], *trp = trapdebug;
 
-void stacktrace(struct trap_frame *);
-void logstacktrace(struct trap_frame *);
-int  kdbpeek(void *);
-/* extern functions printed by name in stack backtraces */
-extern void idle(void);
+void	stacktrace(struct trap_frame *);
+int	kdbpeek(void *);
 #endif	/* DDB || DEBUG */
 
 #if defined(DDB)
-int  kdb_trap(int, db_regs_t *);
+extern int kdb_trap(int, db_regs_t *);
 #endif
 
 extern void MipsSwitchFPState(struct proc *, struct trap_frame *);
 extern void MipsSwitchFPState16(struct proc *, struct trap_frame *);
 extern void MipsFPTrap(u_int, u_int, u_int, union sigval);
 
-void trap(struct trap_frame *);
+void	ast(void);
+void	trap(struct trap_frame *);
 #ifdef PTRACE
-int cpu_singlestep(struct proc *);
+int	cpu_singlestep(struct proc *);
 #endif
-u_long MipsEmulateBranch(struct trap_frame *, long, int, u_int);
+u_long	MipsEmulateBranch(struct trap_frame *, long, int, u_int);
 
 static __inline__ void
 userret(struct proc *p)
@@ -174,6 +170,29 @@ userret(struct proc *p)
 		postsig(sig);
 
 	p->p_cpu->ci_schedstate.spc_curpriority = p->p_priority = p->p_usrpri;
+}
+
+/*
+ * Handle an AST for the current process.
+ */
+void
+ast()
+{
+	struct cpu_info *ci = curcpu();
+	struct proc *p = ci->ci_curproc;
+
+	uvmexp.softs++;
+
+if (p->p_md.md_astpending == 0)
+panic("unexpected ast p %p astpending %p\n", p, &p->p_md.md_astpending);
+	p->p_md.md_astpending = 0;
+	if (p->p_flag & P_OWEUPC) {
+		ADDUPROF(p);
+	}
+	if (ci->ci_want_resched)
+		preempt(NULL);
+
+	userret(p);
 }
 
 /*
@@ -1123,13 +1142,6 @@ stacktrace(regs)
 	struct trap_frame *regs;
 {
 	stacktrace_subr(regs, printf);
-}
-
-void
-logstacktrace(regs)
-	struct trap_frame *regs;
-{
-	stacktrace_subr(regs, addlog);
 }
 
 void

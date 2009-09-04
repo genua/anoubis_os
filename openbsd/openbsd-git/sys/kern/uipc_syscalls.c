@@ -578,7 +578,7 @@ sendit(struct proc *p, int s, struct msghdr *mp, int flags, register_t *retsize)
 		    error == EINTR || error == EWOULDBLOCK))
 			error = 0;
 		if (error == EPIPE)
-			psignal(p, SIGPIPE);
+			ptsignal(p, SIGPIPE, STHREAD);
 	}
 	if (error == 0) {
 		*retsize = len - auio.uio_resid;
@@ -726,7 +726,8 @@ recvit(struct proc *p, int s, struct msghdr *mp, caddr_t namelenp,
 	len = auio.uio_resid;
 	error = soreceive(fp->f_data, &from, &auio, NULL,
 			  mp->msg_control ? &control : NULL,
-			  &mp->msg_flags);
+			  &mp->msg_flags,
+			  mp->msg_control ? mp->msg_controllen : 0);
 	if (error) {
 		if (auio.uio_resid != len && (error == ERESTART ||
 		    error == EINTR || error == EWOULDBLOCK))

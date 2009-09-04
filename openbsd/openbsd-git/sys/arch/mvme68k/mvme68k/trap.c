@@ -1,4 +1,4 @@
-/*	$OpenBSD: martin $ */
+/*	$OpenBSD: miod $ */
 
 /*
  * Copyright (c) 1995 Theo de Raadt
@@ -162,11 +162,6 @@ int mmupid = -1;
 #define MDB_ISPID(p)	(p) == mmupid
 #endif
 
-#define NSIR	8
-void (*sir_routines[NSIR])(void *);
-void *sir_args[NSIR];
-u_char next_sir;
-
 void trap(int, u_int, u_int, struct frame);
 void syscall(register_t, struct frame);
 void init_intrs(void);
@@ -247,7 +242,7 @@ trap(type, code, v, frame)
 	register struct proc *p;
 	register int i;
 	u_int ucode;
-	int typ = 0, bit;
+	int typ = 0;
 #ifdef COMPAT_HPUX
 	extern struct emul emul_hpux;
 #endif
@@ -482,13 +477,19 @@ copyfault:
 
 	case T_SSIR:		/* software interrupt */
 	case T_SSIR|T_USER:
-		while ((bit = ffs(ssir))) {
-			--bit;
-			ssir &= ~(1 << bit);
-			uvmexp.softs++;
-			if (sir_routines[bit])
-				sir_routines[bit](sir_args[bit]);
+	    {
+		int sir, q, mask;
+
+		while ((sir = softpending) != 0) {
+			atomic_clearbits_int(&softpending, sir);
+
+			for (q = SI_NQUEUES - 1, mask = 1 << (SI_NQUEUES - 1);
+			    mask != 0; q--, mask >>= 1)
+				if (mask & sir)
+					softintr_dispatch(q);
 		}
+	    }
+
 		/*
 		 * If this was not an AST trap, we are all done.
 		 */
@@ -1109,24 +1110,6 @@ bad:
 #endif
 }
 
-/*
- * Allocation routines for software interrupts.
- */
-u_int8_t
-allocate_sir(proc, arg)
-	void (*proc)(void *);
-	void *arg;
-{
-	int bit;
-
-	if (next_sir >= NSIR)
-		panic("allocate_sir: none left");
-	bit = next_sir++;
-	sir_routines[bit] = proc;
-	sir_args[bit] = arg;
-	return (1 << bit);
-}
-
 typedef SLIST_HEAD(,intrhand) intrhand_t;
 intrhand_t intrs[NVMEINTR];
 
@@ -1141,9 +1124,7 @@ init_intrs()
 		SLIST_INIT(&intrs[i]);
 
 	/* soft interrupts... */
-	sir_routines[0] = netintr;
-	sir_routines[1] = (void (*)(void *))softclock;
-	next_sir = 2;
+	softintr_init();
 }
 
 void

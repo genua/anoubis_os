@@ -1,4 +1,4 @@
-/*	$OpenBSD: markus $	*/
+/*	$OpenBSD: claudio $	*/
 /*	$NetBSD: ip_output.c,v 1.28 1996/02/13 23:43:07 christos Exp $	*/
 
 /*
@@ -205,11 +205,13 @@ ip_output(struct mbuf *m0, ...)
 		 * If routing to interface only, short-circuit routing lookup.
 		 */
 		if (flags & IP_ROUTETOIF) {
-			if ((ia = ifatoia(ifa_ifwithdstaddr(sintosa(dst)))) == 0 &&
-			    (ia = ifatoia(ifa_ifwithnet(sintosa(dst)))) == 0) {
-			    ipstat.ips_noroute++;
-			    error = ENETUNREACH;
-			    goto bad;
+			if ((ia = ifatoia(ifa_ifwithdstaddr(sintosa(dst),
+			    m->m_pkthdr.rdomain))) == 0 &&
+			    (ia = ifatoia(ifa_ifwithnet(sintosa(dst),
+			    m->m_pkthdr.rdomain))) == 0) {
+				ipstat.ips_noroute++;
+				error = ENETUNREACH;
+				goto bad;
 			}
 
 			ifp = ia->ia_ifp;
@@ -223,7 +225,8 @@ ip_output(struct mbuf *m0, ...)
 			IFP_TO_IA(ifp, ia);
 		} else {
 			if (ro->ro_rt == 0)
-				rtalloc_mpath(ro, NULL, 0);
+				rtalloc_mpath(ro, NULL,
+				    m->m_pkthdr.rdomain);
 
 			if (ro->ro_rt == 0) {
 				ipstat.ips_noroute++;
@@ -375,11 +378,13 @@ ip_output(struct mbuf *m0, ...)
 		 * If routing to interface only, short-circuit routing lookup.
 		 */
 		if (flags & IP_ROUTETOIF) {
-			if ((ia = ifatoia(ifa_ifwithdstaddr(sintosa(dst)))) == 0 &&
-			    (ia = ifatoia(ifa_ifwithnet(sintosa(dst)))) == 0) {
-			    ipstat.ips_noroute++;
-			    error = ENETUNREACH;
-			    goto bad;
+			if ((ia = ifatoia(ifa_ifwithdstaddr(sintosa(dst),
+			    m->m_pkthdr.rdomain))) == 0 &&
+			    (ia = ifatoia(ifa_ifwithnet(sintosa(dst),
+			    m->m_pkthdr.rdomain))) == 0) {
+				ipstat.ips_noroute++;
+				error = ENETUNREACH;
+				goto bad;
 			}
 
 			ifp = ia->ia_ifp;
@@ -393,7 +398,8 @@ ip_output(struct mbuf *m0, ...)
 			IFP_TO_IA(ifp, ia);
 		} else {
 			if (ro->ro_rt == 0)
-				rtalloc_mpath(ro, &ip->ip_src.s_addr, 0);
+				rtalloc_mpath(ro, &ip->ip_src.s_addr,
+				    m->m_pkthdr.rdomain);
 
 			if (ro->ro_rt == 0) {
 				ipstat.ips_noroute++;
@@ -627,7 +633,8 @@ sendit:
 				struct sockaddr_in dst = {
 					sizeof(struct sockaddr_in), AF_INET};
 				dst.sin_addr = ip->ip_dst;
-				rt = icmp_mtudisc_clone((struct sockaddr *)&dst);
+				rt = icmp_mtudisc_clone((struct sockaddr *)&dst,
+				    m->m_pkthdr.rdomain);
 				rt_mtucloned = 1;
 			}
 			DPRINTF(("ip_output: spi %08x mtu %d rt %p cloned %d\n",
@@ -636,8 +643,9 @@ sendit:
 				rt->rt_rmx.rmx_mtu = icmp_mtu;
 				if (ro && ro->ro_rt != NULL) {
 					RTFREE(ro->ro_rt);
-					ro->ro_rt = (struct rtentry *) 0;
-					rtalloc(ro);
+					ro->ro_rt = NULL;
+					rtalloc1(&ro->ro_dst, 1,
+					    m->m_pkthdr.rdomain);
 				}
 				if (rt_mtucloned)
 					rtfree(rt);
@@ -725,14 +733,13 @@ sendit:
 	 * If small enough for interface, can just send directly.
 	 */
 	if (ntohs(ip->ip_len) <= mtu) {
+		ip->ip_sum = 0;
 		if ((ifp->if_capabilities & IFCAP_CSUM_IPv4) &&
 		    ifp->if_bridge == NULL) {
 			m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
 			ipstat.ips_outhwcsum++;
-		} else {
-			ip->ip_sum = 0;
+		} else
 			ip->ip_sum = in_cksum(m, hlen);
-		}
 		/* Update relevant hardware checksum stats for TCP/UDP */
 		if (m->m_pkthdr.csum_flags & M_TCPV4_CSUM_OUT)
 			tcpstat.tcps_outhwcsum++;
@@ -758,7 +765,8 @@ sendit:
 		 * them, there is no way for one to update all its
 		 * routes when the MTU is changed.
 		 */
-		if ((ro->ro_rt->rt_flags & (RTF_UP | RTF_HOST)) &&
+		if (ro->ro_rt != NULL &&
+		    (ro->ro_rt->rt_flags & (RTF_UP | RTF_HOST)) &&
 		    !(ro->ro_rt->rt_rmx.rmx_locks & RTV_MTU) &&
 		    (ro->ro_rt->rt_rmx.rmx_mtu > ifp->if_mtu)) {
 			ro->ro_rt->rt_rmx.rmx_mtu = ifp->if_mtu;
@@ -875,15 +883,14 @@ ip_fragment(struct mbuf *m, struct ifnet *ifp, u_long mtu)
 		m->m_pkthdr.len = mhlen + len;
 		m->m_pkthdr.rcvif = (struct ifnet *)0;
 		mhip->ip_off = htons((u_int16_t)mhip->ip_off);
+		mhip->ip_sum = 0;
 		if ((ifp != NULL) &&
 		    (ifp->if_capabilities & IFCAP_CSUM_IPv4) &&
 		    ifp->if_bridge == NULL) {
 			m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
 			ipstat.ips_outhwcsum++;
-		} else {
-			mhip->ip_sum = 0;
+		} else
 			mhip->ip_sum = in_cksum(m, mhlen);
-		}
 #ifdef MAC
 		mac_netinet_fragment(m0, m);
 #endif
@@ -899,15 +906,14 @@ ip_fragment(struct mbuf *m, struct ifnet *ifp, u_long mtu)
 	m->m_pkthdr.len = hlen + firstlen;
 	ip->ip_len = htons((u_int16_t)m->m_pkthdr.len);
 	ip->ip_off |= htons(IP_MF);
+	ip->ip_sum = 0;
 	if ((ifp != NULL) &&
 	    (ifp->if_capabilities & IFCAP_CSUM_IPv4) &&
 	    ifp->if_bridge == NULL) {
 		m->m_pkthdr.csum_flags |= M_IPV4_CSUM_OUT;
 		ipstat.ips_outhwcsum++;
-	} else {
-		ip->ip_sum = 0;
+	} else
 		ip->ip_sum = in_cksum(m, hlen);
-	}
 sendorfree:
 	/*
 	 * If there is no room for all the fragments, don't queue
@@ -1049,6 +1055,7 @@ ip_ctloutput(op, so, level, optname, mp)
 	u_int16_t opt16val;
 #endif
 	int error = 0;
+	u_int rtid = 0;
 
 	if (level != IPPROTO_IP) {
 		error = EINVAL;
@@ -1133,7 +1140,8 @@ ip_ctloutput(op, so, level, optname, mp)
 		case IP_MULTICAST_LOOP:
 		case IP_ADD_MEMBERSHIP:
 		case IP_DROP_MEMBERSHIP:
-			error = ip_setmoptions(optname, &inp->inp_moptions, m);
+			error = ip_setmoptions(optname, &inp->inp_moptions, m,
+			    inp->inp_rdomain);
 			break;
 
 		case IP_PORTRANGE:
@@ -1397,6 +1405,18 @@ ip_ctloutput(op, so, level, optname, mp)
 			}
 #endif
 			break;
+		case SO_RDOMAIN:
+			if (m == NULL || m->m_len < sizeof(u_int)) {
+				error = EINVAL;
+				break;
+			}
+			rtid = *mtod(m, u_int *);
+			if (!rtable_exists(rtid)) {
+				error = EINVAL;
+				break;
+			}
+			inp->inp_rdomain = rtid;
+			break;
 		default:
 			error = ENOPROTOOPT;
 			break;
@@ -1587,6 +1607,11 @@ ip_ctloutput(op, so, level, optname, mp)
 			}
 #endif
 			break;
+		case SO_RDOMAIN:
+			*mp = m = m_get(M_WAIT, MT_SOOPTS);
+			m->m_len = sizeof(u_int);
+			*mtod(m, u_int *) = inp->inp_rdomain;
+			break;
 		default:
 			error = ENOPROTOOPT;
 			break;
@@ -1708,10 +1733,8 @@ bad:
  * Set the IP multicast options in response to user setsockopt().
  */
 int
-ip_setmoptions(optname, imop, m)
-	int optname;
-	struct ip_moptions **imop;
-	struct mbuf *m;
+ip_setmoptions(int optname, struct ip_moptions **imop, struct mbuf *m,
+    u_int rdomain)
 {
 	int error = 0;
 	u_char loop;
@@ -1768,7 +1791,7 @@ ip_setmoptions(optname, imop, m)
 		 * IP address.  Find the interface and confirm that
 		 * it supports multicasting.
 		 */
-		INADDR_TO_IFP(addr, ifp);
+		INADDR_TO_IFP(addr, ifp, rdomain);
 		if (ifp == NULL || (ifp->if_flags & IFF_MULTICAST) == 0) {
 			error = EADDRNOTAVAIL;
 			break;
@@ -1824,7 +1847,9 @@ ip_setmoptions(optname, imop, m)
 			dst->sin_len = sizeof(*dst);
 			dst->sin_family = AF_INET;
 			dst->sin_addr = mreq->imr_multiaddr;
-			rtalloc(&ro);
+			if (!(ro.ro_rt && ro.ro_rt->rt_ifp &&
+			    (ro.ro_rt->rt_flags & RTF_UP)))
+				ro.ro_rt = rtalloc1(&ro.ro_dst, 1, rdomain);
 			if (ro.ro_rt == NULL) {
 				error = EADDRNOTAVAIL;
 				break;
@@ -1832,7 +1857,7 @@ ip_setmoptions(optname, imop, m)
 			ifp = ro.ro_rt->rt_ifp;
 			rtfree(ro.ro_rt);
 		} else {
-			INADDR_TO_IFP(mreq->imr_interface, ifp);
+			INADDR_TO_IFP(mreq->imr_interface, ifp, rdomain);
 		}
 		/*
 		 * See if we found an interface, and confirm that it
@@ -1918,7 +1943,7 @@ ip_setmoptions(optname, imop, m)
 		if (mreq->imr_interface.s_addr == INADDR_ANY)
 			ifp = NULL;
 		else {
-			INADDR_TO_IFP(mreq->imr_interface, ifp);
+			INADDR_TO_IFP(mreq->imr_interface, ifp, rdomain);
 			if (ifp == NULL) {
 				error = EADDRNOTAVAIL;
 				break;

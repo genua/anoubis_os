@@ -1,4 +1,4 @@
-/*	$OpenBSD: deraadt $	*/
+/*	$OpenBSD: thib $	*/
 /*	$NetBSD: kern_exec.c,v 1.75 1996/02/09 18:59:28 christos Exp $	*/
 
 /*-
@@ -380,7 +380,7 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 			cp = *tmpfap;
 			while (*cp)
 				*dp++ = *cp++;
-			dp++;
+			*dp++ = '\0';
 
 			free(*tmpfap, M_EXEC);
 			tmpfap++; argc++;

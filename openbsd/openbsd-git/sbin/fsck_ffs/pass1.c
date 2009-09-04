@@ -1,4 +1,4 @@
-/*	$OpenBSD: chl $	*/
+/*	$OpenBSD: otto $	*/
 /*	$NetBSD: pass1.c,v 1.16 1996/09/27 22:45:15 christos Exp $	*/
 
 /*
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pass1.c	8.1 (Berkeley) 6/5/93";
 #else
-static const char rcsid[] = "$OpenBSD: chl $";
+static const char rcsid[] = "$OpenBSD: otto $";
 #endif
 #endif /* not lint */
 
@@ -102,9 +102,11 @@ pass1(void)
 		inumber = c * sblock.fs_ipg;
 		setinodebuf(inumber);
 		getblk(&cgblk, cgtod(&sblock, c), sblock.fs_cgsize);
-		if (sblock.fs_magic == FS_UFS2_MAGIC)
+		if (sblock.fs_magic == FS_UFS2_MAGIC) {
 			inosused = cgrp.cg_initediblk;
-		else
+			if (inosused > sblock.fs_ipg)
+				inosused = sblock.fs_ipg;
+		} else
 			inosused = sblock.fs_ipg;
 		cginosused[c] = inosused;
 		for (i = 0; i < inosused; i++, inumber++) {

@@ -1,4 +1,4 @@
-/*	$OpenBSD: kettenis $	*/
+/*	$OpenBSD: oga $	*/
 /*	$NetBSD: malloc.h,v 1.39 1998/07/12 19:52:01 augustss Exp $	*/
 
 /*
@@ -320,7 +320,7 @@
 	"UDF file id",	/* 142 M_UDFFID */ \
 	"Bluetooth HID",	/* 143 M_BTHIDEV */ \
 	"AGP Memory",	/* 144 M_AGP */ \
-	"Direct Rendering Manager",	/* 145 M_DRM */ \
+	"DRM",	/* 145 M_DRM */ \
 	"MAC temp data",	/* 146 M_MACTEMP */ \
 	"sbuf data",	/* 147 M_SBUF */ \
 }

@@ -1,4 +1,4 @@
-/*	$OpenBSD: gollo $	*/
+/*	$OpenBSD: jsg $	*/
 /*	$NetBSD: socket.h,v 1.14 1996/02/09 18:25:36 christos Exp $	*/
 
 /*
@@ -44,6 +44,9 @@
  * Definitions related to sockets: types, address families, options.
  */
 
+/* Maximum number of alternate routing tables */
+#define	RT_TABLEID_MAX	255
+
 /*
  * Types
  */
@@ -82,8 +85,9 @@
 #define	SO_ERROR	0x1007		/* get error status and clear */
 #define	SO_TYPE		0x1008		/* get socket type */
 #define	SO_NETPROC	0x1020		/* multiplex; network processing */
-#define	SO_LABEL	0x1021		/* socket's MAC label */
-#define	SO_PEERLABEL	0x1022		/* socket's peer's MAC label */
+#define	SO_RDOMAIN	0x1021		/* routing domain socket belongs to */
+#define	SO_LABEL	0x1022		/* socket's MAC label */
+#define	SO_PEERLABEL	0x1023		/* socket's peer's MAC label */
 
 /*
  * Structure used for manipulating linger option.

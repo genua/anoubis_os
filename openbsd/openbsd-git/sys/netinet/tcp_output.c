@@ -1,4 +1,4 @@
-/*	$OpenBSD: henning $	*/
+/*	$OpenBSD: claudio $	*/
 /*	$NetBSD: tcp_output.c,v 1.16 1997/06/03 16:17:09 kml Exp $	*/
 
 /*
@@ -1066,6 +1066,9 @@ send:
 		}
 	}
 #endif
+
+	/* force routing domain */
+	m->m_pkthdr.rdomain = tp->t_inpcb->inp_rdomain;
 
 	switch (tp->pf) {
 	case 0:	/*default to PF_INET*/

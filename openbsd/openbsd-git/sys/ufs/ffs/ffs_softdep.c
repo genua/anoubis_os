@@ -1,4 +1,4 @@
-/*	$OpenBSD: mk $	*/
+/*	$OpenBSD: thib $	*/
 
 /*
  * Copyright 1998, 2000 Marshall Kirk McKusick. All Rights Reserved.

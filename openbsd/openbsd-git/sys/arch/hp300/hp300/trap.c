@@ -544,17 +544,19 @@ dopanic:
 
 	case T_SSIR:		/* software interrupt */
 	case T_SSIR|T_USER:
-		if (ssir & SIR_NET) {
-			void netintr(void);
-			siroff(SIR_NET);
-			uvmexp.softs++;
-			netintr();
+	    {
+		int sir, q, mask;
+
+		while ((sir = softpending) != 0) {
+			atomic_clearbits_int(&softpending, sir);
+
+			for (q = SI_NQUEUES - 1, mask = 1 << (SI_NQUEUES - 1);
+			    mask != 0; q--, mask >>= 1)
+				if (mask & sir)
+					softintr_dispatch(q);
 		}
-		if (ssir & SIR_CLOCK) {
-			siroff(SIR_CLOCK);
-			uvmexp.softs++;
-			softclock();
-		}
+	    }
+
 		/*
 		 * If this was not an AST trap, we are all done.
 		 */

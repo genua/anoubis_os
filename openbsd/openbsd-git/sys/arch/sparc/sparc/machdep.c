@@ -1,4 +1,4 @@
-/*	$OpenBSD: miod $	*/
+/*	$OpenBSD: beck $	*/
 /*	$NetBSD: machdep.c,v 1.85 1997/09/12 08:55:02 pk Exp $ */
 
 /*

@@ -1,4 +1,4 @@
-/*	$OpenBSD: tobias $	*/
+/*	$OpenBSD: beck $	*/
 /*	$NetBSD: machdep.c,v 1.207 1998/07/08 04:39:34 thorpej Exp $	*/
 
 /*

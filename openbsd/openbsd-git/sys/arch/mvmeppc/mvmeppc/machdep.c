@@ -1,4 +1,4 @@
-/*	$OpenBSD: deraadt $	*/
+/*	$OpenBSD: beck $	*/
 /*	$NetBSD: machdep.c,v 1.4 1996/10/16 19:33:11 ws Exp $	*/
 
 /*

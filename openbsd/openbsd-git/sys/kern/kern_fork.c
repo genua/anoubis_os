@@ -1,4 +1,4 @@
-/*	$OpenBSD: deraadt $	*/
+/*	$OpenBSD: art $	*/
 /*	$NetBSD: kern_fork.c,v 1.29 1996/02/09 18:59:34 christos Exp $	*/
 
 /*
@@ -195,7 +195,7 @@ fork1(struct proc *p1, int exitsig, int flags, void *stack, size_t stacksize,
 	int s;
 	extern void endtsleep(void *);
 	extern void realitexpire(void *);
-	struct  ptrace_state *newptstat;
+	struct  ptrace_state *newptstat = NULL;
 #if NSYSTRACE > 0
 	void *newstrp = NULL;
 #endif
@@ -277,8 +277,6 @@ fork1(struct proc *p1, int exitsig, int flags, void *stack, size_t stacksize,
 	 */
 	timeout_set(&p2->p_sleep_to, endtsleep, p2);
 	timeout_set(&p2->p_realit_to, realitexpire, p2);
-
-	p2->p_cpu = p1->p_cpu;
 
 	/*
 	 * Duplicate sub-structures as needed.
@@ -419,7 +417,8 @@ fork1(struct proc *p1, int exitsig, int flags, void *stack, size_t stacksize,
 		forkstat.sizkthread += vm->vm_dsize + vm->vm_ssize;
 	}
 
-	newptstat = malloc(sizeof(struct ptrace_state), M_SUBPROC, M_WAITOK);
+	if (p2->p_flag & P_TRACED && flags & FORK_FORK)
+		newptstat = malloc(sizeof(*newptstat), M_SUBPROC, M_WAITOK);
 #if NSYSTRACE > 0
 	if (ISSET(p1->p_flag, P_SYSTRACE))
 		newstrp = systrace_getproc();
@@ -465,6 +464,7 @@ fork1(struct proc *p1, int exitsig, int flags, void *stack, size_t stacksize,
  	getmicrotime(&p2->p_stats->p_start);
 	p2->p_acflag = AFORK;
 	p2->p_stat = SRUN;
+	p2->p_cpu = sched_choosecpu_fork(p1, flags);
 	setrunqueue(p2);
 	SCHED_UNLOCK(s);
 

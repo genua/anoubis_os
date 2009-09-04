@@ -1,4 +1,4 @@
-/*	$OpenBSD: henning $	*/
+/*	$OpenBSD: sthen $	*/
 /*	$NetBSD: udp_usrreq.c,v 1.28 1996/03/16 23:54:03 christos Exp $	*/
 
 /*
@@ -290,9 +290,21 @@ udp_input(struct mbuf *m, ...)
 			udpstat.udps_nosum++;
 			goto bad;
 		}
-		if ((uh->uh_sum = in6_cksum(m, IPPROTO_UDP, iphlen, len))) {
-			udpstat.udps_badsum++;
-			goto bad;
+		if ((m->m_pkthdr.csum_flags & M_UDP_CSUM_IN_OK) == 0) {
+			if (m->m_pkthdr.csum_flags & M_UDP_CSUM_IN_BAD) {
+				udpstat.udps_badsum++;
+				udpstat.udps_inhwcsum++;
+				goto bad;
+			}
+
+			if ((uh->uh_sum = in6_cksum(m, IPPROTO_UDP,
+			    iphlen, len))) {
+				udpstat.udps_badsum++;
+				goto bad;
+			}
+		} else {
+			m->m_pkthdr.csum_flags &= ~M_UDP_CSUM_IN_OK;
+			udpstat.udps_inhwcsum++;
 		}
 	} else
 #endif /* INET6 */
@@ -432,6 +444,8 @@ udp_input(struct mbuf *m, ...)
 			if (!ip6 && (inp->inp_flags & INP_IPV6))
 				continue;
 #endif
+			if (inp->inp_rdomain != m->m_pkthdr.rdomain)
+				continue;
 			if (inp->inp_lport != uh->uh_dport)
 				continue;
 #ifdef INET6
@@ -506,7 +520,7 @@ delivery_denied:
 			 * not have either the SO_REUSEPORT or SO_REUSEADDR
 			 * socket options set.  This heuristic avoids searching
 			 * through all pcbs in the common case of a non-shared
-			 * port.  It * assumes that an application will never
+			 * port.  It assumes that an application will never
 			 * clear these options after setting them.
 			 */
 			if ((last->inp_socket->so_options & (SO_REUSEPORT |
@@ -561,7 +575,7 @@ delivery_denied:
 		else
 #endif /* INET6 */
 		inp = in_pcbhashlookup(&udbtable, ip->ip_src, uh->uh_sport,
-		    ip->ip_dst, uh->uh_dport);
+		    ip->ip_dst, uh->uh_dport, m->m_pkthdr.rdomain);
 #if NPF > 0
 		if (m->m_pkthdr.pf.statekey && inp) {
 			((struct pf_state_key *)m->m_pkthdr.pf.statekey)->inp =
@@ -582,7 +596,8 @@ delivery_denied:
 		} else
 #endif /* INET6 */
 		inp = in_pcblookup_listen(&udbtable,
-		    ip->ip_dst, uh->uh_dport, inpl_reverse, m);
+		    ip->ip_dst, uh->uh_dport, inpl_reverse, m,
+		    m->m_pkthdr.rdomain);
 		if (inp == 0) {
 			udpstat.udps_noport++;
 			if (m->m_flags & (M_BCAST | M_MCAST)) {
@@ -908,7 +923,8 @@ udp_ctlinput(int cmd, struct sockaddr *sa, void *v)
 		}
 #endif
 		inp = in_pcbhashlookup(&udbtable,
-		    ip->ip_dst, uhp->uh_dport, ip->ip_src, uhp->uh_sport);
+		    ip->ip_dst, uhp->uh_dport, ip->ip_src, uhp->uh_sport,
+		    /* XXX */ 0);
 		if (inp && inp->inp_socket != NULL)
 			notify(inp, errno);
 	} else
@@ -973,7 +989,7 @@ udp_output(struct mbuf *m, ...)
 	 * for UDP and IP headers.
 	 */
 	M_PREPEND(m, sizeof(struct udpiphdr), M_DONTWAIT);
-	if (m == 0) {
+	if (m == NULL) {
 		error = ENOBUFS;
 		goto bail;
 	}
@@ -1012,6 +1028,10 @@ udp_output(struct mbuf *m, ...)
 	((struct ip *)ui)->ip_tos = inp->inp_ip.ip_tos;
 
 	udpstat.udps_opackets++;
+
+	/* force routing domain */
+	m->m_pkthdr.rdomain = inp->inp_rdomain;
+
 	error = ip_output(m, inp->inp_options, &inp->inp_route,
 	    inp->inp_socket->so_options &
 	    (SO_DONTROUTE | SO_BROADCAST | SO_JUMBO),

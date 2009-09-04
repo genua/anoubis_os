@@ -1,4 +1,4 @@
-/*	$OpenBSD: martin $	*/
+/*	$OpenBSD: guenther $	*/
 /*	$NetBSD: sysv_shm.c,v 1.50 1998/10/21 22:24:29 tron Exp $	*/
 
 /*
@@ -306,7 +306,7 @@ sys_shmat(struct proc *p, void *v, register_t *retval)
 
 	shmmap_s->va = attach_va;
 	shmmap_s->shmid = SCARG(uap, shmid);
-	shmseg->u.shm_lpid = p->p_pid;
+	shmseg->u.shm_lpid = p->p_p->ps_mainproc->p_pid;
 	shmseg->u.shm_atime = time_second;
 	shmseg->u.shm_nattch++;
 	*retval = attach_va;
@@ -483,7 +483,7 @@ shmget_allocate_segment(struct proc *p,
 	    (shmseqs[segnum] + 1) & 0x7fff;
 	shmseg->u.shm_perm.key = key;
 	shmseg->u.shm_segsz = SCARG(uap, size);
-	shmseg->u.shm_cpid = p->p_pid;
+	shmseg->u.shm_cpid = p->p_p->ps_mainproc->p_pid;
 	shmseg->u.shm_lpid = shmseg->u.shm_nattch = 0;
 	shmseg->u.shm_atime = shmseg->u.shm_dtime = 0;
 	shmseg->u.shm_ctime = time_second;

@@ -69,7 +69,8 @@ soo_read(struct file *fp, off_t *poff, struct uio *uio, struct ucred *cred)
 		return (error);
 #endif
 	return (soreceive((struct socket *)fp->f_data, (struct mbuf **)0,
-		uio, (struct mbuf **)0, (struct mbuf **)0, (int *)0));
+		uio, (struct mbuf **)0, (struct mbuf **)0, (int *)0,
+		(socklen_t)0));
 }
 
 /* ARGSUSED */

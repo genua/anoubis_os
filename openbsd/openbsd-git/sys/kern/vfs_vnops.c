@@ -1,4 +1,4 @@
-/*	$OpenBSD: art $	*/
+/*	$OpenBSD: guenther $	*/
 /*	$NetBSD: vfs_vnops.c,v 1.20 1996/02/04 02:18:41 christos Exp $	*/
 
 /*
@@ -123,6 +123,8 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 			VATTR_NULL(&va);
 			va.va_type = VREG;
 			va.va_mode = cmode;
+			if (fmode & O_EXCL)
+				va.va_vaflags |= VA_EXCLUSIVE;
 #ifdef MAC
 			/* XXX PM: ndp->ni_dvp is locked. */
 			error = mac_vnode_check_create(cred, ndp->ni_dvp,
@@ -609,9 +611,9 @@ vn_stat(struct vnode *vp, struct stat *sb, struct proc *p)
 	sb->st_gid = va.va_gid;
 	sb->st_rdev = va.va_rdev;
 	sb->st_size = va.va_size;
-	sb->st_atimespec = va.va_atime;
-	sb->st_mtimespec = va.va_mtime;
-	sb->st_ctimespec = va.va_ctime;
+	sb->st_atim = va.va_atime;
+	sb->st_mtim = va.va_mtime;
+	sb->st_ctim = va.va_ctime;
 	sb->st_blksize = va.va_blocksize;
 	sb->st_flags = va.va_flags;
 	sb->st_gen = va.va_gen;

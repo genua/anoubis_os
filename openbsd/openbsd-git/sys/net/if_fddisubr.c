@@ -1,4 +1,4 @@
-/*	$OpenBSD: dlg $	*/
+/*	$OpenBSD: claudio $	*/
 /*	$NetBSD: if_fddisubr.c,v 1.5 1996/05/07 23:20:21 christos Exp $	*/
 
 /*
@@ -164,7 +164,7 @@ fddi_output(ifp0, m0, dst, rt0)
 
 		/* loop back if this is going to the carp interface */
 		if (dst != NULL && LINK_STATE_IS_UP(ifp0->if_link_state) &&
-		    (ifa = ifa_ifwithaddr(dst)) != NULL &&
+		    (ifa = ifa_ifwithaddr(dst, ifp->if_rdomain)) != NULL &&
 		    ifa->ifa_ifp == ifp0)
 			return (looutput(ifp0, m, dst, rt0));
 

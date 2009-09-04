@@ -1,4 +1,4 @@
-/*	$OpenBSD: fgsch $	*/
+/*	$OpenBSD: guenther $	*/
 /*	$NetBSD: sysv_msg.c,v 1.19 1996/02/09 19:00:18 christos Exp $	*/
 
 /*
@@ -686,7 +686,7 @@ sys_msgsnd(struct proc *p, void *v, register_t *retval)
 
 	msqkptr->u.msg_cbytes += msghdr->msg_ts;
 	msqkptr->u.msg_qnum++;
-	msqkptr->u.msg_lspid = p->p_pid;
+	msqkptr->u.msg_lspid = p->p_p->ps_mainproc->p_pid;
 	msqkptr->u.msg_stime = time_second;
 
 	wakeup(msqkptr);
@@ -900,7 +900,7 @@ sys_msgrcv(struct proc *p, void *v, register_t *retval)
 
 	msqkptr->u.msg_cbytes -= msghdr->msg_ts;
 	msqkptr->u.msg_qnum--;
-	msqkptr->u.msg_lrpid = p->p_pid;
+	msqkptr->u.msg_lrpid = p->p_p->ps_mainproc->p_pid;
 	msqkptr->u.msg_rtime = time_second;
 
 	/*

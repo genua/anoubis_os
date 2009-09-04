@@ -1,4 +1,4 @@
-/* 	$OpenBSD: tedu $ */
+/* 	$OpenBSD: kettenis $ */
 
 /*
  * Copyright (c) 2003 Marc Espie
@@ -31,6 +31,7 @@
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/fcntl.h>
+#include <sys/core.h>
 #include <compat/common/compat_util.h>
 
 void aout_compat_setup(struct exec_package *epp);
@@ -55,6 +56,7 @@ struct emul emul_aout = {
 	copyargs,
 	setregs,
 	NULL,
+	coredump_trad,
 	sigcode,
 	esigcode,
 };

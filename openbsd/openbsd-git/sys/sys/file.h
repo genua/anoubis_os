@@ -1,4 +1,4 @@
-/*	$OpenBSD: mickey $	*/
+/*	$OpenBSD: blambert $	*/
 /*	$NetBSD: file.h,v 1.11 1995/03/26 20:24:13 jtc Exp $	*/
 
 /*
@@ -113,10 +113,5 @@ extern struct filelist filehead;	/* head of list of open files */
 extern int maxfiles;			/* kernel limit on number of open files */
 extern int nfiles;			/* actual number of open files */
 extern struct fileops vnops;		/* vnode operations for files */
-
-int     dofileread(struct proc *, int, struct file *, void *, size_t,
-            off_t *, register_t *);
-int     dofilewrite(struct proc *, int, struct file *, const void *,
-            size_t, off_t *, register_t *);
 
 #endif /* _KERNEL */

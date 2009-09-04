@@ -407,8 +407,8 @@ ufs_setattr(void *v)
 			if (DIP(ip, flags) & (SF_IMMUTABLE | SF_APPEND) ||
 			    (vap->va_flags & UF_SETTABLE) != vap->va_flags)
 				return (EPERM);
-			DIP(ip, flags) &= SF_SETTABLE;
-			DIP(ip, flags) |= (vap->va_flags & UF_SETTABLE);
+			DIP_AND(ip, flags, SF_SETTABLE);
+			DIP_OR(ip, flags, vap->va_flags & UF_SETTABLE);
 		}
 		ip->i_flag |= IN_CHANGE;
 		if (vap->va_flags & (IMMUTABLE | APPEND))
@@ -546,8 +546,8 @@ ufs_chmod(struct vnode *vp, int mode, struct ucred *cred, struct proc *p)
 		if (error)
 			return (error);
 	}
-	DIP(ip, mode) &= ~ALLPERMS;
-	DIP(ip, mode) |= (mode & ALLPERMS);
+	DIP_AND(ip, mode, ~ALLPERMS);
+	DIP_OR(ip, mode, mode & ALLPERMS);
 	ip->i_flag |= IN_CHANGE;
 	if ((vp->v_flag & VTEXT) && (DIP(ip, mode) & S_ISTXT) == 0)
 		(void) uvm_vnp_uncache(vp);
@@ -627,9 +627,9 @@ ufs_chown(struct vnode *vp, uid_t uid, gid_t gid, struct ucred *cred,
 	if (ouid != uid || ogid != gid)
 		ip->i_flag |= IN_CHANGE;
 	if (ouid != uid && cred->cr_uid != 0)
-		DIP(ip, mode) &= ~ISUID;
+		DIP_AND(ip, mode, ~ISUID);
 	if (ogid != gid && cred->cr_uid != 0)
-		DIP(ip, mode) &= ~ISGID;
+		DIP_AND(ip, mode, ~ISGID);
 	return (0);
 
 error:
@@ -1795,7 +1795,7 @@ ufs_strategy(void *v)
 	}
 	vp = ip->i_devvp;
 	bp->b_dev = vp->v_rdev;
-	VOCALL (vp->v_op, VOFFSET(vop_strategy), ap);
+	VOCALL(vp->v_op, VOFFSET(vop_strategy), ap);
 	return (0);
 }
 
@@ -2155,7 +2155,7 @@ ufs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 	if ((DIP(ip, mode) & ISGID) &&
 		!groupmember(DIP(ip, gid), cnp->cn_cred) &&
 	    suser_ucred(cnp->cn_cred))
-		DIP(ip, mode) &= ~ISGID;
+		DIP_AND(ip, mode, ~ISGID);
 
 	/*
 	 * Make sure inode goes to disk before directory entry.
