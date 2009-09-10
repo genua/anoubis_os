@@ -347,8 +347,8 @@ fi
 syslogd ${syslogd_flags}
 
 # upgrade /var/lib/anoubis/sfs if necessary
-if [ -x /usr/share/anoubisd/upgrade_sfs.pl ]; then
-	/usr/share/anoubisd/upgrade_sfs.pl
+if [ -x /usr/local/share/anoubisd/upgrade_sfs.pl ]; then
+	/usr/local/share/anoubisd/upgrade_sfs.pl
 fi
 
 # start anoubisd
