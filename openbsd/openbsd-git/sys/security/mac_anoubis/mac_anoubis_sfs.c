@@ -147,9 +147,6 @@ void			 mac_anoubis_sfs_exec_success(struct exec_package *,
 			     struct label *);
 int			 mac_anoubis_sfs_check_follow_link(struct nameidata *,
 			     char *, int);
-int			 mac_anoubis_sfs_check_socket_connect(struct ucred *,
-			     struct socket *, struct label *,
-			     const struct sockaddr *);
 int			 sfs_do_csum(struct vnode *, struct sfs_label *);
 int			 sfs_csum(struct vnode *, struct sfs_label *);
 char			*sfs_d_path(struct vnode *dirvp,
@@ -900,48 +897,6 @@ mac_anoubis_sfs_check_follow_link(struct nameidata *ndp, char *buf, int buflen)
 	return ret;
 }
 
-/*
- * Handle unix socket connections using regular open messages
- */
-int
-mac_anoubis_sfs_check_socket_connect(struct ucred *cred, struct socket *sock,
-		struct label *solabel, const struct sockaddr *sa)
-{
-	struct sockaddr_un	*soun = (struct sockaddr_un *)sa;
-	int			 namelen, alloclen, ret;
-	struct sfs_open_message	*msg;
-
-	if (sock == NULL)
-		return EBADF;
-	if (sotopf(sock) != PF_UNIX)
-		return 0;
-
-	/* XXX: should we resolve this path ? */
-	namelen = 1 + strlen(soun->sun_path);
-	alloclen = sizeof(struct sfs_open_message) - 1 + namelen;
-	msg = malloc(alloclen, M_DEVBUF, M_WAITOK);
-	if (!msg)
-		return ENOMEM;
-	msg->flags = 0;
-	if (namelen) {
-		memcpy(msg->pathhint, soun->sun_path, namelen);
-		msg->flags |= ANOUBIS_OPEN_FLAG_PATHHINT;
-	} else {
-		msg->pathhint[0] = 0;
-	}
-
-	msg->flags |= ANOUBIS_OPEN_FLAG_WRITE;
-	msg->ino = 0;
-	msg->dev = 0;
-	sfs_stat_ev++;
-	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
-	if (ret == EPIPE /* && openation_mode != strict XXX */)
-		return 0;
-	if (ret)
-		sfs_stat_ev_deny++;
-	return ret;
-}
-
 void mac_anoubis_sfs_init(struct mac_policy_conf * conf)
 {
 }
@@ -977,7 +932,6 @@ struct mac_policy_ops mac_anoubis_sfs_ops =
 	.mpo_cred_internalize_label = mac_anoubis_sfs_cred_internalize_label,
 	.mpo_cred_destroy_label = mac_anoubis_sfs_cred_destroy_label,
 	.mpo_check_follow_link = mac_anoubis_sfs_check_follow_link,
-	.mpo_socket_check_connect = mac_anoubis_sfs_check_socket_connect,
 };
 
 MAC_POLICY_SET(&mac_anoubis_sfs_ops, mac_anoubis_sfs, "Anoubis SFS",
