@@ -781,6 +781,13 @@ static int ac_path_truncate(struct path *path, loff_t length,
 {
 	return HOOKS(path_truncate, (path, length, time_attr));
 }
+
+static int ac_path_mknod(struct path *dir, struct dentry *dentry, int mode,
+    unsigned int dev)
+{
+	return HOOKS(path_mknod, (dir, dentry, mode, dev));
+}
+
 #endif
 
 /* EXEC */
@@ -903,6 +910,8 @@ static struct security_operations anoubis_core_ops = {
 	.path_rename = ac_path_rename,
 	.path_symlink = ac_path_symlink,
 	.path_truncate = ac_path_truncate,
+	.path_mknod = ac_path_mknod,
+	.path_mkdir = ac_path_mkdir,
 #endif
 	.cred_prepare = ac_cred_prepare,
 	.cred_free = ac_cred_free,

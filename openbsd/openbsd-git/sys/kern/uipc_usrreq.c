@@ -437,6 +437,12 @@ unp_bind(struct unpcb *unp, struct mbuf *nam, struct proc *p)
 	    &vattr);
 	if (error)
 		goto abort;
+	VOP_UNLOCK(nd.ni_dvp, 0, p);
+	error = relookup(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd);
+	if (error == 0 && nd.ni_vp)
+		error = EADDRINUSE;
+	if (error)
+		goto abort;
 #endif	/* MAC */
 	error = VOP_CREATE(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr);
 	if (error)
@@ -453,11 +459,12 @@ unp_bind(struct unpcb *unp, struct mbuf *nam, struct proc *p)
 #ifdef MAC
 abort:
 	VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
-	if (nd.ni_dvp == vp)
+	if (nd.ni_dvp == nd.ni_vp)
 		vrele(nd.ni_dvp);
 	else
 		vput(nd.ni_dvp);
-	vrele(vp);
+	if (nd.ni_vp)
+		vrele(nd.ni_vp);
 	return (error);
 #endif	/* MAC */
 }

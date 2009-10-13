@@ -129,20 +129,47 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 			/* XXX PM: ndp->ni_dvp is locked. */
 			error = mac_vnode_check_create(cred, ndp->ni_dvp,
 			    &ndp->ni_cnd, &va);
-			if (error == 0)
-				error = VOP_CREATE(ndp->ni_dvp, &ndp->ni_vp,
-				    &ndp->ni_cnd, &va);
-#else
+			if (error) {
+#ifdef ANOUBIS
+				if (dirvp) {
+					pool_put(&namei_pool, cnp->cn_pnbuf);
+					vrele(dirvp);
+				}
+#endif
+				vput(dirvp);
+				return error;
+			}
+			/*
+			 * relookup the vnode. The call to check_create has
+			 * changed the directory information in the file
+			 * system specific part of the inode.
+			 */
+			VOP_UNLOCK(ndp->ni_dvp, 0, curproc);
+			error = relookup(ndp->ni_dvp, &ndp->ni_vp, cnp);
+			if (error != 0) {
+				if (dirvp)
+					vrele(dirvp);
+				pool_put(&namei_pool, cnp->cn_pnbuf);
+				vput(dirvp);
+				return error;
+			}
+			/*
+			 * relookup plus SAVESTART, i.e. we get another
+			 * reference to dirvp that we do not need.
+			 */
+			if (dirvp)
+				vrele(dirvp);
+#endif
 			error = VOP_CREATE(ndp->ni_dvp, &ndp->ni_vp,
 			    &ndp->ni_cnd, &va);
-#endif
 #ifdef ANOUBIS
 			if (error) {
 				if (dirvp)
 					vrele(dirvp);
 				/*
 				 * No need to free cnp->cn_pnbuf here as
-				 * VOP_CREATE does this on error.
+				 * VOP_CREATE does this on error. This is
+				 * independent of SAVESTART.
 				 */
 				return (error);
 			}

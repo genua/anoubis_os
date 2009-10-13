@@ -866,7 +866,7 @@ static struct sfs_path_message * sfs_path_fill(unsigned int op,
 	return msg;
 }
 
-int sfs_path_checks(struct sfs_path_message * msg, int len)
+static int sfs_path_checks(struct sfs_path_message * msg, int len)
 {
 	int ret;
 
@@ -883,7 +883,7 @@ int sfs_path_checks(struct sfs_path_message * msg, int len)
 }
 
 #ifdef CONFIG_SECURITY_PATH
-int sfs_path_link(struct dentry *old_dentry, struct path *parent_dir,
+static int sfs_path_link(struct dentry *old_dentry, struct path *parent_dir,
     struct dentry *new_dentry)
 {
 	struct path link;
@@ -902,7 +902,7 @@ int sfs_path_link(struct dentry *old_dentry, struct path *parent_dir,
 	return sfs_path_checks(msg, len);
 }
 
-int sfs_path_rename(struct path *old_dir, struct dentry *old_dentry,
+static int sfs_path_rename(struct path *old_dir, struct dentry *old_dentry,
     struct path *new_dir, struct dentry *new_dentry)
 {
 	unsigned int op = ANOUBIS_PATH_OP_RENAME;
@@ -933,7 +933,7 @@ int sfs_path_rename(struct path *old_dir, struct dentry *old_dentry,
  * XXX: SSP these aren't real opens but we'll treat
  * them like that in the daemon for now
  */
-int sfs_path_unlink(struct path *dir, struct dentry *dentry)
+static int sfs_path_unlink(struct path *dir, struct dentry *dentry)
 {
 	struct path file = { dir->mnt, dentry };
 
@@ -946,18 +946,40 @@ int sfs_path_unlink(struct path *dir, struct dentry *dentry)
 	return sfs_path_write(&file);
 }
 
-int sfs_path_symlink(struct path *dir, struct dentry *dentry,
+static int sfs_path_symlink(struct path *dir, struct dentry *dentry,
     const char *old_name)
 {
 	struct path symlink = { dir->mnt, dentry };
 	return sfs_path_write(&symlink);
 }
 
-int sfs_path_truncate(struct path *path, loff_t length,
+static int sfs_path_truncate(struct path *path, loff_t length,
     unsigned int time_attrs)
 {
 	return sfs_path_write(path);
 }
+
+static int sfs_path_mknod(struct path *dir, struct dentry *dentry,
+    int mode, unsigned int dev)
+{
+	struct path file = { dir->mnt, dentry };
+
+	if (!dentry)
+		return 0;
+
+	return sfs_path_write(&file);
+}
+
+static int sfs_path_mkdir(struct path *dir, struct dentry *dentry, int mode)
+{
+	struct path file = { dir->mnt, dentry };
+
+	if (!dentry)
+		return 0;
+
+	return sfs_path_write(&file);
+}
+
 #endif
 
 /*
@@ -1174,6 +1196,8 @@ static struct anoubis_hooks sfs_ops = {
 	.path_rename = sfs_path_rename,
 	.path_symlink = sfs_path_symlink,
 	.path_truncate = sfs_path_truncate,
+	.path_mknod = sfs_path_mknod,
+	.path_mkdir = sfs_path_mkdir,
 #endif
 	.socket_connect = sfs_socket_connect,
 	.anoubis_stats = sfs_getstats,

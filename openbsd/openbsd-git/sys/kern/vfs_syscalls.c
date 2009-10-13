@@ -960,17 +960,6 @@ sys_open(struct proc *p, void *v, register_t *retval)
 			goto out;
 		}
 	}
-#ifdef ANOUBIS
-	assert(p == curproc);
-	error = mac_file_check_open(p->p_ucred, fp, vp, SCARG(uap, path));
-	if (error) {
-		VOP_UNLOCK(vp, 0, p);
-		/* closef will close the file for us. */
-		fdremove(fdp, indx);
-		closef(fp, p);
-		goto out;
-	}
-#endif
 	VOP_UNLOCK(vp, 0, p);
 	*retval = indx;
 	FILE_SET_MATURE(fp);
@@ -1175,15 +1164,6 @@ sys_fhopen(struct proc *p, void *v, register_t *retval)
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, p);
 		fp->f_flag |= FHASLOCK;
 	}
-#ifdef ANOUBIS
-	assert(p == curproc);
-	error = mac_file_check_open(p->p_ucred, fp, vp, NULL);
-	if (error) {
-		VOP_UNLOCK(vp, 0, p);
-		vp = NULL;
-		goto bad;
-	}
-#endif
 	VOP_UNLOCK(vp, 0, p);
 	*retval = indx;
 	FILE_SET_MATURE(fp);
@@ -1326,9 +1306,16 @@ sys_mknod(struct proc *p, void *v, register_t *retval)
 		}
 	}
 #ifdef MAC
-	if (!error)
+	if (!error) {
 		error = mac_vnode_check_create(p->p_ucred, nd.ni_dvp,
 		    &nd.ni_cnd, &vattr);
+		if (error == 0) {
+			VOP_UNLOCK(nd.ni_dvp, 0, curproc);
+			error = relookup(nd.ni_dvp, &vp, &nd.ni_cnd);
+			if (error == 0 && vp)
+				error = EEXIST;
+		}
+	}
 #endif
 	if (!error) {
 		error = VOP_MKNOD(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr);
@@ -1387,6 +1374,12 @@ sys_mkfifo(struct proc *p, void *v, register_t *retval)
 	    &vattr);
 	if (error)
 		goto abort;
+	VOP_UNLOCK(nd.ni_dvp, 0, curproc);
+	error = relookup(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd);
+	if (error == 0 && nd.ni_vp)
+		error = EEXIST;
+	if (error)
+		goto abort;
 #endif
 	return (VOP_MKNOD(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr));
 #ifdef MAC
@@ -1396,7 +1389,8 @@ abort:
 		vrele(nd.ni_dvp);
 	else
 		vput(nd.ni_dvp);
-	vrele(nd.ni_vp);
+	if (nd.ni_vp)
+		vrele(nd.ni_vp);
 	return error;
 #endif	/* MAC */
 #endif /* FIFO */
@@ -1530,6 +1524,12 @@ sys_symlink(struct proc *p, void *v, register_t *retval)
 	    &vattr);
 	if (error)
 		goto abort;
+	VOP_UNLOCK(nd.ni_dvp, 0, curproc);
+	error = relookup(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd);
+	if (error == 0 && nd.ni_vp)
+		error = EEXIST;
+	if (error)
+		goto abort;
 #endif
 	error = VOP_SYMLINK(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr, path);
 out:
@@ -1542,7 +1542,8 @@ abort:
 		vrele(nd.ni_dvp);
 	else
 		vput(nd.ni_dvp);
-	vrele(nd.ni_vp);
+	if (nd.ni_vp)
+		vrele(nd.ni_vp);
 	goto out;
 #endif	/* MAC */
 }
@@ -2695,6 +2696,12 @@ sys_mkdir(struct proc *p, void *v, register_t *retval)
 	    &vattr);
 	if (error)
 		goto abort;
+	VOP_UNLOCK(nd.ni_dvp, 0, curproc);
+	error = relookup(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd);
+	if (error == 0 && nd.ni_vp)
+		error = EEXIST;
+	if (error)
+		goto abort;
 #endif
 	error = VOP_MKDIR(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr);
 	if (!error)
@@ -2703,11 +2710,12 @@ sys_mkdir(struct proc *p, void *v, register_t *retval)
 #ifdef MAC
 abort:
 	VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
-	if (nd.ni_dvp == vp)
+	if (nd.ni_dvp == nd.ni_vp)
 		vrele(nd.ni_dvp);
 	else
 		vput(nd.ni_dvp);
-	vrele(vp);
+	if (nd.ni_vp)
+		vrele(nd.ni_vp);
 	return error;
 #endif	/* MAC */
 }

@@ -649,18 +649,6 @@ mac_execve_success(struct exec_package *pack)
 }
 
 int
-mac_file_check_open(struct ucred *cred, struct file *fp, struct vnode *vp,
-    const char *pathhint)
-{
-	int error;
-
-	ASSERT_VOP_LOCKED(vp, "mac_file_check_open");
-
-	MAC_CHECK(file_check_open, cred, fp, vp, vp->v_label, pathhint);
-	return (error);
-}
-
-int
 mac_check_follow_link(struct nameidata *ndp, char *buf, int len)
 {
 	int error;

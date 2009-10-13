@@ -133,11 +133,6 @@ int     mac_execve_prepare(struct exec_package *pack);
 void    mac_execve_success(struct exec_package *pack);
 #endif
 
-#ifdef ANOUBIS
-int	mac_file_check_open(struct ucred *cred, struct file * fp,
-	    struct vnode *vp, const char * pathhint);
-#endif
-
 int	mac_ifnet_check_transmit(struct ifnet *ifp, struct mbuf *m);
 void	mac_ifnet_create(struct ifnet *ifp);
 void	mac_ifnet_create_mbuf(struct ifnet *ifp, struct mbuf *m);

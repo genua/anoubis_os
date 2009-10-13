@@ -66,7 +66,7 @@ int sfs_enable = 1;
 /* Flags for @sfsmask in @anoubis_inode_security */
 #define SFS_CS_REQUIRED		0x01UL  /* Checksum should be calculated */
 #define SFS_CS_UPTODATE		0x02UL  /* Checksum in ISEC is uptodate */
-#define SFS_LOCKWATCH	  	0x04UL  /* Checksum in ISEC is uptodate */
+#define SFS_LOCKWATCH		0x04UL  /* Checksum in ISEC is uptodate */
 
 struct sfs_label {
 	struct mutex lock;
@@ -123,6 +123,9 @@ int			 mac_anoubis_sfs_vnode_truncate(struct ucred *,
 			     struct vnode *, struct label *,
 			     struct vnode *, struct label *,
 			     struct componentname *);
+int			 mac_anoubis_sfs_vnode_create(struct ucred *,
+			     struct vnode *, struct label *,
+			     struct componentname *, struct vattr *);
 int			 mac_anoubis_sfs_vnode_unlink(struct ucred *,
 			     struct vnode *, struct label *,
 			     struct vnode *, struct label *,
@@ -140,9 +143,6 @@ int			 mac_anoubis_sfs_vnode_rename(struct ucred *,
 			     struct componentname *, struct componentname *);
 int			 mac_anoubis_sfs_vnode_lock(struct ucred *,
 			     struct vnode *, struct label *, unsigned int cmd);
-int			 mac_anoubis_sfs_file_open(struct ucred * active_cred,
-			     struct file *, struct vnode * vp,
-			     struct label * l, const char * pathhint);
 void			 mac_anoubis_sfs_exec_success(struct exec_package *,
 			     struct label *);
 int			 mac_anoubis_sfs_check_follow_link(struct nameidata *,
@@ -154,7 +154,7 @@ int			 sfs_do_csum(struct vnode *, struct sfs_label *);
 int			 sfs_csum(struct vnode *, struct sfs_label *);
 char			*sfs_d_path(struct vnode *dirvp,
 			     struct componentname *cnp, char **bufp);
-int			 sfs_open_checks(struct file *, struct vnode *,
+int			 sfs_open_checks(struct vnode *,
 			     struct sfs_label * sec, int, const char *,
 			     int * flags);
 struct sfs_path_message *sfs_path_fill(unsigned int, struct vnode *,
@@ -320,19 +320,19 @@ anoubis_sfs_getcsum(struct file *file, u_int8_t *csum)
  *   being opened for the call to sfs_d_path.
  *
  *   The race in question is as follows:
- *      Process 1 does:
- *         -> open("/a/b")
- *                which locks "b" via lookup
- *         -> mac_anoubis_sfs_vnode_open(...)
- *         -> vfs_getcwd_common (via sfs_d_path)
- *                which tries to lock "a".
- *      Process 2 does:
- *         -> open("/a/b")
- *         -> lookup
- *              which locks "a" while looking up "b"
- *                    tries to lock "b" once the lookup is successful
- *      Thus locks on "a" and "b" are acquired in reverse order which
- *      can lead to a deadlock involving two processes.
+ *	Process 1 does:
+ *	   -> open("/a/b")
+ *		which locks "b" via lookup
+ *	   -> mac_anoubis_sfs_vnode_open(...)
+ *	   -> vfs_getcwd_common (via sfs_d_path)
+ *		which tries to lock "a".
+ *	Process 2 does:
+ *	   -> open("/a/b")
+ *	   -> lookup
+ *		which locks "a" while looking up "b"
+ *			tries to lock "b" once the lookup is successful
+ *	Thus locks on "a" and "b" are acquired in reverse order which
+ *	can lead to a deadlock involving two processes.
  */
 char *
 sfs_d_path(struct vnode *dirvp, struct componentname *cnp, char **bufp)
@@ -408,7 +408,7 @@ fileopen:
 		pathhint = sfs_d_path(dirvp, cnp, &bufp);
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 	}
-	ret = sfs_open_checks(NULL, vp, sec, acc_mode, pathhint, &flags);
+	ret = sfs_open_checks(vp, sec, acc_mode, pathhint, &flags);
 	if (flags & ANOUBIS_RET_OPEN_LOCKWATCH) {
 		mtx_enter(&sec->lock);
 		sec->sfsmask |= SFS_LOCKWATCH;
@@ -444,7 +444,7 @@ int mac_anoubis_sfs_vnode_unlink(struct ucred * cred, struct vnode * dirvp,
 		vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 	}
-	ret = sfs_open_checks(NULL, vp, sec, VWRITE, pathhint, NULL);
+	ret = sfs_open_checks(vp, sec, VWRITE, pathhint, NULL);
 	if (pathhint)
 		free(bufp, M_MACTEMP);
 	return ret;
@@ -457,6 +457,49 @@ mac_anoubis_sfs_vnode_truncate(struct ucred * cred, struct vnode * vp,
 {
 	return mac_anoubis_sfs_vnode_open(cred, vp, vplabel, VWRITE,
 	    dirvp, dirlabel, cnp);
+}
+
+int
+mac_anoubis_sfs_vnode_create(struct ucred *cred, struct vnode *dir,
+    struct label *label, struct componentname *cnd, struct vattr *va)
+{
+	size_t			 pathlen = 1;
+	int			 alloclen, ret;
+	struct sfs_open_message	*msg;
+	char			*bufp = NULL, *pathhint;
+
+	VOP_UNLOCK(dir, 0, curproc);
+	pathhint = sfs_d_path(dir, cnd, &bufp);
+	vn_lock(dir, LK_EXCLUSIVE | LK_RETRY, curproc);
+	if (pathhint)
+		pathlen = 1 + strlen(pathhint);
+	alloclen = sizeof(struct sfs_open_message) - 1 + pathlen;
+	msg = malloc(alloclen, M_DEVBUF, M_WAITOK);
+	if (!msg) {
+		if (pathhint)
+			free(bufp, M_MACTEMP);
+		return ENOMEM;
+	}
+	msg->flags = 0;
+	if (pathhint) {
+		memcpy(msg->pathhint, pathhint, pathlen);
+		msg->flags |= ANOUBIS_OPEN_FLAG_PATHHINT;
+		free(bufp, M_MACTEMP);
+	} else {
+		msg->pathhint[0] = 0;
+	}
+	msg->flags |= ANOUBIS_OPEN_FLAG_WRITE;
+	msg->ino = 0;
+	msg->dev = 0;
+	sfs_stat_ev++;
+	VOP_UNLOCK(dir, 0, curproc);
+	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
+	vn_lock(dir, LK_EXCLUSIVE | LK_RETRY, curproc);
+	if (ret == EPIPE /* && openation_mode != strict XXX */)
+		return 0;
+	if (ret)
+		sfs_stat_ev_deny++;
+	return ret;
 }
 
 int
@@ -529,8 +572,8 @@ mac_anoubis_sfs_vnode_lock(struct ucred * cred, struct vnode *vp,
 	}
 	mtx_leave(&sec->lock);
 
- 	if (cmd == F_UNLCK)
-        	op = ANOUBIS_PATH_OP_UNLOCK;
+	if (cmd == F_UNLCK)
+		op = ANOUBIS_PATH_OP_UNLOCK;
 	else
 		op = ANOUBIS_PATH_OP_LOCK;
 
@@ -550,7 +593,7 @@ mac_anoubis_sfs_vnode_lock(struct ucred * cred, struct vnode *vp,
 }
 
 int
-sfs_open_checks(struct file * file, struct vnode * vp, struct sfs_label * sec,
+sfs_open_checks(struct vnode * vp, struct sfs_label * sec,
     int mode, const char * pathhint, int * flags)
 {
 	size_t pathlen = 1;
@@ -676,34 +719,6 @@ sfs_path_checks(struct sfs_path_message * msg, int len)
 #define _ACC_MODE_READ(X) (((X)&FREAD?VREAD:0))
 #define _ACC_MODE_WRITE(X) (((X)&FWRITE)?VWRITE:0)
 #define ACC_MODE(X) (_ACC_MODE_READ(X)|_ACC_MODE_WRITE(X))
-
-int
-mac_anoubis_sfs_file_open(struct ucred * active_cred, struct file * file,
-    struct vnode * vp, struct label * l, const char * pathhint)
-{
-	struct sfs_label * sec;
-	if (!sfs_enable)
-		return 0;
-	if (!FPVNODE(file) || !CHECKSUM_OK(vp))
-		return 0;
-	sec = SFS_LABEL(l);
-	assert(sec);
-	if (file->f_flag & FWRITE) {
-		assert((sec->sfsmask & SFS_CS_UPTODATE) == 0);
-	} else {
-		sfs_csum(vp, sec);
-	}
-#if 0
-	/*
-	 * XXX This no longer works because sfs_open_checks expects
-	 * XXX an in core pathname.
-	 */
-	return sfs_open_checks(file, vp, sec, ACC_MODE(file->f_flag), pathhint,
-	    NULL);
-#else
-	return 0;
-#endif
-}
 
 struct sfs_open_message *
 sfs_pack_to_message(struct pack_label *pl, int *lenp)
@@ -952,11 +967,11 @@ struct mac_policy_ops mac_anoubis_sfs_ops =
 	.mpo_vnode_destroy_label = mac_anoubis_sfs_destroy_vnode_label,
 	.mpo_vnode_check_open = mac_anoubis_sfs_vnode_open,
 	.mpo_vnode_check_truncate = mac_anoubis_sfs_vnode_truncate,
+	.mpo_vnode_check_create = mac_anoubis_sfs_vnode_create,
 	.mpo_vnode_check_unlink = mac_anoubis_sfs_vnode_unlink,
 	.mpo_vnode_check_link = mac_anoubis_sfs_vnode_link,
 	.mpo_vnode_check_rename_an = mac_anoubis_sfs_vnode_rename,
 	.mpo_vnode_check_lock = mac_anoubis_sfs_vnode_lock,
-	.mpo_file_check_open = NULL /* mac_anoubis_sfs_file_open */,
 	.mpo_execve_prepare = mac_anoubis_sfs_execve_prepare,
 	.mpo_execve_success = mac_anoubis_sfs_execve_success,
 	.mpo_cred_internalize_label = mac_anoubis_sfs_cred_internalize_label,

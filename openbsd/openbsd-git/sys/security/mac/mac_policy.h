@@ -173,12 +173,6 @@ typedef int	(*mpo_execve_prepare_t)(struct exec_package *, struct label *);
 typedef void	(*mpo_execve_success_t)(struct exec_package *, struct label *);
 #endif
 
-#ifdef ANOUBIS
-typedef int	(*mpo_file_check_open_t)(struct ucred *cred, struct file * fp,
-		    struct vnode *vp, struct label *vplabel,
-		    const char * pathhint);
-#endif
-
 typedef int	(*mpo_ifnet_check_relabel_t)(struct ucred *cred,
 		    struct ifnet *ifp, struct label *ifplabel,
 		    struct label *newlabel);
@@ -742,10 +736,6 @@ struct mac_policy_ops {
 #ifdef ANOUBIS
 	mpo_execve_prepare_t			mpo_execve_prepare;
 	mpo_execve_success_t			mpo_execve_success;
-#endif
-
-#ifdef ANOUBIS
-	mpo_file_check_open_t			mpo_file_check_open;
 #endif
 
 	mpo_ifnet_check_relabel_t		mpo_ifnet_check_relabel;

@@ -167,6 +167,7 @@ struct anoubis_hooks {
 	DECLARE(path_rename);
 	DECLARE(path_symlink);
 	DECLARE(path_truncate);
+	DECLARE(path_mknod);
 #endif
 	DECLARE(cred_prepare);
 	DECLARE(cred_free);
