@@ -456,46 +456,48 @@ mac_anoubis_sfs_vnode_truncate(struct ucred * cred, struct vnode * vp,
 	    dirvp, dirlabel, cnp);
 }
 
+static int
+sfs_path_write(const char *path)
+{
+	int				 alloclen, pathlen, ret;
+	struct sfs_open_message		*msg;
+
+	pathlen = strlen(path) + 1;
+	alloclen = sizeof(struct sfs_open_message) - 1 + pathlen;
+	msg = malloc(alloclen, M_DEVBUF, M_WAITOK);
+	if (!msg)
+		return ENOMEM;
+	msg->flags = 0;
+	memcpy(msg->pathhint, path, pathlen);
+	msg->flags |= ANOUBIS_OPEN_FLAG_PATHHINT;
+	msg->flags |= ANOUBIS_OPEN_FLAG_WRITE;
+	msg->ino = 0;
+	msg->dev = 0;
+	sfs_stat_ev++;
+	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
+	if (ret == EPIPE /* && openation_mode != strict XXX */)
+		return 0;
+	if (ret)
+		sfs_stat_ev_deny++;
+	return ret;
+}
+
 int
 mac_anoubis_sfs_vnode_create(struct ucred *cred, struct vnode *dir,
     struct label *label, struct componentname *cnd, struct vattr *va)
 {
-	size_t			 pathlen = 1;
-	int			 alloclen, ret;
-	struct sfs_open_message	*msg;
+	int			 ret;
 	char			*bufp = NULL, *pathhint;
 
 	VOP_UNLOCK(dir, 0, curproc);
 	pathhint = sfs_d_path(dir, cnd, &bufp);
 	vn_lock(dir, LK_EXCLUSIVE | LK_RETRY, curproc);
-	if (pathhint)
-		pathlen = 1 + strlen(pathhint);
-	alloclen = sizeof(struct sfs_open_message) - 1 + pathlen;
-	msg = malloc(alloclen, M_DEVBUF, M_WAITOK);
-	if (!msg) {
-		if (pathhint)
-			free(bufp, M_MACTEMP);
-		return ENOMEM;
-	}
-	msg->flags = 0;
-	if (pathhint) {
-		memcpy(msg->pathhint, pathhint, pathlen);
-		msg->flags |= ANOUBIS_OPEN_FLAG_PATHHINT;
-		free(bufp, M_MACTEMP);
-	} else {
-		msg->pathhint[0] = 0;
-	}
-	msg->flags |= ANOUBIS_OPEN_FLAG_WRITE;
-	msg->ino = 0;
-	msg->dev = 0;
-	sfs_stat_ev++;
-	VOP_UNLOCK(dir, 0, curproc);
-	ret = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
-	vn_lock(dir, LK_EXCLUSIVE | LK_RETRY, curproc);
-	if (ret == EPIPE /* && openation_mode != strict XXX */)
+	if (pathhint == NULL)
 		return 0;
-	if (ret)
-		sfs_stat_ev_deny++;
+	VOP_UNLOCK(dir, 0, curproc);
+	ret = sfs_path_write(pathhint);
+	vn_lock(dir, LK_EXCLUSIVE | LK_RETRY, curproc);
+	free(bufp, M_MACTEMP);
 	return ret;
 }
 
@@ -513,10 +515,16 @@ mac_anoubis_sfs_vnode_link(struct ucred * cred, struct vnode *dirvp,
 	msg = sfs_path_fill(op, dirvp, cnp, sdirvp, scnp, &len);
 	vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
 
-	if (!msg)
+	if (!msg) {
 		ret = ENOMEM;
-	else
-		ret = sfs_path_checks(msg, len);
+	} else {
+		ret = sfs_path_write(msg->paths);
+		if (ret) {
+			free(msg, M_DEVBUF);
+		} else {
+			ret = sfs_path_checks(msg, len);
+		}
+	}
 
 	return ret;
 }
@@ -539,10 +547,19 @@ mac_anoubis_sfs_vnode_rename(struct ucred * cred, struct vnode *dirvp,
 	if (vp != NULL)
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 
-	if (!msg)
+	if (!msg) {
 		ret = ENOMEM;
-	else
-		ret = sfs_path_checks(msg, len);
+	} else {
+		ret = sfs_path_write(msg->paths);
+		if (ret == 0) {
+			ret = sfs_path_write(msg->paths + msg->pathlen[0]);
+		}
+		if (ret) {
+			free(msg, M_DEVBUF);
+		} else {
+			ret = sfs_path_checks(msg, len);
+		}
+	}
 
 	return ret;
 }
