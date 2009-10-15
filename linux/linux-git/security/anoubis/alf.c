@@ -160,10 +160,21 @@ static int alf_check_policy(int op, struct socket *sock,
 		 * uses the same trick so this should be ok.
 		 */
 		if (sock->ops->getname(sock, (struct sockaddr *)tmpaddr,
-		    &addrlen, 2) < 0)
-			return -EBADF;
-
-		address = (struct sockaddr *)&tmpaddr;
+		    &addrlen, 2) < 0) {
+			/*
+			 * Allow a missing remote address for non-INET
+			 * sockets. Some dhclients exhibit this behaviour
+			 * on RAW sockets.
+			 */
+			switch (sock->sk->sk_family) {
+			case AF_INET:
+			case AF_INET6:
+				return -EBADF;
+			}
+			address = NULL;
+		} else {
+			address = (struct sockaddr *)&tmpaddr;
+		}
 	}
 
 	event_size = sizeof(struct alf_event);
