@@ -154,6 +154,7 @@ char			*sfs_d_path(struct vnode *dirvp,
 int			 sfs_open_checks(struct vnode *,
 			     struct sfs_label * sec, int, const char *,
 			     int * flags);
+static int		 sfs_path_write(const char *path, int flags);
 struct sfs_path_message *sfs_path_fill(unsigned int, struct vnode *,
 			     struct componentname *, struct vnode *,
 			     struct componentname *,  int *);
@@ -393,7 +394,9 @@ mac_anoubis_sfs_vnode_open(struct ucred * cred, struct vnode * vp,
 		sfs_csum(vp, sec);
 	}
 fileopen:
-	if (!sfs_enable || !CHECKSUM_OK(vp))
+	if (!sfs_enable)
+		return 0;
+	if (!CHECKSUM_OK(vp) && vp->v_type != VSOCK)
 		return 0;
 	pathhint = NULL;
 	if (dirvp) {
@@ -405,7 +408,17 @@ fileopen:
 		pathhint = sfs_d_path(dirvp, cnp, &bufp);
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 	}
-	ret = sfs_open_checks(vp, sec, acc_mode, pathhint, &flags);
+	if (!CHECKSUM_OK(vp)) {
+		int flags = ANOUBIS_OPEN_FLAG_READ | ANOUBIS_OPEN_FLAG_WRITE;
+		ret = ENOMEM;
+		if (pathhint) {
+			VOP_UNLOCK(vp, 0, curproc);
+			ret = sfs_path_write(pathhint, flags);
+			vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
+		}
+	} else {
+		ret = sfs_open_checks(vp, sec, acc_mode, pathhint, &flags);
+	}
 	if (flags & ANOUBIS_RET_OPEN_LOCKWATCH) {
 		mtx_enter(&sec->lock);
 		sec->sfsmask |= SFS_LOCKWATCH;
@@ -457,7 +470,7 @@ mac_anoubis_sfs_vnode_truncate(struct ucred * cred, struct vnode * vp,
 }
 
 static int
-sfs_path_write(const char *path)
+sfs_path_write(const char *path, int flags)
 {
 	int				 alloclen, pathlen, ret;
 	struct sfs_open_message		*msg;
@@ -467,10 +480,9 @@ sfs_path_write(const char *path)
 	msg = malloc(alloclen, M_DEVBUF, M_WAITOK);
 	if (!msg)
 		return ENOMEM;
-	msg->flags = 0;
+	msg->flags = flags;
 	memcpy(msg->pathhint, path, pathlen);
 	msg->flags |= ANOUBIS_OPEN_FLAG_PATHHINT;
-	msg->flags |= ANOUBIS_OPEN_FLAG_WRITE;
 	msg->ino = 0;
 	msg->dev = 0;
 	sfs_stat_ev++;
@@ -495,7 +507,7 @@ mac_anoubis_sfs_vnode_create(struct ucred *cred, struct vnode *dir,
 	if (pathhint == NULL)
 		return 0;
 	VOP_UNLOCK(dir, 0, curproc);
-	ret = sfs_path_write(pathhint);
+	ret = sfs_path_write(pathhint, ANOUBIS_OPEN_FLAG_WRITE);
 	vn_lock(dir, LK_EXCLUSIVE | LK_RETRY, curproc);
 	free(bufp, M_MACTEMP);
 	return ret;
@@ -518,7 +530,7 @@ mac_anoubis_sfs_vnode_link(struct ucred * cred, struct vnode *dirvp,
 	if (!msg) {
 		ret = ENOMEM;
 	} else {
-		ret = sfs_path_write(msg->paths);
+		ret = sfs_path_write(msg->paths, ANOUBIS_OPEN_FLAG_WRITE);
 		if (ret) {
 			free(msg, M_DEVBUF);
 		} else {
@@ -550,9 +562,10 @@ mac_anoubis_sfs_vnode_rename(struct ucred * cred, struct vnode *dirvp,
 	if (!msg) {
 		ret = ENOMEM;
 	} else {
-		ret = sfs_path_write(msg->paths);
+		ret = sfs_path_write(msg->paths, ANOUBIS_OPEN_FLAG_WRITE);
 		if (ret == 0) {
-			ret = sfs_path_write(msg->paths + msg->pathlen[0]);
+			ret = sfs_path_write(msg->paths + msg->pathlen[0],
+			    ANOUBIS_OPEN_FLAG_WRITE);
 		}
 		if (ret) {
 			free(msg, M_DEVBUF);
