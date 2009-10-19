@@ -137,7 +137,7 @@ static int eventdev_wait(struct eventdev_queue * q, struct eventdev_msg * m)
 		spin_lock_bh(&q->lock);
 		list_del(&m->link);
 		q->waiters--;
-		ret = -EINTR;
+		ret = EINTR;
 		spin_unlock_bh(&q->lock);
 	}
 	free_eventdev_msg(m);
