@@ -716,6 +716,8 @@ errout:
 			    (rep->r_flags & R_SOFTTERM))
 				return (EINTR);
 		} while (error == EWOULDBLOCK);
+		if (!error && *mp == NULL)
+			error = EPIPE;
 		len -= auio.uio_resid;
 	}
 	if (error) {
@@ -773,8 +775,9 @@ nfs_reply(myrep)
 			 * Ignore routing errors on connectionless protocols??
 			 */
 			if (NFSIGNORE_SOERROR(nmp->nm_soflags, error)) {
-				if (nmp->nm_so)
-					nmp->nm_so->so_error = 0;
+				if (!nmp->nm_so)
+					return error;
+				nmp->nm_so->so_error = 0;
 				continue;
 			}
 			return (error);
