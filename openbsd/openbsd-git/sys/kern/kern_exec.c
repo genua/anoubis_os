@@ -517,9 +517,6 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 		vrele(p->p_textvp);
 	VREF(pack.ep_vp);
 	p->p_textvp = pack.ep_vp;
-#ifdef ANOUBIS
-	mac_execve_success(&pack);
-#endif
 
 	atomic_setbits_int(&p->p_flag, P_EXEC);
 	if (p->p_flag & P_PPWAIT) {
@@ -663,6 +660,14 @@ do_execve(struct proc *p, void *v, register_t *retval, struct mac *mac_p)
 		}
 		splx(s);
 	}
+
+#ifdef ANOUBIS
+	/*
+	 * Do this late because mac_execve_success relies on a properly
+	 * set P_SUGIDEXEC flag.
+	 */
+	mac_execve_success(&pack);
+#endif
 
 	uvm_km_free_wakeup(exec_map, (vaddr_t) argp, NCARGS);
 

@@ -76,6 +76,7 @@ struct sfs_label {
 
 struct pack_label {
 	unsigned int	 flags;
+	int		 will_transition;
 	char		 csum[ANOUBIS_CS_LEN];
 	char		*path;
 	ino_t		 ino;
@@ -143,8 +144,12 @@ int			 mac_anoubis_sfs_vnode_rename(struct ucred *,
 			     struct componentname *, struct componentname *);
 int			 mac_anoubis_sfs_vnode_lock(struct ucred *,
 			     struct vnode *, struct label *, unsigned int cmd);
-void			 mac_anoubis_sfs_exec_success(struct exec_package *,
+void			 mac_anoubis_sfs_execve_success(struct exec_package *,
 			     struct label *);
+int			 mac_anoubis_sfs_will_transition(struct ucred *old,
+			     struct vnode *vp, struct label *vplabel,
+			     struct label *interpvplabel,
+			     struct exec_package *pack, struct label *eplabel);
 int			 mac_anoubis_sfs_check_follow_link(struct nameidata *,
 			     char *, int);
 int			 sfs_do_csum(struct vnode *, struct sfs_label *);
@@ -160,8 +165,6 @@ struct sfs_path_message *sfs_path_fill(unsigned int, struct vnode *,
 			     struct componentname *,  int *);
 int			 sfs_path_checks(struct sfs_path_message *, int);
 struct sfs_open_message	*sfs_pack_to_message(struct pack_label *pl, int *lenp);
-void			 mac_anoubis_sfs_execve_success(struct exec_package *,
-			     struct label *);
 int			 mac_anoubis_sfs_cred_internalize_label(struct label *,
 			     char *, char *, int *);
 int			 mac_anoubis_sfs_execve_prepare(struct exec_package *,
@@ -786,7 +789,18 @@ mac_anoubis_sfs_execve_success(struct exec_package *pack, struct label *l)
 	msg = sfs_pack_to_message(pl, &len);
 	assert(msg);
 	msg->flags |= ANOUBIS_OPEN_FLAG_EXEC;
+	if (curproc->p_flag & P_SUGIDEXEC)
+		msg->flags |= ANOUBIS_OPEN_FLAG_SECUREEXEC;
 	anoubis_notify(msg, len, ANOUBIS_SOURCE_SFSEXEC);
+}
+
+int
+mac_anoubis_sfs_will_transition(struct ucred *old, struct vnode *vp,
+    struct label *vplabel, struct label *interpvplabel,
+    struct exec_package *pack, struct label *eplabel)
+{
+	struct pack_label	*pl = PACK_LABEL(eplabel);
+	return pl->will_transition;
 }
 
 int
@@ -803,6 +817,7 @@ mac_anoubis_sfs_cred_internalize_label(struct label *label, char *name,
 	pl = malloc(sizeof(struct pack_label), M_MACTEMP, M_WAITOK);
 	assert(pl);
 	pl->flags = 0;
+	pl->will_transition = 0;
 	pl->path = NULL;
 	mac_label_set(label, mac_anoubis_sfs_slot, (caddr_t)pl);
 	return 0;
@@ -959,6 +974,7 @@ struct mac_policy_ops mac_anoubis_sfs_ops =
 	.mpo_vnode_check_lock = mac_anoubis_sfs_vnode_lock,
 	.mpo_execve_prepare = mac_anoubis_sfs_execve_prepare,
 	.mpo_execve_success = mac_anoubis_sfs_execve_success,
+	.mpo_vnode_execve_will_transition = mac_anoubis_sfs_will_transition,
 	.mpo_cred_internalize_label = mac_anoubis_sfs_cred_internalize_label,
 	.mpo_cred_destroy_label = mac_anoubis_sfs_cred_destroy_label,
 	.mpo_check_follow_link = mac_anoubis_sfs_check_follow_link,
