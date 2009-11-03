@@ -128,6 +128,7 @@ extern int anoubis_notify(void * buf, size_t len, int src);
 extern int anoubis_notify_atomic(void * buf, size_t len, int src);
 extern void anoubis_task_create(struct task_struct *tsk);
 extern void anoubis_task_destroy(struct task_struct *tsk);
+extern int anoubis_need_secureexec(struct linux_binprm *bprm);
 
 /*
  * Module mulitplexor functions
@@ -172,7 +173,8 @@ struct anoubis_hooks {
 	DECLARE(cred_prepare);
 	DECLARE(cred_free);
 	DECLARE(bprm_set_creds);
-	DECLARE(bprm_committing_creds);
+	DECLARE(bprm_committed_creds);
+	DECLARE(bprm_secureexec);
 };
 #undef DECLARE
 
@@ -180,6 +182,7 @@ extern int anoubis_register(struct anoubis_hooks *, int *);
 extern void anoubis_unregister(int idx);
 extern void * anoubis_set_sublabel(void ** labelp, int idx, void * subl);
 extern void * anoubis_get_sublabel(void ** labelp, int idx);
+extern void * anoubis_get_sublabel_const(void *label, int idx);
 extern anoubis_cookie_t anoubis_get_task_cookie(void);
 
 #endif

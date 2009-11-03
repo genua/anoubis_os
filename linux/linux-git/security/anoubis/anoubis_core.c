@@ -445,9 +445,7 @@ static struct anoubis_label * ac_alloc_label(int gfp)
 
 void * anoubis_get_sublabel(void ** lp, int idx)
 {
-	void * ret = NULL;
 	struct anoubis_label * l = (*lp);
-	struct anoubis_hooks * h;
 	unsigned long flags;
 
 	if (unlikely(!l)) {
@@ -463,6 +461,22 @@ void * anoubis_get_sublabel(void ** lp, int idx)
 		}
 		spin_unlock_irqrestore(&late_alloc_lock, flags);
 	}
+	return anoubis_get_sublabel_const(l, idx);
+}
+
+/*
+ * This function is a faster replacement for anoubis_get_sublabel that
+ * can be used iff the label is already allocated. The main reason for
+ * the existence of this function is a security label pointer embedded
+ * in a const data structure.
+ */
+void * anoubis_get_sublabel_const(void *lv, int idx)
+{
+	struct anoubis_label * l = lv;
+	void * ret = NULL;
+	struct anoubis_hooks * h;
+	unsigned long flags;
+
 	spin_lock_irqsave(&l->label_lock, flags);
 	if (l->labels[idx] == NULL)
 		goto out;
@@ -628,7 +642,7 @@ void anoubis_unregister(int idx)
 	ret;							\
 });
 
-#define VOIDHOOKS(FUNC, ARGS) ({				\
+#define VOIDHOOKS(FUNC, ARGS) do {				\
 	int i;							\
 	if (original_ops)					\
 		original_ops->FUNC ARGS;			\
@@ -647,7 +661,7 @@ void anoubis_unregister(int idx)
 			rcu_read_unlock();			\
 		}						\
 	}							\
-})
+} while(0)
 
 /* NETWORK */
 static int ac_unix_stream_connect(struct socket *sock, struct socket *other,
@@ -879,9 +893,20 @@ static int ac_bprm_set_creds(struct linux_binprm * bprm)
 	return HOOKS(bprm_set_creds, (bprm));
 }
 
-void ac_bprm_committing_creds(struct linux_binprm *bprm)
+void ac_bprm_committed_creds(struct linux_binprm *bprm)
 {
-	VOIDHOOKS(bprm_committing_creds, (bprm));
+	VOIDHOOKS(bprm_committed_creds, (bprm));
+}
+
+int ac_bprm_secureexec(struct linux_binprm *bprm)
+{
+	return HOOKS(bprm_secureexec, (bprm));
+}
+
+/* Wrapper that exports secureexec to the anoubis modules. */
+int anoubis_need_secureexec(struct linux_binprm *bprm)
+{
+	return security_bprm_secureexec(bprm);
 }
 
 static struct security_operations anoubis_core_ops = {
@@ -917,7 +942,8 @@ static struct security_operations anoubis_core_ops = {
 	.cred_free = ac_cred_free,
 	.cred_commit = ac_cred_commit,
 	.bprm_set_creds = ac_bprm_set_creds,
-	.bprm_committing_creds = ac_bprm_committing_creds,
+	.bprm_committed_creds = ac_bprm_committed_creds,
+	.bprm_secureexec = ac_bprm_secureexec,
 };
 
 /*
@@ -961,8 +987,10 @@ EXPORT_SYMBOL(anoubis_notify_atomic);
 EXPORT_SYMBOL(anoubis_register);
 EXPORT_SYMBOL(anoubis_unregister);
 EXPORT_SYMBOL(anoubis_get_sublabel);
+EXPORT_SYMBOL(anoubis_get_sublabel_const);
 EXPORT_SYMBOL(anoubis_set_sublabel);
 EXPORT_SYMBOL(anoubis_get_task_cookie);
+EXPORT_SYMBOL(anoubis_need_secureexec);
 
 security_initcall(anoubis_core_init);
 module_init(anoubis_core_init_late);

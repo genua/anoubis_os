@@ -136,19 +136,19 @@ struct sfs_inode_sec {
 
 /* Bprm security label */
 struct sfs_bprm_sec {
-	spinlock_t lock;
 	struct sfs_open_message * msg;
 	int len;
+	unsigned int need_secureexec:1;
 };
 
 /* Macros to access the security labels with their approriate type. */
 #define _SEC(TYPE,X) ((TYPE)anoubis_get_sublabel(&(X), ac_index))
+#define _SECCONST(TYPE,X) ((TYPE)anoubis_get_sublabel_const(X, ac_index))
 #define ISEC(X) _SEC(struct sfs_inode_sec *, (X)->i_security)
-#define BSEC(X) _SEC(struct sfs_bprm_sec *, (X)->cred->security)
+#define CSEC(X) _SECCONST(struct sfs_bprm_sec *, (X)->security)
 
 #define _SETSEC(TYPE,X,V) ((TYPE)anoubis_set_sublabel(&(X), ac_index, (V)))
 #define SETISEC(X,V) _SETSEC(struct sfs_inode_sec *, ((X)->i_security), (V))
-#define SETBSEC(X,V) _SETSEC(struct sfs_bprm_sec *, ((X)->cred->security), (V))
 #define SETCSEC(X,V) _SETSEC(struct sfs_bprm_sec *, ((X)->security), (V))
 
 /*
@@ -1067,6 +1067,7 @@ static int sfs_cred_prepare(struct cred * cred, const struct cred *ocred,
 	if (!sec)
 		return -ENOMEM;
 	sec->msg = NULL;
+	sec->need_secureexec = 0;
 	old = SETCSEC(cred, sec);
 	BUG_ON(old);
 	return 0;
@@ -1088,7 +1089,7 @@ static void sfs_cred_free(struct cred * cred)
  */
 static int sfs_bprm_set_creds(struct linux_binprm * bprm)
 {
-	struct sfs_bprm_sec * sec = BSEC(bprm);
+	struct sfs_bprm_sec * sec = CSEC(bprm->cred);
 	struct file * file = bprm->file;
 	struct inode * inode;
 	struct sfs_open_message * msg;
@@ -1108,16 +1109,21 @@ static int sfs_bprm_set_creds(struct linux_binprm * bprm)
 		sec->msg = msg;
 		sec->len = len;
 	}
+	/*
+	 * TODO CEH: We should have the possibility to get a flag from
+	 * TODO CEH: user space that sets need_secureexec if this exec
+	 * TODO CEH: will result in a context change.
+	 */
 	return sfs_open_checks(file, MAY_READ|MAY_EXEC, NULL);
 }
 
 /*
- * Inform anoubisd about exec systemcalls,
- * so it can update the required attributes.
+ * Inform anoubisd about exec system calls. Note that bprm->cred is already
+ * committed to current_cred() and brpm->cred is NULL.
  */
-static void sfs_bprm_committing_creds(struct linux_binprm * bprm)
+static void sfs_bprm_committed_creds(struct linux_binprm * bprm)
 {
-	struct sfs_bprm_sec * sec = BSEC(bprm);
+	struct sfs_bprm_sec * sec = CSEC(current_cred());
 	struct file * file = bprm->file;
 	struct sfs_open_message * msg;
 	int len;
@@ -1126,8 +1132,11 @@ static void sfs_bprm_committing_creds(struct linux_binprm * bprm)
 		msg = sec->msg;
 		len = sec->len;
 		sec->msg = NULL;
-	} else
+	} else {
 		msg = sfs_open_fill(&file->f_path, MAY_READ|MAY_EXEC, &len);
+	}
+	if (anoubis_need_secureexec(bprm))
+		msg->flags |= ANOUBIS_OPEN_FLAG_SECUREEXEC;
 	anoubis_notify(msg, len, ANOUBIS_SOURCE_SFSEXEC);
 }
 
@@ -1175,6 +1184,19 @@ static int sfs_inode_removexattr(struct dentry *dentry, const char *name)
 	return 0;
 }
 
+/*
+ * Return true if the anoubis-SFS module requires a secure exec. Currently,
+ * this is a dummy hook as need_seucreexec is never set. However, this
+ * will change in the future.
+ * NOTE: brpm->cred might be NULL at this point. Use current_cred() instead.
+ */
+static int sfs_bprm_secureexec(struct linux_binprm *bprm)
+{
+	struct sfs_bprm_sec * sec = CSEC(current_cred());
+
+	return sec->need_secureexec;
+}
+
 /* Security operations. */
 static struct anoubis_hooks sfs_ops = {
 	.version = ANOUBISCORE_VERSION,
@@ -1183,7 +1205,8 @@ static struct anoubis_hooks sfs_ops = {
 	.cred_prepare = sfs_cred_prepare,
 	.cred_free = sfs_cred_free,
 	.bprm_set_creds = sfs_bprm_set_creds,
-	.bprm_committing_creds = sfs_bprm_committing_creds,
+	.bprm_committed_creds = sfs_bprm_committed_creds,
+	.bprm_secureexec = sfs_bprm_secureexec,
 	.inode_permission = sfs_inode_permission,
 	.inode_follow_link = sfs_inode_follow_link,
 	.dentry_open = sfs_dentry_open,
