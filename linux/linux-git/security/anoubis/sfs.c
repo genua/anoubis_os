@@ -171,6 +171,7 @@ static const char * csnocache[] = {
  */
 static const char * csnodev[]  = {
 	"tmpfs",
+	"dazukofs",
 	NULL,
 };
 
@@ -446,8 +447,9 @@ static int sfs_read_syssig(struct dentry * dentry)
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
+	/* we only validate syssig on checksum_ok filesystems */
 	if (!checksum_ok(inode))
-		return -EINVAL;
+		return 0;
 	spin_lock(&sec->lock);
 	ret = sec->sfsmask;
 	spin_unlock(&sec->lock);
@@ -494,11 +496,12 @@ static int sfs_check_syssig(struct file * file, int mask)
 	inode = dentry->d_inode;
 	if (!inode)
 		return 0;
+	/* We only validate syssig on checksum_ok filesystems */
+	if (!checksum_ok(inode))
+		return 0;
 	ret = sfs_read_syssig(dentry);
 	if (ret <= 0)
 		return ret;
-	if (!checksum_ok(inode))
-		return -EACCES;
 	/* We do have a system signature. */
 	if (mask & MAY_WRITE)
 		return -EACCES;
@@ -657,10 +660,6 @@ static int sfs_dentry_open(struct file * file, const struct cred * cred)
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
-	if (!checksum_ok(inode))
-		return 0;
-	if (skipsum_ok(inode, dentry))
-		return 0;
 	mask = 0;
 	if (file->f_mode & FMODE_READ)
 		mask |= MAY_READ;
@@ -671,7 +670,8 @@ static int sfs_dentry_open(struct file * file, const struct cred * cred)
 		sec->sfsmask &= ~SFS_CS_UPTODATE;
 		spin_unlock(&sec->lock);
 	} else {
-		sfs_csum(file, inode);
+		if (checksum_ok(inode) && !skipsum_ok(inode, dentry))
+			sfs_csum(file, inode);
 	}
 
 	ret = sfs_open_checks(file, mask, &flags);
@@ -1091,16 +1091,22 @@ static int sfs_bprm_set_creds(struct linux_binprm * bprm)
 {
 	struct sfs_bprm_sec * sec = CSEC(bprm->cred);
 	struct file * file = bprm->file;
+	struct dentry * dentry;
 	struct inode * inode;
 	struct sfs_open_message * msg;
 	int len;
 
 	BUG_ON(!file);
 	BUG_ON(file->f_mode & FMODE_WRITE);
-	inode = file->f_path.dentry->d_inode;
+	dentry = file->f_path.dentry;
+	if (!dentry)
+		return 0;
+	inode = dentry->d_inode;
+	if (!inode)
+		return 0;
 	if (!sec)
 		return -ENOMEM;
-	if (checksum_ok(inode))
+	if (checksum_ok(inode) && !skipsum_ok(inode, dentry))
 		sfs_csum(file, inode);
 	if (sec->msg == NULL) {
 		msg = sfs_open_fill(&file->f_path, MAY_READ|MAY_EXEC, &len);
