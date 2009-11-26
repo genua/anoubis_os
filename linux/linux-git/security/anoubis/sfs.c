@@ -172,6 +172,7 @@ static const char * csnocache[] = {
 static const char * csnodev[]  = {
 	"tmpfs",
 	"dazukofs",
+	"ecryptfs",
 	NULL,
 };
 
