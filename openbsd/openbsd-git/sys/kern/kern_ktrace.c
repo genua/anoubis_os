@@ -525,10 +525,10 @@ ktrcanset(struct proc *callp, struct proc *targetp)
 	    (targetp->p_traceflag & KTRFAC_ROOT) == 0 &&
 	    !ISSET(targetp->p_flag, P_SUGID)) ||
 	    caller->pc_ucred->cr_uid == 0)
-		return (1);
-
 #ifdef MAC
-	if (!mac_proc_check_debug(callp->p_ucred, targetp))
+		if (!mac_proc_check_debug(callp->p_ucred, targetp))
+			return (1);
+#else
 		return (1);
 #endif
 
