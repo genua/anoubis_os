@@ -22,21 +22,20 @@ if [ "`grep CONFIG_DRM=y .config | cut -f2 -d\=`" = "y" ]; then
 fi
 
 PROVIDES="$PROVIDES kernel-$KERNELRELEASE"
-__KERNELRELEASE=`echo $KERNELRELEASE | sed -e "s/-//g"`
 
 echo "Name: kernel"
 echo "Summary: The Linux Kernel"
-echo "Version: $__KERNELRELEASE"
+echo "Version: ${KERNELRELEASE%-*}"
 # we need to determine the NEXT version number so that uname and
 # rpm -q will agree
-echo "Release: `. $srctree/scripts/mkversion`"
+echo "Release: ${KERNELRELEASE#*-}"
 echo "License: GPL"
 echo "Group: System Environment/Kernel"
 echo "Vendor: The Linux Community"
 echo "URL: http://www.kernel.org"
 
 if ! $PREBUILT; then
-echo "Source: kernel-$__KERNELRELEASE.tar.gz"
+echo "Source: kernel-$KERNELRELEASE.tar.gz"
 fi
 
 echo "BuildRoot: %{_tmppath}/%{name}-%{PACKAGE_VERSION}-root"
@@ -170,7 +169,7 @@ if [ -x /usr/lib/bootloader/bootloader_entry ] ; then
 		initrd-$KERNELRELEASE
 elif [ -x /sbin/new-kernel-pkg ] ; then
 	# fedora
-	/sbin/new-kernel-pkg --package kernel-$__KERNELRELEASE \
+	/sbin/new-kernel-pkg --package kernel-$KERNELRELEASE \
 		--mkinitrd --depmod --install $KERNELRELEASE
 else 
 	echo "Warning: Don't know how to create initrd for this system"
@@ -187,7 +186,7 @@ if [ -x /usr/lib/bootloader/bootloader_entry ] ; then
 		initrd-$KERNELRELEASE
 elif [ -x /sbin/new-kernel-pkg ] ; then
 	# fedora
-	/sbin/new-kernel-pkg --package kernel-$__KERNELRELEASE \
+	/sbin/new-kernel-pkg --package kernel-$KERNELRELEASE \
 		--rminitrd --rmmoddep --remove $KERNELRELEASE
 else 
 	echo "Warning: Don't know how to remove initrd for this system"
