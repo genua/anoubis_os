@@ -334,6 +334,8 @@ anoubis_sfs_getcsum(struct file *file, u_int8_t *csum)
  *			tries to lock "b" once the lookup is successful
  *	Thus locks on "a" and "b" are acquired in reverse order which
  *	can lead to a deadlock involving two processes.
+ *
+ * Locking Summary: Do not hold any vnode locks when calling this function.
  */
 char *
 sfs_d_path(struct vnode *dirvp, struct componentname *cnp, char **bufp)
@@ -368,6 +370,9 @@ sfs_d_path(struct vnode *dirvp, struct componentname *cnp, char **bufp)
 	return bp;
 }
 
+/*
+ * Locking: vp is locked, dirvp is unlocked.
+ */
 int
 mac_anoubis_sfs_vnode_open(struct ucred * cred, struct vnode * vp,
     struct label * vplabel, int acc_mode, struct vnode *dirvp,
@@ -432,46 +437,9 @@ fileopen:
 	return ret;
 }
 
-int mac_anoubis_sfs_vnode_unlink(struct ucred * cred, struct vnode * dirvp,
-    struct label * dirlabel, struct vnode *vp, struct label *vplabel,
-    struct componentname *cnp)
-{
-	struct sfs_label * sec = SFS_LABEL(vplabel);
-	char *pathhint, *bufp;
-	int ret;
-
-	/* We don't handle directories yet */
-	if (!sfs_enable || !CHECKSUM_OK(vp))
-		return 0;
-
-	pathhint = NULL;
-
-	if (dirvp) {
-		/*
-		 * The reason for the VOP_UNLOCK is explained in the
-		 * comment above sfs_d_path
-		 */
-		VOP_UNLOCK(vp, 0, curproc);
-		VOP_UNLOCK(dirvp, 0, curproc);
-		pathhint = sfs_d_path(dirvp, cnp, &bufp);
-		vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
-		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
-	}
-	ret = sfs_open_checks(vp, sec, VWRITE, pathhint, NULL);
-	if (pathhint)
-		free(bufp, M_MACTEMP);
-	return ret;
-}
-
-int
-mac_anoubis_sfs_vnode_truncate(struct ucred * cred, struct vnode * vp,
-    struct label * vplabel, struct vnode *dirvp,
-    struct label *dirlabel, struct componentname *cnp)
-{
-	return mac_anoubis_sfs_vnode_open(cred, vp, vplabel, VWRITE,
-	    dirvp, dirlabel, cnp);
-}
-
+/*
+ * Locking: No vnode locks must be held when calling this function.
+ */
 static int
 sfs_path_write(const char *path, int flags)
 {
@@ -497,6 +465,69 @@ sfs_path_write(const char *path, int flags)
 	return ret;
 }
 
+/*
+ * Locking: Both vp and dirvp are locked.
+ *          vp == dirvp is possbile.
+ * The reason for the VOP_UNLOCK is explained in the comment above sfs_d_path.
+ */
+int mac_anoubis_sfs_vnode_unlink(struct ucred * cred, struct vnode * dirvp,
+    struct label * dirlabel, struct vnode *vp, struct label *vplabel,
+    struct componentname *cnp)
+{
+	struct sfs_label * sec = SFS_LABEL(vplabel);
+	char *pathhint, *bufp;
+	int ret = 0;
+
+	if (!sfs_enable)
+		return 0;
+
+	pathhint = NULL;
+	if (dirvp && dirvp != vp)
+		VOP_UNLOCK(dirvp, 0, curproc);
+	/* At this point exactly vp is locked. */
+	if (dirvp) {
+		VOP_UNLOCK(vp, 0, curproc);
+		pathhint = sfs_d_path(dirvp, cnp, &bufp);
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
+	}
+	if (CHECKSUM_OK(vp)) {
+		/* sfs_open_checks needs vp locked. */
+		ret = sfs_open_checks(vp, sec, VWRITE, pathhint, NULL);
+	} else if (pathhint) {
+		/* sfs_path_write needs vp unlocked. */
+		VOP_UNLOCK(vp, 0, curproc);
+		ret = sfs_path_write(pathhint, ANOUBIS_OPEN_FLAG_WRITE);
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
+	}
+	if (dirvp && dirvp != vp) {
+		/*
+		 * We need to reacquire the directory lock but we must
+		 * not do this while holding the vp lock.
+		 */
+		VOP_UNLOCK(vp, 0, curproc);
+		vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
+	}
+	if (pathhint)
+		free(bufp, M_MACTEMP);
+	return ret;
+}
+
+/*
+ * Locking: vp is locked, dirvp is unlocked, no other vnode locks are held.
+ */
+int
+mac_anoubis_sfs_vnode_truncate(struct ucred * cred, struct vnode * vp,
+    struct label * vplabel, struct vnode *dirvp,
+    struct label *dirlabel, struct componentname *cnp)
+{
+	return mac_anoubis_sfs_vnode_open(cred, vp, vplabel, VWRITE,
+	    dirvp, dirlabel, cnp);
+}
+
+/*
+ * Locking: The vnode lock of dir is held.
+ */
 int
 mac_anoubis_sfs_vnode_create(struct ucred *cred, struct vnode *dir,
     struct label *label, struct componentname *cnd, struct vattr *va)
@@ -516,6 +547,9 @@ mac_anoubis_sfs_vnode_create(struct ucred *cred, struct vnode *dir,
 	return ret;
 }
 
+/*
+ * Locking: The vnode lock of dirvp is held, all other vnodes are unlocked.
+ */
 int
 mac_anoubis_sfs_vnode_link(struct ucred * cred, struct vnode *dirvp,
     struct label *dirlabel, struct vnode *vp, struct label *vplabel,
@@ -533,17 +567,23 @@ mac_anoubis_sfs_vnode_link(struct ucred * cred, struct vnode *dirvp,
 	if (!msg) {
 		ret = ENOMEM;
 	} else {
+		VOP_UNLOCK(dirvp, 0, curproc);
 		ret = sfs_path_write(msg->paths, ANOUBIS_OPEN_FLAG_WRITE);
 		if (ret) {
 			free(msg, M_DEVBUF);
 		} else {
 			ret = sfs_path_checks(msg, len);
 		}
+		vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
 	}
 
 	return ret;
 }
 
+/*
+ * Locking: The vnode locks of dirvp and vp (if not NULL) are held.
+ *          dirvp == vp is allowed and vp may be NULL.
+ */
 int
 mac_anoubis_sfs_vnode_rename(struct ucred * cred, struct vnode *dirvp,
     struct label *dirlabel, struct vnode *vp, struct label *vplabel,
@@ -554,32 +594,34 @@ mac_anoubis_sfs_vnode_rename(struct ucred * cred, struct vnode *dirvp,
 	struct sfs_path_message * msg;
 	int len, ret;
 
-	if (vp != NULL)
+	if (vp != NULL && vp != dirvp)
 		VOP_UNLOCK(vp, 0, curproc);
 	VOP_UNLOCK(dirvp, 0, curproc);
 	msg = sfs_path_fill(op, dirvp, cnp, sdirvp, scnp, &len);
-	vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
-	if (vp != NULL)
-		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 
 	if (!msg) {
 		ret = ENOMEM;
 	} else {
 		ret = sfs_path_write(msg->paths, ANOUBIS_OPEN_FLAG_WRITE);
-		if (ret == 0) {
+		if (ret == 0)
 			ret = sfs_path_write(msg->paths + msg->pathlen[0],
 			    ANOUBIS_OPEN_FLAG_WRITE);
-		}
 		if (ret) {
 			free(msg, M_DEVBUF);
 		} else {
 			ret = sfs_path_checks(msg, len);
 		}
 	}
+	vn_lock(dirvp, LK_EXCLUSIVE | LK_RETRY, curproc);
+	if (vp && vp != dirvp)
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY, curproc);
 
 	return ret;
 }
 
+/*
+ * Locking: No vnode locks are held.
+ */
 int
 mac_anoubis_sfs_vnode_lock(struct ucred * cred, struct vnode *vp,
     struct label *vplabel, unsigned int cmd)
@@ -622,6 +664,9 @@ mac_anoubis_sfs_vnode_lock(struct ucred * cred, struct vnode *vp,
 	return ret;
 }
 
+/*
+ * Locking: The vnode lock of vp must be held, do NOT hold other vnode locks.
+ */
 int
 sfs_open_checks(struct vnode * vp, struct sfs_label * sec,
     int mode, const char * pathhint, int * flags)
@@ -682,6 +727,9 @@ sfs_open_checks(struct vnode * vp, struct sfs_label * sec,
 	return ret;
 }
 
+/*
+ * Locking: Do not call this function with any vnode locks held.
+ */
 struct sfs_path_message *
 sfs_path_fill(unsigned int op, struct vnode *dirvp, struct componentname *cnp,
     struct vnode *sdirvp, struct componentname *scnp,  int * lenp)
@@ -729,6 +777,9 @@ sfs_path_fill(unsigned int op, struct vnode *dirvp, struct componentname *cnp,
 	return msg;
 }
 
+/*
+ * Locking: Do not call this function with any vnode locks held.
+ */
 int
 sfs_path_checks(struct sfs_path_message * msg, int len)
 {
@@ -823,6 +874,9 @@ mac_anoubis_sfs_cred_internalize_label(struct label *label, char *name,
 	return 0;
 }
 
+/*
+ * Locking: No vnode locks are held when calling this function.
+ */
 int
 mac_anoubis_sfs_execve_prepare(struct exec_package *pack, struct label *label)
 {
@@ -898,6 +952,8 @@ mac_anoubis_sfs_cred_destroy_label(struct label *label)
 
 /*
  * WARNING: Note that buf might NOT be terminated by a NUL byte.
+ *
+ * Locking: No vnode locks are held.
  */
 int
 mac_anoubis_sfs_check_follow_link(struct nameidata *ndp, char *buf, int buflen)

@@ -2734,8 +2734,17 @@ sys_rmdir(struct proc *p, void *v, register_t *retval)
 	int error;
 	struct nameidata nd;
 
+#ifdef ANOUBIS
+	/*
+	* NOTE: We do not actually need SAVESTART but setting
+	* it explicitly will prevent VOP_* from freeing the name buffer.
+	*/
+	NDINIT(&nd, DELETE, LOCKPARENT | LOCKLEAF | SAVENAME | SAVESTART,
+	    UIO_USERSPACE, SCARG(uap, path), p);
+#else
 	NDINIT(&nd, DELETE, LOCKPARENT | LOCKLEAF, UIO_USERSPACE,
 	    SCARG(uap, path), p);
+#endif
 	if ((error = namei(&nd)) != 0)
 		return (error);
 	vp = nd.ni_vp;
@@ -2760,8 +2769,24 @@ out:
 	if (!error)
 		error = mac_vnode_check_unlink(p->p_ucred, nd.ni_dvp, vp,
 		    &nd.ni_cnd);
-	/* using this hook for anoubis will require a relookup,
-	 * please read the comment in sys_unlink for more details */
+#ifdef ANOUBIS
+	/*
+	 * relookup the vnode because the vfs_getcwd_common call
+	 * in SFS modifies ni_dvp->i_offset which is used by VOP_RMDIR
+	 * to unlink the vnode.
+	 */
+	if (!error) {
+		if (nd.ni_dvp == vp)
+			vrele(vp);
+		else
+			vput(vp);
+		VOP_UNLOCK(nd.ni_dvp, 0, curproc);
+		if ((error = relookup(nd.ni_dvp, &vp, &nd.ni_cnd)) != 0) {
+			VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
+			goto done;
+		}
+	}
+#endif
 #endif
 	if (!error) {
 		error = VOP_RMDIR(nd.ni_dvp, nd.ni_vp, &nd.ni_cnd);
@@ -2773,6 +2798,11 @@ out:
 			vput(nd.ni_dvp);
 		vput(vp);
 	}
+done:
+#ifdef ANOUBIS
+	vrele(nd.ni_startdir);
+	pool_put(&namei_pool, nd.ni_cnd.cn_pnbuf);
+#endif
 	return (error);
 }
 
