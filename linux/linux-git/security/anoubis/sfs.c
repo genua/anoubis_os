@@ -942,12 +942,17 @@ static int sfs_path_unlink(struct path *dir, struct dentry *dentry)
 {
 	struct path file = { dir->mnt, dentry };
 
-	/* We don't handle directories yet */
 	if (!dentry || !dentry->d_inode)
 		return 0;
-	if (!S_ISREG(dentry->d_inode->i_mode))
-		return 0;
+	return sfs_path_write(&file);
+}
 
+static int sfs_path_rmdir(struct path *dir, struct dentry *dentry)
+{
+	struct path file = { dir->mnt, dentry };
+
+	if (!dentry || !dentry->d_inode)
+		return 0;
 	return sfs_path_write(&file);
 }
 
@@ -1227,6 +1232,7 @@ static struct anoubis_hooks sfs_ops = {
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = sfs_path_link,
 	.path_unlink = sfs_path_unlink,
+	.path_rmdir = sfs_path_rmdir,
 	.path_rename = sfs_path_rename,
 	.path_symlink = sfs_path_symlink,
 	.path_truncate = sfs_path_truncate,
