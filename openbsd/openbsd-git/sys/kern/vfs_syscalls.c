@@ -2798,8 +2798,8 @@ out:
 			vput(nd.ni_dvp);
 		vput(vp);
 	}
-done:
 #ifdef ANOUBIS
+done:
 	vrele(nd.ni_startdir);
 	pool_put(&namei_pool, nd.ni_cnd.cn_pnbuf);
 #endif
