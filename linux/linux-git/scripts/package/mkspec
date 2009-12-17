@@ -25,7 +25,7 @@ PROVIDES="$PROVIDES kernel-$KERNELRELEASE"
 
 echo "Name: kernel"
 echo "Summary: The Linux Kernel"
-echo "Version: ${KERNELRELEASE%-*}"
+echo "Version: ${KERNELRELEASE%%-*}"
 # we need to determine the NEXT version number so that uname and
 # rpm -q will agree
 echo "Release: ${KERNELRELEASE#*-}"
@@ -171,11 +171,11 @@ elif [ -x /sbin/new-kernel-pkg ] ; then
 	# fedora
 	/sbin/new-kernel-pkg --package kernel-$KERNELRELEASE \
 		--mkinitrd --depmod --install $KERNELRELEASE
-else 
+else
 	echo "Warning: Don't know how to create initrd for this system"
 fi
 
-%preun 
+%preun
 echo "Removing initrd..."
 if [ -x /usr/lib/bootloader/bootloader_entry ] ; then
 	#suse
@@ -188,7 +188,7 @@ elif [ -x /sbin/new-kernel-pkg ] ; then
 	# fedora
 	/sbin/new-kernel-pkg --package kernel-$KERNELRELEASE \
 		--rminitrd --rmmoddep --remove $KERNELRELEASE
-else 
+else
 	echo "Warning: Don't know how to remove initrd for this system"
 fi
 EOF
