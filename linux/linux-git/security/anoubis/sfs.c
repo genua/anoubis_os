@@ -1039,14 +1039,15 @@ static int sfs_file_lock(struct file * file, unsigned int cmd) {
  */
 int anoubis_sfs_get_csum(struct file * file, u8 * csum)
 {
-	struct inode * inode = file->f_path.dentry->d_inode;
+	struct dentry * dentry = file->f_path.dentry;
+	struct inode * inode = dentry->d_inode;
 	struct sfs_inode_sec * sec;
 	int err;
 
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
-	if (!checksum_ok(inode))
+	if (!checksum_ok(inode) || skipsum_ok(inode, dentry))
 		return -EINVAL;
 	err = sfs_do_csum(file, inode, sec);
 	if (err < 0) {
