@@ -169,6 +169,8 @@ anoubisioctl(dev_t dev, u_long cmd, caddr_t data, int fflag,
 			return ret;
 		}
 		case ANOUBIS_REQUEST_STATS:
+			if (suser(p, 0) != 0)
+				return EPERM;
 			return ac_stats();
 		case ANOUBIS_OLD_REPLACE_POLICY: {
 			static int do_print = 1;

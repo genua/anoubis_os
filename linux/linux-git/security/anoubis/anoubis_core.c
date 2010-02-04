@@ -362,6 +362,8 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 		eventdev_put_queue(q);
 		return ret;
 	case ANOUBIS_REQUEST_STATS:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
 		return ac_stats();
 	case ANOUBIS_OLD_REPLACE_POLICY:
 		{
