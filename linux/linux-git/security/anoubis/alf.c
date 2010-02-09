@@ -236,11 +236,12 @@ static int alf_socket_sendmsg(struct socket * sock, struct msghdr * msg,
 	ret = alf_check_policy(ALF_SENDMSG, sock,
 	    (struct sockaddr *)msg->msg_name);
 
-	/* Close open TCP connections */
+	/* Close open TCP/SCTP connections */
 	if ((ret != 0) &&
 	    (sock->sk->sk_family == AF_INET ||
 	    sock->sk->sk_family == AF_INET6) &&
 	    (sock->sk->sk_protocol == IPPROTO_TCP ||
+	    sock->sk->sk_protocol == IPPROTO_SCTP ||
 	    sock->sk->sk_protocol == IPPROTO_IP)) {
 		alf_stat_forced_disconnect++;
 		sock->sk->sk_prot->disconnect(sock->sk, 0);
@@ -261,6 +262,7 @@ static int alf_socket_recvmsg(struct socket * sock, struct msghdr * msg,
 		return 0;
 
 	if (sock->sk->sk_protocol != IPPROTO_TCP &&
+	    sock->sk->sk_protocol != IPPROTO_SCTP &&
 	    sock->sk->sk_protocol != IPPROTO_IP)
 		return 0;
 
@@ -283,10 +285,11 @@ static int alf_socket_skb_recv_datagram(struct sock * sk, struct sk_buff * skb)
 	if (!sk || !skb)
 		return 0;
 
-	/* TCP is handled by alf_socket_recvmsg */
+	/* TCP and SCTP handled by alf_socket_recvmsg */
 	if ((sk->sk_family == AF_INET ||
 	    sk->sk_family == AF_INET6) &&
 	    (sk->sk_protocol == IPPROTO_TCP ||
+	    sk->sk_protocol == IPPROTO_SCTP ||
 	    sk->sk_protocol == IPPROTO_IP))
 		return 0;
 
