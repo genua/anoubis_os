@@ -68,6 +68,7 @@ struct anoubis_event_common {
 #define ANOUBIS_RET_CLEAN(x)		(x & 0xffff)
 #define ANOUBIS_RET_FLAGS(x)		(x & ~0xffff)
 #define ANOUBIS_RET_OPEN_LOCKWATCH	(1<<16)
+#define ANOUBIS_RET_NEED_SECUREEXEC	(1<<17)
 
 #define ANOUBIS_PROCESS_OP_FORK		0x0001UL
 #define ANOUBIS_PROCESS_OP_EXIT		0x0002UL

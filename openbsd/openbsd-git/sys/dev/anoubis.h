@@ -63,6 +63,7 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_RET_CLEAN(x)		(x & 0xffff)
 #define ANOUBIS_RET_FLAGS(x)		(x & ~0xffff)
 #define ANOUBIS_RET_OPEN_LOCKWATCH	(1<<16)
+#define ANOUBIS_RET_NEED_SECUREEXEC	(1<<17)
 
 typedef u_int64_t anoubis_cookie_t;
 

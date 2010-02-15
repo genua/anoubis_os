@@ -1105,7 +1105,7 @@ static int sfs_bprm_set_creds(struct linux_binprm * bprm)
 	struct dentry * dentry;
 	struct inode * inode;
 	struct sfs_open_message * msg;
-	int len;
+	int len, flags = 0, ret;
 
 	BUG_ON(!file);
 	BUG_ON(file->f_mode & FMODE_WRITE);
@@ -1126,12 +1126,10 @@ static int sfs_bprm_set_creds(struct linux_binprm * bprm)
 		sec->msg = msg;
 		sec->len = len;
 	}
-	/*
-	 * TODO CEH: We should have the possibility to get a flag from
-	 * TODO CEH: user space that sets need_secureexec if this exec
-	 * TODO CEH: will result in a context change.
-	 */
-	return sfs_open_checks(file, MAY_READ|MAY_EXEC, NULL);
+	ret = sfs_open_checks(file, MAY_READ|MAY_EXEC, &flags);
+	if (flags & ANOUBIS_RET_NEED_SECUREEXEC)
+		sec->need_secureexec = 1;
+	return ret;
 }
 
 /*

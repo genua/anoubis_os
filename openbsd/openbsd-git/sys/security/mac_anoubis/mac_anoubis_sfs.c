@@ -885,6 +885,7 @@ mac_anoubis_sfs_execve_prepare(struct exec_package *pack, struct label *label)
 	char			*path = NULL, *buf = NULL;
 	int			 plen = 1;
 	int			 ret;
+	int			 flags = 0;
 	struct sfs_open_message	*msg;
 	struct vnode		*vp;
 	struct sfs_label	*vpsec;
@@ -932,9 +933,11 @@ mac_anoubis_sfs_execve_prepare(struct exec_package *pack, struct label *label)
 	if (!msg)
 		return ENOMEM;
 	msg->flags |= ANOUBIS_OPEN_FLAG_EXEC;
-	ret = anoubis_raise(msg, plen, ANOUBIS_SOURCE_SFS);
+	ret = anoubis_raise_flags(msg, plen, ANOUBIS_SOURCE_SFS, &flags);
 	if (ret == EPIPE /* XXX && operation mode != strict */)
 		return 0;
+	if (flags & ANOUBIS_RET_NEED_SECUREEXEC)
+		pl->will_transition = 1;
 	return ret;
 }
 
