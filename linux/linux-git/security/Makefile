@@ -9,7 +9,7 @@ subdir-$(CONFIG_SECURITY_TOMOYO)        += tomoyo
 subdir-$(CONFIG_SECURITY_ANOUBIS)	+= anoubis
 
 # always enable default capabilities
-obj-y		+= commoncap.o
+obj-y		+= commoncap.o min_addr.o
 
 # Object file lists
 obj-$(CONFIG_SECURITY)			+= security.o capability.o
@@ -17,6 +17,7 @@ obj-$(CONFIG_SECURITYFS)		+= inode.o
 # Must precede capability.o in order to stack properly.
 obj-$(CONFIG_SECURITY_SELINUX)		+= selinux/built-in.o
 obj-$(CONFIG_SECURITY_SMACK)		+= smack/built-in.o
+obj-$(CONFIG_AUDIT)			+= lsm_audit.o
 obj-$(CONFIG_SECURITY_TOMOYO)		+= tomoyo/built-in.o
 obj-$(CONFIG_SECURITY_ROOTPLUG)		+= root_plug.o
 obj-$(CONFIG_SECURITY_ANOUBIS)		+= anoubis/built-in.o
