@@ -1896,7 +1896,8 @@ nfs_rmdir(v)
 	if (dvp == vp) {
 		vrele(dvp);
 		vrele(dvp);
-		pool_put(&namei_pool, cnp->cn_pnbuf);
+		if ((cnp->cn_flags & SAVESTART) == 0)
+			pool_put(&namei_pool, cnp->cn_pnbuf);
 		return (EINVAL);
 	}
 	nfsstats.rpccnt[NFSPROC_RMDIR]++;
@@ -1930,7 +1931,8 @@ nfsmout:
 	 */
 	if (error == ENOENT)
 		error = 0;
-	pool_put(&namei_pool, cnp->cn_pnbuf);
+	if ((cnp->cn_flags & SAVESTART) == 0)
+		pool_put(&namei_pool, cnp->cn_pnbuf);
 	return (error);
 }
 
