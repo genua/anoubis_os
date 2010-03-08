@@ -1143,13 +1143,14 @@ static void sfs_bprm_committed_creds(struct linux_binprm * bprm)
 	struct sfs_open_message * msg;
 	int len;
 
-	if (sec->msg != NULL) {
+	if (sec && sec->msg) {
 		msg = sec->msg;
 		len = sec->len;
 		sec->msg = NULL;
 	} else {
 		msg = sfs_open_fill(&file->f_path, MAY_READ|MAY_EXEC, &len);
 	}
+	BUG_ON(msg == NULL);
 	if (anoubis_need_secureexec(bprm))
 		msg->flags |= ANOUBIS_OPEN_FLAG_SECUREEXEC;
 	anoubis_notify(msg, len, ANOUBIS_SOURCE_SFSEXEC);
@@ -1200,16 +1201,16 @@ static int sfs_inode_removexattr(struct dentry *dentry, const char *name)
 }
 
 /*
- * Return true if the anoubis-SFS module requires a secure exec. Currently,
- * this is a dummy hook as need_seucreexec is never set. However, this
- * will change in the future.
+ * Return true if the anoubis-SFS module requires a secure exec. The
+ * sec pointer might be NULL if the sfs module was loaded in the middle
+ * of an exec.
  * NOTE: brpm->cred might be NULL at this point. Use current_cred() instead.
  */
 static int sfs_bprm_secureexec(struct linux_binprm *bprm)
 {
 	struct sfs_bprm_sec * sec = CSEC(current_cred());
 
-	return sec->need_secureexec;
+	return sec && sec->need_secureexec;
 }
 
 /* Security operations. */
