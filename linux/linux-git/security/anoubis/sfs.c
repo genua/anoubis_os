@@ -319,6 +319,11 @@ static int sfs_do_csum(struct file * file, struct inode * inode,
 		int count = PAGE_SIZE;
 		struct scatterlist sg[1];
 
+		if (unlikely(fatal_signal_pending(current))) {
+			err = EIO;
+			set_fs(oldfs);
+			goto out;
+		}
 		if (size - pos < count)
 			count = size - pos;
 		ret = vfs_read(file, page_address(p), count, &pos);

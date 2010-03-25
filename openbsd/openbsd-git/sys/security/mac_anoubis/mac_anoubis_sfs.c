@@ -233,6 +233,10 @@ sfs_do_csum(struct vnode * vp, struct sfs_label * sec)
 	done = 0;
 	while (done < size) {
 		size_t this = size - done;
+		if (p->p_siglist & sigmask(SIGKILL)) {
+			err = EIO;
+			goto out_free;
+		}
 		if (this > CSUM_BUFSIZE)
 			this = CSUM_BUFSIZE;
 		iov.iov_base = ptr;
