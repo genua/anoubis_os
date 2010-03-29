@@ -173,6 +173,7 @@ static const char * csnodev[]  = {
 	"tmpfs",
 	"dazukofs",
 	"ecryptfs",
+	"aufs",
 	NULL,
 };
 
