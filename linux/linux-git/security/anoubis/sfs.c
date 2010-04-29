@@ -63,6 +63,15 @@
 
 static unsigned int checksum_max_size = 0;
 static int ac_index = -1;
+static char allow_path_buf[PAGE_SIZE] __initdata;
+
+struct allow_path_entry {
+	struct allow_path_entry *next;
+	unsigned int prefixlen;
+	char prefix[];
+};
+
+static struct allow_path_entry *allow_path_entries;
 
 /* Statistics */
 
@@ -97,6 +106,17 @@ static void sfs_getstats(struct anoubis_internal_stat_value **ptr, int * count)
 	(*count) = sizeof(sfs_stats)/sizeof(struct anoubis_internal_stat_value);
 }
 
+static inline int
+sfs_is_allow_path(const char *path)
+{
+	struct allow_path_entry	*entry;
+
+	for (entry = allow_path_entries; entry; entry = entry->next) {
+		if (strncmp(path, entry->prefix, entry->prefixlen) == 0)
+			return 1;
+	}
+	return 0;
+}
 
 /* Veratim copy from fs/namei.c because of a missing EXPORT_SYMBOL */
 static inline int anoubis_deny_write_access(struct inode * inode)
@@ -644,6 +664,10 @@ static int sfs_open_checks(struct file * file, int mask, int *flags)
 	if (!msg)
 		return -ENOMEM;
 	sfs_stat_ev++;
+	if (sfs_is_allow_path(msg->pathhint)) {
+		kfree(msg);
+		return 0;
+	}
 	ret = anoubis_raise_flags(msg, len, ANOUBIS_SOURCE_SFS, flags);
 	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
 		return 0;
@@ -777,6 +801,10 @@ static int sfs_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 	msg->ino = 0;
 	msg->dev = 0;
 	memcpy(msg->csum, csum, ANOUBIS_SFS_CS_LEN);
+	if (sfs_is_allow_path(msg->pathhint)) {
+		kfree(msg);
+		return 0;
+	}
 	err = anoubis_raise(msg, alloclen, ANOUBIS_SOURCE_SFS);
 	if (err == -EPIPE /* XXX and mode != strict */)
 		err = 0;
@@ -808,6 +836,10 @@ int sfs_path_write(struct path *path)
 			return -EACCES;
 	}
 	msg = sfs_open_fill(path, MAY_WRITE, &len);
+	if (sfs_is_allow_path(msg->pathhint)) {
+		kfree(msg);
+		return 0;
+	}
 	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFS);
 	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
 		ret = 0;
@@ -883,6 +915,15 @@ static int sfs_path_checks(struct sfs_path_message * msg, int len)
 
 	sfs_stat_path++;
 
+	if (msg->pathlen[0] && sfs_is_allow_path(msg->paths)) {
+		kfree(msg);
+		return 0;
+	}
+	if (msg->pathlen[1] && sfs_is_allow_path(msg->paths +
+							msg->pathlen[0])) {
+		kfree(msg);
+		return 0;
+	}
 	ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_SFSPATH);
 
 	if (ret == -EPIPE /* &&  operation_mode != strict XXX */)
@@ -1262,11 +1303,41 @@ static struct crypto_hash * dummy_tfm;
 
 static void __exit sfs_exit(void)
 {
+	struct allow_path_entry *tmp;
+
 	if (ac_index >= 0)
 		anoubis_unregister(ac_index);
 	if (dummy_tfm && !IS_ERR(dummy_tfm))
 		crypto_free_hash(dummy_tfm);
+	while(allow_path_entries) {
+		tmp = allow_path_entries;
+		allow_path_entries = tmp->next;
+		kfree(tmp);
+	}
 }
+
+static void
+sfs_add_allow_path(const char *ptr, int len)
+{
+	struct allow_path_entry *allow;
+
+	if (*ptr != '/') {
+		printk(KERN_ERR "sfs.allow_path: Paths must be absolute\n");
+		return;
+	}
+	allow = kmalloc(sizeof(*allow) + len + 1, GFP_KERNEL);
+	if (!allow) {
+		printk(KERN_CRIT "sfs: Out of memory while parsing "
+					"module command line\n");
+		return;
+	}
+	allow->next = allow_path_entries;
+	allow->prefixlen = len;
+	memcpy(allow->prefix, ptr, len);
+	allow->prefix[len] = 0;
+	allow_path_entries = allow;
+}
+
 
 /*
  * Initialize the anoubis module.
@@ -1275,10 +1346,21 @@ static int __init sfs_init(void)
 {
 	int rc = 0;
 	struct timeval tv;
+	char *p, *last;
+
 	/* register ourselves with the security framework */
 	do_gettimeofday(&tv);
 	sfs_stat_loadtime = tv.tv_sec;
 	dummy_tfm = crypto_alloc_hash("sha256", 0, CRYPTO_ALG_ASYNC);
+	last = allow_path_buf;
+	for (p=allow_path_buf; *p; p++) {
+		if (*p == ',' && p - last > 0) {
+			sfs_add_allow_path(last, p-last);
+			last = p+1;
+		}
+	}
+	if (p - last > 0)
+		sfs_add_allow_path(last, p-last);
 	if (IS_ERR(dummy_tfm)) {
 		printk(KERN_ERR "Cannot allocate sha256 hash "
 		    "(try modprobe sha256)\n");
@@ -1298,6 +1380,12 @@ module_init(sfs_init);
 module_param(checksum_max_size, int, 0644);
 MODULE_PARM_DESC(checksum_max_size,
     "Maximum filesize for SFS checksum calculations");
+
+/* allow_path_buf is marked as __initdata, thus we disallow read. */
+module_param_string(allow_path, allow_path_buf, sizeof(allow_path_buf), 0);
+MODULE_PARM_DESC(allow_path,
+    "Do not perform file system access checks for these path prefixes");
+
 module_exit(sfs_exit);
 
 MODULE_AUTHOR("Christian Ehrhardt <ehrhardt@genua.de>");
