@@ -138,7 +138,6 @@ static int alf_check_policy(int op, struct socket *sock,
 	if (!sock || !sock->sk)
 		return -EBADF;
 
-	alf_stat_processed++;
 	switch(sock->sk->sk_family) {
 	case AF_UNIX:
 	case AF_NETLINK:
@@ -146,6 +145,7 @@ static int alf_check_policy(int op, struct socket *sock,
 		return 0;
 	}
 
+	alf_stat_processed++;
 	if (sock->ops->getname(sock, (struct sockaddr *)myaddress,
 	    &mylen, 0) < 0)
 		return -EBADF;
@@ -162,16 +162,16 @@ static int alf_check_policy(int op, struct socket *sock,
 		if (sock->ops->getname(sock, (struct sockaddr *)tmpaddr,
 		    &addrlen, 2) < 0) {
 			/*
-			 * Allow a missing remote address for non-INET
-			 * sockets. Some dhclients exhibit this behaviour
-			 * on RAW sockets.
+			 * The socket is not connected and the sendmsg
+			 * request did not specify a target address either.
+			 * There are several cases where this can happen,
+			 * but fortunately we want to allow all of them to
+			 * pass through:
+			 * - dhclient triggers this with RAW sockets.
+			 * - nfs triggers it if MSG_MORE was set on an
+			 *   earlier sendmsg (which did have an address!)
 			 */
-			switch (sock->sk->sk_family) {
-			case AF_INET:
-			case AF_INET6:
-				return -EBADF;
-			}
-			address = NULL;
+			return 0;
 		} else {
 			address = (struct sockaddr *)&tmpaddr;
 		}
