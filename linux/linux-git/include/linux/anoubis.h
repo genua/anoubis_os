@@ -48,15 +48,18 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_GETCSUM			_IOWR(ANOUBIS_TYPE,0x16, \
 					    struct anoubis_ioctl_csum)
 
-#define ANOUBIS_SOURCE_TEST	0
-#define ANOUBIS_SOURCE_ALF	10
-#define ANOUBIS_SOURCE_SANDBOX	20
-#define ANOUBIS_SOURCE_SFS	30
-#define ANOUBIS_SOURCE_SFSEXEC	31
-#define ANOUBIS_SOURCE_SFSPATH	32
-#define ANOUBIS_SOURCE_PROCESS	40
-#define ANOUBIS_SOURCE_STAT	50
-#define ANOUBIS_SOURCE_IPC	60
+#define ANOUBIS_CREATE_PLAYGROUND	_IO(ANOUBIS_TYPE,0x17)
+
+#define ANOUBIS_SOURCE_TEST		0
+#define ANOUBIS_SOURCE_ALF		10
+#define ANOUBIS_SOURCE_SANDBOX		20
+#define ANOUBIS_SOURCE_SFS		30
+#define ANOUBIS_SOURCE_SFSEXEC		31
+#define ANOUBIS_SOURCE_SFSPATH		32
+#define ANOUBIS_SOURCE_PROCESS		40
+#define ANOUBIS_SOURCE_STAT		50
+#define ANOUBIS_SOURCE_IPC		60
+#define ANOUBIS_SOURCE_PLAYGROUND	70
 
 typedef u_int64_t anoubis_cookie_t;
 
@@ -176,6 +179,7 @@ struct anoubis_hooks {
 	DECLARE(bprm_set_creds);
 	DECLARE(bprm_committed_creds);
 	DECLARE(bprm_secureexec);
+	DECLARE(capable);
 };
 #undef DECLARE
 
@@ -185,6 +189,7 @@ extern void * anoubis_set_sublabel(void ** labelp, int idx, void * subl);
 extern void * anoubis_get_sublabel(void ** labelp, int idx);
 extern void * anoubis_get_sublabel_const(void *label, int idx);
 extern anoubis_cookie_t anoubis_get_task_cookie(void);
+extern anoubis_cookie_t anoubis_get_playgroundid(void);
 
 #endif
 

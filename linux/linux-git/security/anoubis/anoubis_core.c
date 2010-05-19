@@ -77,6 +77,7 @@ struct anoubis_label {
 struct anoubis_cred_label {
 	struct anoubis_label	_l;
 	anoubis_cookie_t	task_cookie;
+	anoubis_cookie_t	playgroundid;
 	unsigned int		listener:1;
 };
 
@@ -98,6 +99,15 @@ anoubis_cookie_t anoubis_get_task_cookie(void)
 	if (unlikely(!cred))
 		return 0;
 	return cred->task_cookie;
+}
+
+anoubis_cookie_t anoubis_get_playgroundid(void)
+{
+	struct anoubis_cred_label *cred = ac_current_label();
+
+	if (unlikely(!cred))
+		return 0;
+	return cred->playgroundid;
 }
 
 /*
@@ -402,6 +412,23 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 				return ret;
 			if (copy_to_user(&cs->csum, csum, ANOUBIS_CS_LEN))
 				return -EFAULT;
+			return 0;
+		}
+	case ANOUBIS_CREATE_PLAYGROUND:
+		{
+			struct anoubis_cred_label *cl = ac_current_label();
+
+			if (unlikely(!cl))
+				return -ESRCH;
+			if (cl->playgroundid)
+				return -EBUSY;
+			/*
+			 * Playground creation is not allowed if the task
+			 * used super user privileges.
+			 */
+			if (current->flags & PF_SUPERPRIV)
+				return -EPERM;
+			cl->playgroundid = cl->task_cookie;
 			return 0;
 		}
 	default:
@@ -824,6 +851,7 @@ static void ac_process_message(int op, anoubis_cookie_t cookie)
 static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 {
 	struct anoubis_cred_label	*cl;
+	anoubis_cookie_t		 pgid = anoubis_get_playgroundid();
 
 	cl = __ac_alloc_label(gfp, sizeof (struct anoubis_cred_label));
 	if (cl == NULL)
@@ -831,6 +859,7 @@ static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 	spin_lock(&task_cookie_lock);
 	cl->task_cookie = task_cookie++;
 	spin_unlock(&task_cookie_lock);
+	cl->playgroundid = pgid;
 	cl->listener = 0;
 	nc->security = &cl->_l;
 	ac_process_message(ANOUBIS_PROCESS_OP_FORK, cl->task_cookie);
@@ -867,6 +896,7 @@ static void ac_cred_commit(struct cred *nc, const struct cred* old)
 		    nsec->task_cookie);
 		nsec->task_cookie = osec->task_cookie;
 		nsec->listener = osec->listener;
+		nsec->playgroundid = osec->playgroundid;
 	}
 }
 
@@ -911,6 +941,15 @@ int anoubis_need_secureexec(struct linux_binprm *bprm)
 	return security_bprm_secureexec(bprm);
 }
 
+/* A process with a non-zero playground-ID has no capabilities whatsoever. */
+int anoubis_capable(struct task_struct *tsk, const struct cred *cred,
+			int cap, int audit)
+{
+	if (tsk == current && anoubis_get_playgroundid())
+		return -EPERM;
+	return cap_capable(tsk, cred, cap, audit);
+}
+
 static struct security_operations anoubis_core_ops = {
 	.unix_stream_connect = ac_unix_stream_connect,
 	.socket_post_create = ac_socket_post_create,
@@ -946,6 +985,7 @@ static struct security_operations anoubis_core_ops = {
 	.bprm_set_creds = ac_bprm_set_creds,
 	.bprm_committed_creds = ac_bprm_committed_creds,
 	.bprm_secureexec = ac_bprm_secureexec,
+	.capable = anoubis_capable,
 };
 
 /*
@@ -992,6 +1032,7 @@ EXPORT_SYMBOL(anoubis_get_sublabel);
 EXPORT_SYMBOL(anoubis_get_sublabel_const);
 EXPORT_SYMBOL(anoubis_set_sublabel);
 EXPORT_SYMBOL(anoubis_get_task_cookie);
+EXPORT_SYMBOL(anoubis_get_playgroundid);
 EXPORT_SYMBOL(anoubis_need_secureexec);
 
 security_initcall(anoubis_core_init);

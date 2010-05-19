@@ -20,13 +20,22 @@ config SECURITY_ANOUBIS_IPC
 	tristate "Anoubis IPC Module"
 	depends on SECURITY_ANOUBIS && SECURITY_NETWORK
 	help
-	  This option provides initial support for the Anoubis IPC module.
+	  This option provides support for the Anoubis IPC module.
 
 config SECURITY_ANOUBIS_SFS
 	tristate "Secure Filesystem Module"
 	depends on SECURITY_ANOUBIS && SECURITY_PATH && CRYPTO && CRYPTO_SHA256
 	help
 	  This option provides initial support for the Anoubis SFS module.
+
+config SECURITY_ANOUBIS_PLAYGROUND
+	bool "Anoubis Playground feature"
+	depends on SECURITY_ANOUBIS
+	help
+	  This option provides support for the Anoubis Playground feature.
+	  This feature provides individual processes with the ability to
+	  make modifications to the file system that are only visible to
+	  the process itself and its children.
 
 config SECURITY_ANOUBIS_DEBUG
 	bool "Anoubis debug messages"
