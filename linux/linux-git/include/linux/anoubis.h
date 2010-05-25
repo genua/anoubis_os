@@ -190,6 +190,8 @@ extern void * anoubis_get_sublabel(void ** labelp, int idx);
 extern void * anoubis_get_sublabel_const(void *label, int idx);
 extern anoubis_cookie_t anoubis_get_task_cookie(void);
 extern anoubis_cookie_t anoubis_get_playgroundid(void);
+extern int anoubis_pg_validate_name(const char *name, struct dentry *base,
+					int len, anoubis_cookie_t pgid);
 
 #endif
 
