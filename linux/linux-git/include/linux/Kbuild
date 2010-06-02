@@ -177,6 +177,7 @@ endif
 unifdef-y += anoubis.h
 unifdef-y += anoubis_alf.h
 unifdef-y += anoubis_sfs.h
+unifdef-y += anoubis_playground.h
 unifdef-y += apm_bios.h
 unifdef-y += atalk.h
 unifdef-y += atmdev.h
