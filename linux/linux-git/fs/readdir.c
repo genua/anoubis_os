@@ -22,6 +22,7 @@
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 
 #include <linux/anoubis.h>
+#include <linux/anoubis_playground.h>
 
 struct playground_callback {
 	filldir_t	orig_filler;

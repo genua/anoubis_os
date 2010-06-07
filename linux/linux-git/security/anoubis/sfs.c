@@ -55,6 +55,7 @@
 
 #include <linux/anoubis.h>
 #include <linux/anoubis_sfs.h>
+#include <linux/anoubis_playground.h>
 
 #define XATTR_ANOUBIS_SYSSIG_SUFFIX "anoubis_syssig"
 #define XATTR_ANOUBIS_SKIPSUM_SUFFIX "anoubis_skipsum"
@@ -1176,6 +1177,13 @@ static int sfs_bprm_set_creds(struct linux_binprm * bprm)
 	ret = sfs_open_checks(file, MAY_READ|MAY_EXEC, &flags);
 	if (flags & ANOUBIS_RET_NEED_SECUREEXEC)
 		sec->need_secureexec = 1;
+	if (ret == 0 && (flags & ANOUBIS_RET_NEED_PLAYGROUND)) {
+		ret = anoubis_playground_create();
+		/* Process is already in a playground. This is ok. */
+		if (ret == -EBUSY)
+			ret = 0;
+	}
+
 	return ret;
 }
 

@@ -37,6 +37,7 @@
 
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 #include <linux/anoubis.h>
+#include <linux/anoubis_playground.h>
 #endif
 
 #define ACC_MODE(x) ("\000\004\002\006"[(x)&O_ACCMODE])

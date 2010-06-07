@@ -72,6 +72,7 @@ struct anoubis_event_common {
 #define ANOUBIS_RET_FLAGS(x)		(x & ~0xffff)
 #define ANOUBIS_RET_OPEN_LOCKWATCH	(1<<16)
 #define ANOUBIS_RET_NEED_SECUREEXEC	(1<<17)
+#define ANOUBIS_RET_NEED_PLAYGROUND	(1<<18)
 
 #define ANOUBIS_PROCESS_OP_FORK		0x0001UL
 #define ANOUBIS_PROCESS_OP_EXIT		0x0002UL
@@ -180,6 +181,9 @@ struct anoubis_hooks {
 	DECLARE(bprm_committed_creds);
 	DECLARE(bprm_secureexec);
 	DECLARE(capable);
+
+	DECLARE(d_instantiate);
+	DECLARE(inode_init_security);
 };
 #undef DECLARE
 
@@ -189,9 +193,6 @@ extern void * anoubis_set_sublabel(void ** labelp, int idx, void * subl);
 extern void * anoubis_get_sublabel(void ** labelp, int idx);
 extern void * anoubis_get_sublabel_const(void *label, int idx);
 extern anoubis_cookie_t anoubis_get_task_cookie(void);
-extern anoubis_cookie_t anoubis_get_playgroundid(void);
-extern int anoubis_pg_validate_name(const char *name, struct dentry *base,
-					int len, anoubis_cookie_t pgid);
 
 #endif
 

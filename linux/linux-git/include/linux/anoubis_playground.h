@@ -27,9 +27,42 @@
 #ifndef ANOUBIS_PLAYGROUND_H
 #define ANOUBIS_PLAYGROUND_H
 
+#include <linux/errno.h>
 #include <linux/anoubis.h>
 
 /* Statistic Keys for ANOUBIS_SOURCE_PLAYGROUND */
 #define PG_STAT_LOADTIME		10
+
+#ifdef __KERNEL__
+
+#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
+
+extern int anoubis_playground_create(void);
+extern anoubis_cookie_t anoubis_get_playgroundid(void);
+extern int anoubis_pg_validate_name(const char *name, struct dentry *base,
+					int len, anoubis_cookie_t pgid);
+
+#else
+
+static inline int anoubis_playground_create(void)
+{
+	return -ENOSYS;
+}
+
+static inline anoubis_cookie_t anoubis_get_playgroundid(void)
+{
+	return 0;
+}
+
+static inline int anoubis_pg_validate_name(const char *name,
+			struct dentry *base, int len, anoubis_cookie_t pgid)
+{
+	return 1;
+}
+
+
+#endif
+
+#endif /* __KERNEL__ */
 
 #endif /* ANOUBIS_PG_H */

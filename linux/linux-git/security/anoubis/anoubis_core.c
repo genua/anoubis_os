@@ -40,6 +40,7 @@
 #include <linux/types.h>
 #include <linux/time.h>
 #include <linux/anoubis.h>
+#include <linux/anoubis_playground.h>
 #include <net/sock.h>
 #include <asm/uaccess.h>
 
@@ -77,7 +78,9 @@ struct anoubis_label {
 struct anoubis_cred_label {
 	struct anoubis_label	_l;
 	anoubis_cookie_t	task_cookie;
+#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 	anoubis_cookie_t	playgroundid;
+#endif
 	unsigned int		listener:1;
 };
 
@@ -101,6 +104,16 @@ anoubis_cookie_t anoubis_get_task_cookie(void)
 	return cred->task_cookie;
 }
 
+
+#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
+
+/**
+ * Return the playground-ID of the current process.
+ *
+ * @param None.
+ * @return The playground-ID of the current process. Zero means that
+ *     the process is not in a playground.
+ */
 anoubis_cookie_t anoubis_get_playgroundid(void)
 {
 	struct anoubis_cred_label *cred = ac_current_label();
@@ -109,6 +122,36 @@ anoubis_cookie_t anoubis_get_playgroundid(void)
 		return 0;
 	return cred->playgroundid;
 }
+
+/**
+ * Move the current process into a new playground. This is done
+ * by assigning a playground-ID to the current process if it does not
+ * have one.
+ *
+ * @param None. Always affects the current process.
+ * @return Zero if a new playground was created, -EBUSY if the current
+ *     process is already in a playground, a negative error code if something
+ *     else went wrong.
+ */
+int anoubis_playground_create(void)
+{
+	struct anoubis_cred_label *cl = ac_current_label();
+
+	if (unlikely(!cl))
+		return -ESRCH;
+	if (cl->playgroundid)
+		return -EBUSY;
+	/*
+	 * Playground creation is not allowed if the task
+	 * used super user privileges.
+	 */
+	if (current->flags & PF_SUPERPRIV)
+		return -EPERM;
+	cl->playgroundid = cl->task_cookie;
+	return 0;
+}
+
+#endif
 
 /*
  * Wrapper around eventdev_enqueue. Removes the queue if it turns out
@@ -415,22 +458,7 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 			return 0;
 		}
 	case ANOUBIS_CREATE_PLAYGROUND:
-		{
-			struct anoubis_cred_label *cl = ac_current_label();
-
-			if (unlikely(!cl))
-				return -ESRCH;
-			if (cl->playgroundid)
-				return -EBUSY;
-			/*
-			 * Playground creation is not allowed if the task
-			 * used super user privileges.
-			 */
-			if (current->flags & PF_SUPERPRIV)
-				return -EPERM;
-			cl->playgroundid = cl->task_cookie;
-			return 0;
-		}
+		return anoubis_playground_create();
 	default:
 		return -EINVAL;
 	}
@@ -769,6 +797,107 @@ static int ac_inode_removexattr(struct dentry *dentry, const char *name)
 {
 	return HOOKS(inode_removexattr, (dentry, name));
 }
+/*
+ * This function has special error code conventions:
+ *   . Zero: An extended Attribute (name/value) was assigned.
+ *   . -EOPNOTSUPP: This hook does not want to set extended attributes.
+ *   . Other < 0: A real error occured.
+ *
+ * We use a modified version of the code in the HOOKS macro to
+ * deal with this properly:
+ * - If any hook returns a real error (not -EOPNOTSUPP), return this
+ *   error code and make sure that memory allocated by another hook
+ *   gets freed properly.
+ * - At most one hook can return zero. All other hooks must return
+ *   -EOPNOTSUPP and this does not count as an error.
+ *
+ * NOTE: As a matter of best practise we call all hooks even if we
+ * NOTE: find one that returns an error early.
+ */
+static int ac_inode_init_security(struct inode *inode, struct inode *dir,
+				  char **namep, void **valuep, size_t *lenp)
+{
+
+	int i;
+	int ret = 0, ret2, gotname = 0;
+	unsigned int mymagic, lastmagic = 0;
+	char *myname = NULL, *name = NULL;
+	void *myvalue = NULL, *value = NULL;
+	int mylen = 0, len = 0;
+
+	if (original_ops->inode_init_security) {
+		ret = original_ops->inode_init_security(inode, dir,
+						&myname, &myvalue, &mylen);
+		if (ret == 0) {
+			gotname = 1;
+			name = myname;
+			value = myvalue;
+			len = mylen;
+		} else if (ret == -EOPNOTSUPP) {
+			ret = 0;
+		}
+	}
+
+	for(i=0; i<MAX_ANOUBIS_MODULES; ++i) {
+		typeof(hooks[i]->inode_init_security) _func;
+		struct anoubis_hooks *h;
+		rcu_read_lock();
+		h = rcu_dereference(hooks[i]);
+		if (h && h->inode_init_security) {
+			_func = h->inode_init_security;
+			mymagic = h->magic;
+			atomic_inc(&h->refcount);
+			rcu_read_unlock();
+			ret2 = (*_func)(inode, dir, &myname, &myvalue, &mylen);
+			atomic_dec(&h->refcount);
+			if (ret2 == -EOPNOTSUPP)
+				continue;
+			if (ret2 == 0) {
+				if (!gotname) {
+					name = myname;
+					value = myvalue;
+					len = mylen;
+					gotname = 1;
+					continue;
+				}
+				if (myname)
+					kfree(myname);
+				if (myvalue)
+					kfree(myvalue);
+				ret2 = -EPERM;
+			}
+			/* At this point we know that ret2 is not zero. */
+			if (!ret || lastmagic > mymagic) {
+				ret = ret2;
+				lastmagic = mymagic;
+			}
+		} else {
+			rcu_read_unlock();
+		}
+	}
+	if (ret) {
+		if (gotname) {
+			if (name)
+				kfree(name);
+			if (value)
+				kfree(value);
+		}
+	} else if (gotname == 0) {
+		ret = -EOPNOTSUPP;
+	} else {
+		if (namep)
+			(*namep) = name;
+		else if (name)
+			kfree(name);
+		if (valuep)
+			(*valuep) = value;
+		else if (value)
+			kfree(value);
+		if (lenp)
+			(*lenp) = len;
+	}
+	return ret;
+}
 static int ac_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	return HOOKS(inode_follow_link, (dentry, nd));
@@ -778,6 +907,10 @@ static int ac_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 static int ac_dentry_open(struct file *file, const struct cred *cred)
 {
 	return HOOKS(dentry_open, (file, cred));
+}
+static void ac_d_instantiate(struct dentry *dentry, struct inode *inode)
+{
+	VOIDHOOKS(d_instantiate, (dentry, inode));
 }
 static int ac_file_lock(struct file *file, unsigned int cmd)
 {
@@ -851,7 +984,6 @@ static void ac_process_message(int op, anoubis_cookie_t cookie)
 static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 {
 	struct anoubis_cred_label	*cl;
-	anoubis_cookie_t		 pgid = anoubis_get_playgroundid();
 
 	cl = __ac_alloc_label(gfp, sizeof (struct anoubis_cred_label));
 	if (cl == NULL)
@@ -859,7 +991,9 @@ static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 	spin_lock(&task_cookie_lock);
 	cl->task_cookie = task_cookie++;
 	spin_unlock(&task_cookie_lock);
-	cl->playgroundid = pgid;
+#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
+	cl->playgroundid = anoubis_get_playgroundid();
+#endif
 	cl->listener = 0;
 	nc->security = &cl->_l;
 	ac_process_message(ANOUBIS_PROCESS_OP_FORK, cl->task_cookie);
@@ -896,7 +1030,9 @@ static void ac_cred_commit(struct cred *nc, const struct cred* old)
 		    nsec->task_cookie);
 		nsec->task_cookie = osec->task_cookie;
 		nsec->listener = osec->listener;
+#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 		nsec->playgroundid = osec->playgroundid;
+#endif
 	}
 }
 
@@ -965,8 +1101,10 @@ static struct security_operations anoubis_core_ops = {
 	.inode_permission = ac_inode_permission,
 	.inode_setxattr = ac_inode_setxattr,
 	.inode_removexattr = ac_inode_removexattr,
+	.inode_init_security = ac_inode_init_security,
 	.inode_follow_link = ac_inode_follow_link,
 	.dentry_open = ac_dentry_open,
+	.d_instantiate = ac_d_instantiate,
 	.file_lock = ac_file_lock,
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = ac_path_link,
@@ -1032,7 +1170,10 @@ EXPORT_SYMBOL(anoubis_get_sublabel);
 EXPORT_SYMBOL(anoubis_get_sublabel_const);
 EXPORT_SYMBOL(anoubis_set_sublabel);
 EXPORT_SYMBOL(anoubis_get_task_cookie);
+#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 EXPORT_SYMBOL(anoubis_get_playgroundid);
+EXPORT_SYMBOL(anoubis_playground_create);
+#endif
 EXPORT_SYMBOL(anoubis_need_secureexec);
 
 security_initcall(anoubis_core_init);
