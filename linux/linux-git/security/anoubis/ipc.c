@@ -60,9 +60,11 @@ static int ipc_unix_stream_connect(struct socket *sock, struct socket *other,
 	anoubis_cookie_t	 cookie;
 	unsigned long		 flags;
 
+	if (!sock->sk && !other->sk)
+		return 0;
+
 	sockl = SKSEC(sock->sk);
 	otherl = SKSEC(other->sk);
-
 	if (sockl == NULL || otherl == NULL)
 		return 0;
 
