@@ -41,8 +41,24 @@ static int ac_index = -1;
 
 static u_int64_t pg_stat_loadtime;
 
+/**
+ * Statistic counters for the REQUEST_STATS ioctl on /dev/anoubis.
+ */
 struct anoubis_internal_stat_value pg_stats[] = {
 	{ ANOUBIS_SOURCE_PLAYGROUND, PG_STAT_LOADTIME, &pg_stat_loadtime },
+};
+
+/**
+ * List of file systems that are passed through the playground without
+ * any modifications, i.e. even playground processes are allowed to write
+ * to these filesystems and lookups will be performed without modifications.
+ * This list should be documented in the user's Guide!
+ */
+static const char *nopg_fs[] = {
+	"proc",
+	"usbfs",
+	"sysfs",
+	NULL,
 };
 
 /**
@@ -70,10 +86,13 @@ static void pg_getstats(struct anoubis_internal_stat_value **ptr, int * count)
  * @havexattr: True if the file system has extended attributes, i.e. if
  *     there is a security label for the file, it can be read from the
  *     persistent storage on the file system.
+ * @pglookupenabled: True if playground style lookups are enabled. Some
+ *     filesystems do not support this and have this flag cleared.
  */
 struct pg_inode_sec {
 	anoubis_cookie_t	pgid;
-	int			havexattr;
+	unsigned int		havexattr:1;
+	unsigned int		pgenabled:1;
 };
 
 /* Macros to access the security labels with their approriate type. */
@@ -98,12 +117,22 @@ struct pg_inode_sec {
 static int pg_inode_alloc_security(struct inode * inode)
 {
 	struct pg_inode_sec *sec, *old;
+	const char *ftype;
+	int i;
 
 	sec = kmalloc(sizeof (struct pg_inode_sec), GFP_KERNEL);
 	if (!sec)
 		return -ENOMEM;
 	sec->pgid = 0;
 	sec->havexattr = 0;
+	sec->pgenabled = 1;
+	ftype = inode->i_sb->s_type->name;
+	for (i=0; nopg_fs[i]; ++i) {
+		if (strcmp(ftype, nopg_fs[i]) == 0) {
+			sec->pgenabled = 0;
+			break;
+		}
+	}
 	old = SETISEC(inode, sec);
 	BUG_ON(old);
 
@@ -152,15 +181,23 @@ static int pg_inode_permission(struct inode * inode, int mask)
 			return -EPERM;
 		return 0;
 	}
+	/* Allow access on file systems that do not support the playground. */
+	if (isec && isec->pgenabled == 0)
+		return 0;
 	/* Ok, this is a playground process */
 	if (!isec || isec->havexattr == 0 || isec->pgid == 0) {
 		/*
 		 * The file is a production file (not part of any playground)
 		 * or the file system does not support security labels.
-		 * Writing to directories is ok but everything else is
-		 * not allowed. (XXX CEH: What about other non-regular files?)
+		 *
+		 * Writing to directories is ok for the playground.
+		 * Additionally, writing to special files (devices, sockets,
+		 * and fifos) is ok for now. This might need more review
+		 * later on but it seems to be what we want.
 		 */
-		if (S_ISDIR(inode->i_mode))
+		if (S_ISDIR(inode->i_mode) || S_ISCHR(inode->i_mode)
+		    || S_ISBLK(inode->i_mode) || S_ISFIFO(inode->i_mode)
+		    || S_ISSOCK(inode->i_mode))
 			return 0;
 		if (mask & (MAY_WRITE | MAY_APPEND))
 			return -EPERM;
@@ -241,6 +278,8 @@ static void pg_d_instantiate(struct dentry *dentry, struct inode *inode)
 	isec = ISEC(inode);
 	if (!isec)
 		return;
+	if (isec->pgenabled == 0)
+		goto noxattr;
 	if (!inode->i_op->getxattr)
 		goto noxattr;
 	BUG_ON(dentry == NULL);
@@ -294,6 +333,8 @@ static int pg_inode_init_security(struct inode *inode, struct inode *dir,
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
 	char *name;
 	void *value;
+	const char *ftype;
+	int i;
 
 	if (!inode)
 		return -EOPNOTSUPP;
@@ -302,6 +343,14 @@ static int pg_inode_init_security(struct inode *inode, struct inode *dir,
 		return -EOPNOTSUPP;
 	sec->havexattr = 1;
 	sec->pgid = pgid;
+	sec->pgenabled = 1;
+	ftype = inode->i_sb->s_type->name;
+	for (i=0; nopg_fs[i]; ++i) {
+		if (strcmp(ftype, nopg_fs[i]) == 0) {
+			sec->pgenabled = 0;
+			break;
+		}
+	}
 	if (pgid == 0)
 		return -EOPNOTSUPP;
 	name = kstrdup(XATTR_ANOUBIS_PG_SUFFIX, GFP_KERNEL);
@@ -327,6 +376,30 @@ static int pg_inode_init_security(struct inode *inode, struct inode *dir,
 }
 
 /**
+ * Return true if the playground feature is enabled for this dentry.
+ * Lookups and access checks will work exactly as normal for this dentry
+ * if this function returns false. This is useful for file systems that
+ * do not support playground features (proc, sysfs).
+ *
+ * @param dentry The directory entry to check.
+ * @return True if playground features are enabled for this dentry.
+ *     False if this is not the case.
+ */
+int anoubis_playground_enabled(struct dentry *dentry)
+{
+	struct pg_inode_sec *sec;
+
+	if (!dentry->d_inode)
+		return 0;
+	sec = ISEC(dentry->d_inode);
+	if (!sec) {
+		printk(KERN_ERR "anoubis_pg: NULL security attribute\n");
+		return 0;
+	}
+	return sec->pgenabled;
+}
+
+/**
  * Security operations for the anoubis playground module.
  */
 static struct anoubis_hooks pg_ops = {
@@ -342,28 +415,49 @@ static struct anoubis_hooks pg_ops = {
 };
 
 /**
- * Initialize the anoubis playground module.
- * Loading the playground as a real module is not supported by the
- * kernel configuration mechanism.
+ * Do the rest of the anoubis playground module initialization. The hooks
+ * have been registered earlier to make sure that /proc and /sysfs files
+ * get security labels, too. The load time cannot be set in the early
+ * initialization because the clock might not be set up.
+ *
+ * @param None.
+ * return Zero in case of success, a negative error code in case of an error.
  */
-static int __init pg_init(void)
+static int __init pg_init_late(void)
 {
-	int rc = 0;
 	struct timeval tv;
 
 	/* register ourselves with the security framework */
-	do_gettimeofday(&tv);
-	pg_stat_loadtime = tv.tv_sec;
+	if (ac_index >= 0) {
+		do_gettimeofday(&tv);
+		pg_stat_loadtime = tv.tv_sec;
+		printk(KERN_INFO "anoubis_pg: Successfully initialized.\n");
+	}
+	return 0;
+}
+
+/**
+ * Register the playground security hooks. We do this early because we
+ * want inodes that are created early (/proc, /sysfs) to get labels, too.
+ *
+ * @param None.
+ * @return Zero in case of success, a negative error code in case of errors.
+ */
+static int __init pg_init_early(void)
+{
+	int rc;
+
 	if ((rc = anoubis_register(&pg_ops, &ac_index)) < 0) {
 		ac_index = -1;
 		printk(KERN_ERR "anoubis_pg: Failure registering\n");
 		return rc;
 	}
-	printk(KERN_INFO "anoubis_pg: Successfully initialized.\n");
+	printk(KERN_INFO "anoubis_pg: Early initialization complete.\n");
 	return 0;
 }
 
-module_init(pg_init);
+security_initcall(pg_init_early);
+module_init(pg_init_late);
 
 MODULE_AUTHOR("Christian Ehrhardt <ehrhardt@genua.de>");
 MODULE_DESCRIPTION("Anoubis playground module");

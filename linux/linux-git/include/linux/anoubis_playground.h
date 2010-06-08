@@ -35,12 +35,15 @@
 
 #ifdef __KERNEL__
 
+#include <linux/dcache.h>
+
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 
 extern int anoubis_playground_create(void);
 extern anoubis_cookie_t anoubis_get_playgroundid(void);
 extern int anoubis_pg_validate_name(const char *name, struct dentry *base,
 					int len, anoubis_cookie_t pgid);
+extern int anoubis_playground_enabled(struct dentry *dentry);
 
 #else
 
@@ -59,7 +62,6 @@ static inline int anoubis_pg_validate_name(const char *name,
 {
 	return 1;
 }
-
 
 #endif
 

@@ -898,7 +898,8 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 	struct qstr pgname;
 	int err;
 
-	if (pgid == 0 || isdot(name))
+	if (pgid == 0 || isdot(name) ||
+				!anoubis_playground_enabled(nd->path.dentry))
 		return do_lookup_pg(nd, name, pathp);
 	err = pg_create_qstr(&pgname, name, pgid, 1);
 	if (err < 0)
@@ -1383,7 +1384,8 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 	int err;
 	struct dentry *pgdentry, *origdentry;
 
-	if (pgid == 0 || isdot(&nd->last))
+	if (pgid == 0 || isdot(&nd->last) ||
+				!anoubis_playground_enabled(nd->path.dentry))
 		return lookup_hash_pg(nd, &nd->last);
 
 	err = pg_create_qstr(&pgname, &nd->last, pgid, 1);
@@ -1523,7 +1525,7 @@ int anoubis_pg_validate_name(const char *name, struct dentry *base, int len,
 	int err, exists, off;
 	anoubis_cookie_t file_cookie;
 
-	if (pgid == 0)
+	if (pgid == 0 || !anoubis_playground_enabled(base))
 		return 0;
 
 	origname.name = name;

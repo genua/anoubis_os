@@ -811,7 +811,7 @@ static int ac_inode_removexattr(struct dentry *dentry, const char *name)
  * - At most one hook can return zero. All other hooks must return
  *   -EOPNOTSUPP and this does not count as an error.
  *
- * NOTE: As a matter of best practise we call all hooks even if we
+ * NOTE: As a matter of best practice we call all hooks even if we
  * NOTE: find one that returns an error early.
  */
 static int ac_inode_init_security(struct inode *inode, struct inode *dir,
