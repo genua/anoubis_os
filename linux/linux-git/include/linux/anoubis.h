@@ -176,6 +176,7 @@ struct anoubis_hooks {
 	DECLARE(path_mknod);
 #endif
 	DECLARE(cred_prepare);
+	DECLARE(cred_commit);
 	DECLARE(cred_free);
 	DECLARE(bprm_set_creds);
 	DECLARE(bprm_committed_creds);

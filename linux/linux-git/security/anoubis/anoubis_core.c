@@ -78,9 +78,6 @@ struct anoubis_label {
 struct anoubis_cred_label {
 	struct anoubis_label	_l;
 	anoubis_cookie_t	task_cookie;
-#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
-	anoubis_cookie_t	playgroundid;
-#endif
 	unsigned int		listener:1;
 };
 
@@ -103,55 +100,6 @@ anoubis_cookie_t anoubis_get_task_cookie(void)
 		return 0;
 	return cred->task_cookie;
 }
-
-
-#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
-
-/**
- * Return the playground-ID of the current process.
- *
- * @param None.
- * @return The playground-ID of the current process. Zero means that
- *     the process is not in a playground.
- */
-anoubis_cookie_t anoubis_get_playgroundid(void)
-{
-	struct anoubis_cred_label *cred = ac_current_label();
-
-	if (unlikely(!cred))
-		return 0;
-	return cred->playgroundid;
-}
-
-/**
- * Move the current process into a new playground. This is done
- * by assigning a playground-ID to the current process if it does not
- * have one.
- *
- * @param None. Always affects the current process.
- * @return Zero if a new playground was created, -EBUSY if the current
- *     process is already in a playground, a negative error code if something
- *     else went wrong.
- */
-int anoubis_playground_create(void)
-{
-	struct anoubis_cred_label *cl = ac_current_label();
-
-	if (unlikely(!cl))
-		return -ESRCH;
-	if (cl->playgroundid)
-		return -EBUSY;
-	/*
-	 * Playground creation is not allowed if the task
-	 * used super user privileges.
-	 */
-	if (current->flags & PF_SUPERPRIV)
-		return -EPERM;
-	cl->playgroundid = cl->task_cookie;
-	return 0;
-}
-
-#endif
 
 /*
  * Wrapper around eventdev_enqueue. Removes the queue if it turns out
@@ -991,9 +939,6 @@ static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 	spin_lock(&task_cookie_lock);
 	cl->task_cookie = task_cookie++;
 	spin_unlock(&task_cookie_lock);
-#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
-	cl->playgroundid = anoubis_get_playgroundid();
-#endif
 	cl->listener = 0;
 	nc->security = &cl->_l;
 	ac_process_message(ANOUBIS_PROCESS_OP_FORK, cl->task_cookie);
@@ -1030,9 +975,7 @@ static void ac_cred_commit(struct cred *nc, const struct cred* old)
 		    nsec->task_cookie);
 		nsec->task_cookie = osec->task_cookie;
 		nsec->listener = osec->listener;
-#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
-		nsec->playgroundid = osec->playgroundid;
-#endif
+		VOIDHOOKS(cred_commit, (nc, old));
 	}
 }
 
@@ -1170,10 +1113,6 @@ EXPORT_SYMBOL(anoubis_get_sublabel);
 EXPORT_SYMBOL(anoubis_get_sublabel_const);
 EXPORT_SYMBOL(anoubis_set_sublabel);
 EXPORT_SYMBOL(anoubis_get_task_cookie);
-#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
-EXPORT_SYMBOL(anoubis_get_playgroundid);
-EXPORT_SYMBOL(anoubis_playground_create);
-#endif
 EXPORT_SYMBOL(anoubis_need_secureexec);
 
 security_initcall(anoubis_core_init);

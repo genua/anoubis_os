@@ -25,11 +25,12 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <linux/module.h>
 #include <linux/gfp.h>
+#include <linux/module.h>
+#include <linux/sched.h>
 #include <linux/security.h>
-#include <linux/xattr.h>
 #include <linux/string.h>
+#include <linux/xattr.h>
 
 #include <linux/anoubis.h>
 #include <linux/anoubis_playground.h>
@@ -95,15 +96,35 @@ struct pg_inode_sec {
 	unsigned int		pgenabled:1;
 };
 
-/* Macros to access the security labels with their approriate type. */
+/**
+ * Playground security labels for task/credentials.
+ * Fields:
+ *
+ * @pgid: The playgroudn-ID of the current task.
+ */
+struct pg_task_sec {
+	anoubis_cookie_t	pgid;
+};
+
+/*
+ * Macros to access the security labels with their approriate type.
+ * Please note that the credentials structure are often const, i.e.
+ * we must not change the sec->security pointer. Thus we use
+ * anoubis_get_sublabel_const and only access the pointer if it is not
+ * NULL. The latter can happen for the initial task.
+ */
 #define _SEC(TYPE,X) ((TYPE)anoubis_get_sublabel(&(X), ac_index))
+#define _SECCONST(TYPE,X) \
+		((X)?((TYPE)anoubis_get_sublabel_const(X, ac_index)):NULL)
 #define ISEC(X) _SEC(struct pg_inode_sec *, (X)->i_security)
+#define CSEC(X) _SECCONST(struct pg_task_sec *, (X)->security)
 
 #define _SETSEC(TYPE,X,V) ((TYPE)anoubis_set_sublabel(&(X), ac_index, (V)))
 #define SETISEC(X,V) _SETSEC(struct pg_inode_sec *, ((X)->i_security), (V))
+#define SETCSEC(X,V) _SETSEC(struct pg_task_sec *, ((X)->security), (V))
 
 
-/*
+/**
  * This implements the inode_alloc_security hook for the playground module.
  * Allocate a new playground inode security label. This initializes
  * the playground-ID to and havexattr to zero. This means that the
@@ -376,6 +397,122 @@ static int pg_inode_init_security(struct inode *inode, struct inode *dir,
 }
 
 /**
+ * This implements the pg_cred_prepare security hook. We use this
+ * to track playground-IDs. The playground-ID of the new credentials
+ * is copied from the old credentials. If the old credentials do not
+ * have a security label, the playground-ID of the new credentials is
+ * zero.
+ *
+ * @param cred The new credentials.
+ * @param ocred The old credentials.
+ * @param gfp Memory allocation flags to use for any memory allocation.
+ * @return Zero in case of success, a negative error code, in case of
+ *     an error.
+ */
+static int pg_cred_prepare(struct cred *cred, const struct cred *ocred,
+							gfp_t gfp)
+{
+	struct pg_task_sec *sec, *old;
+
+	sec = kmalloc(sizeof(struct pg_task_sec), gfp);
+	if (!sec)
+		return -ENOMEM;
+	old = CSEC(ocred);
+	if (old)
+		sec->pgid = old->pgid;
+	else
+		sec->pgid = 0;
+	old = SETCSEC(cred, sec);
+	BUG_ON(old);
+	return 0;
+}
+
+/**
+ * This function implements the cred_commit security hook.
+ * We copy the playground-ID from the old to the new creditials.
+ *
+ * @param nc The new credentials.
+ * @param odl The old credentials.
+ * @return None.
+ */
+static void pg_cred_commit(struct cred *nc, const struct cred* old)
+{
+	struct pg_task_sec *nsec = CSEC(nc);
+	struct pg_task_sec *osec = CSEC(old);
+
+	if (nsec && osec) {
+		nsec->pgid = osec->pgid;
+	}
+}
+
+/**
+ * This implements the cred_free security hook.
+ * We free the playground security label associated with the creditials.
+ *
+ * @param cred The credentials.
+ * @return None.
+ */
+static void pg_cred_free(struct cred * cred)
+{
+	struct pg_task_sec *sec = SETCSEC(cred, NULL);
+
+	if (sec)
+		kfree(sec);
+}
+
+/**
+ * Return the playground-ID of the current process.
+ *
+ * @param None.
+ * @return The playground-ID of the current process. Zero means that
+ *     the process is not in a playground.
+ */
+anoubis_cookie_t anoubis_get_playgroundid(void)
+{
+	const struct cred *cred = __task_cred(current);
+	struct pg_task_sec *sec;
+
+	if (unlikely(!cred))
+		return 0;
+	sec = CSEC(cred);
+	if (unlikely(!sec))
+		return 0;
+	return sec->pgid;
+}
+
+/**
+ * Move the current process into a new playground. This is done
+ * by assigning a playground-ID to the current process if it does not
+ * have one.
+ *
+ * @param None. Always affects the current process.
+ * @return Zero if a new playground was created, -EBUSY if the current
+ *     process is already in a playground, a negative error code if something
+ *     else went wrong.
+ */
+int anoubis_playground_create(void)
+{
+	const struct cred *cred = __task_cred(current);
+	struct pg_task_sec *sec;
+
+	if (unlikely(!cred))
+		return -ESRCH;
+	sec = CSEC(cred);
+	if (unlikely(!sec))
+		return -ESRCH;
+	if (sec->pgid)
+		return -EBUSY;
+	/*
+	 * Playground creation is not allowed if the task
+	 * used super user privileges.
+	 */
+	if (current->flags & PF_SUPERPRIV)
+		return -EPERM;
+	sec->pgid = anoubis_get_task_cookie();
+	return 0;
+}
+
+/**
  * Return true if the playground feature is enabled for this dentry.
  * Lookups and access checks will work exactly as normal for this dentry
  * if this function returns false. This is useful for file systems that
@@ -411,6 +548,9 @@ static struct anoubis_hooks pg_ops = {
 	.inode_removexattr = pg_inode_removexattr,
 	.d_instantiate = pg_d_instantiate,
 	.inode_init_security = pg_inode_init_security,
+	.cred_prepare = pg_cred_prepare,
+	.cred_free = pg_cred_free,
+	.cred_commit = pg_cred_commit,
 	.anoubis_stats = pg_getstats,
 };
 
@@ -458,6 +598,9 @@ static int __init pg_init_early(void)
 
 security_initcall(pg_init_early);
 module_init(pg_init_late);
+
+EXPORT_SYMBOL(anoubis_get_playgroundid);
+EXPORT_SYMBOL(anoubis_playground_create);
 
 MODULE_AUTHOR("Christian Ehrhardt <ehrhardt@genua.de>");
 MODULE_DESCRIPTION("Anoubis playground module");
