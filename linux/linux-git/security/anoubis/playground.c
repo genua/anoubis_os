@@ -306,10 +306,14 @@ static void pg_d_instantiate(struct dentry *dentry, struct inode *inode)
 	BUG_ON(dentry == NULL);
 	rc = inode->i_op->getxattr(dentry, XATTR_ANOUBIS_PG, attrbuf,
 	    sizeof(attrbuf) - 1);
-	if (rc == -ENODATA) {
+	switch (-rc) {
+	case ENODATA:
 		isec->havexattr = 1;
 		isec->pgid = 0;
 		return;
+	case ENOTSUPP:
+	case EOPNOTSUPP:
+		goto noxattr;
 	}
 	if (rc < 0) {
 		printk(KERN_ERR "anoubis_playground: Error %d while reading "
