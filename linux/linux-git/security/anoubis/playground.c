@@ -187,7 +187,7 @@ static void pg_inode_free_security(struct inode * inode)
  * - Playground processes must not access files from a different playground.
  *
  * @param inode The inode.
- * @param mask The access mask (MAY_READ, MAY_WRITE and MAY_EXEC)
+ * @param mask The access mask (MAY_READ, MAY_WRITE, MAY_EXEC and MAY_APPEND)
  * @return Zero if the access is ok, a negative error code if the
  *     access it not allowed.
  */
@@ -205,24 +205,40 @@ static int pg_inode_permission(struct inode * inode, int mask)
 	/* Allow access on file systems that do not support the playground. */
 	if (isec && isec->pgenabled == 0)
 		return 0;
+
 	/* Ok, this is a playground process */
+
 	if (!isec || isec->havexattr == 0 || isec->pgid == 0) {
 		/*
 		 * The file is a production file (not part of any playground)
 		 * or the file system does not support security labels.
 		 *
-		 * Writing to directories is ok for the playground.
-		 * Additionally, writing to special files (devices, sockets,
-		 * and fifos) is ok for now. This might need more review
-		 * later on but it seems to be what we want.
+		 * Reading production files is always ok.
 		 */
-		if (S_ISDIR(inode->i_mode) || S_ISCHR(inode->i_mode)
-		    || S_ISBLK(inode->i_mode) || S_ISFIFO(inode->i_mode)
-		    || S_ISSOCK(inode->i_mode))
+		if ((mask & (MAY_WRITE | MAY_APPEND)) == 0)
 			return 0;
-		if (mask & (MAY_WRITE | MAY_APPEND))
-			return -EPERM;
-		return 0;
+
+		/*
+		 * Writing to special files (devices, sockets, and fifos)
+		 * is ok for now. This might need more review later on but
+		 * it seems to be what we want.
+		 */
+		if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode)
+		    || S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode))
+			return 0;
+
+		/*
+		 * Writing to production directories is allowed for playground
+		 * processes because the playground must be able to create
+		 * playground named versions of a directory entry. However,
+		 * writing is not allowed, if the file system does not support
+		 * extended attributes.
+		 */
+		if (S_ISDIR(inode->i_mode) && isec && isec->havexattr == 1)
+			return 0;
+
+		/* Deny all other writes. */
+		return -EPERM;
 	}
 	/*
 	 * At this point we know that the process is in a playground
