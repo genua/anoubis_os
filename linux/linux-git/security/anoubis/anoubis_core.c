@@ -860,6 +860,20 @@ static void ac_d_instantiate(struct dentry *dentry, struct inode *inode)
 {
 	VOIDHOOKS(d_instantiate, (dentry, inode));
 }
+static int ac_file_alloc_security(struct file *file)
+{
+	if ((file->f_security = ac_alloc_label(GFP_KERNEL)) == NULL)
+		return -ENOMEM;
+	return HOOKS(file_alloc_security, (file));
+}
+static void ac_file_free_security(struct file *file)
+{
+	if (!file->f_security)
+		return;
+	VOIDHOOKS(file_free_security, (file));
+	kfree(file->f_security);
+	file->f_security = NULL;
+}
 static int ac_file_lock(struct file *file, unsigned int cmd)
 {
 	return HOOKS(file_lock, (file, cmd));
@@ -1048,6 +1062,8 @@ static struct security_operations anoubis_core_ops = {
 	.inode_follow_link = ac_inode_follow_link,
 	.dentry_open = ac_dentry_open,
 	.d_instantiate = ac_d_instantiate,
+	.file_alloc_security = ac_file_alloc_security,
+	.file_free_security = ac_file_free_security,
 	.file_lock = ac_file_lock,
 #ifdef CONFIG_SECURITY_PATH
 	.path_link = ac_path_link,

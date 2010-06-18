@@ -877,6 +877,48 @@ fail:
 
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 
+/**
+ * Mark the file given as dst as a file that must be filled from the inode
+ * referenced by srcdentry and srcmnt before it can be accessed.
+ * This function emulates an open on the file in srcdentry and attaches
+ * new file handle to the file dst. This function takes all required
+ * references on the parameters, it does not consume any references held
+ * by the caller.
+ *
+ * @param dst The destrination file.
+ * @param srcmnt The vfsmount of the source file.
+ * @param srcdentry The dentry of the source file.
+ * @return Zero in case of success, a negative error code in case of an
+ *     error.
+ *
+ * NOTE: The calle to anoubis_playground_set_lowerfile will try to
+ * NOTE: call deny_write_access on the lower file. I.e. this function
+ * NOTE: fails with -EBUSY if the lower file is alreday open for writing.
+ */
+static int anoubis_pg_needcopy(struct file *dst, struct vfsmount *srcmnt,
+			       struct dentry *srcdentry)
+{
+	struct path path = { srcmnt, srcdentry };
+	struct file *srcfile;
+	const struct cred *cred = current_cred();
+
+	int err = may_open(&path, MAY_READ, FMODE_READ);
+	if (err)
+		return err;
+	/* dentry_open will either release or consume these references! */
+	mntget(srcmnt);
+	dget(srcdentry);
+	srcfile = dentry_open(srcdentry, srcmnt, O_RDONLY, cred);
+	if (IS_ERR(srcfile))
+		return PTR_ERR(srcfile);
+	err = anoubis_playground_set_lowerfile(dst, srcfile);
+	if (err < 0) {
+		fput(srcfile);
+		return err;
+	}
+	return 0;
+}
+
 static inline int isdot(struct qstr *name)
 {
 	if (name->name[0] == '.') {
@@ -952,6 +994,25 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 			path_put_conditional(&pgpath, nd);
 			return -EEXIST;
 		}
+		/* Fall through to LOOKUP_OPEN */
+	}
+	if (nd->flags & LOOKUP_OPEN) {
+		struct inode *inode = origpath.dentry->d_inode;
+		int is_write = (nd->intent.open.flags &
+					(FMODE_WRITE | O_APPEND | O_TRUNC));
+
+		/* Use original file for non-write accesses. */
+		if (!is_write)
+			goto use_orig;
+		/* Use original file for writes to non-regular files. */
+		if (inode && !S_ISREG(inode->i_mode))
+			goto use_orig;
+		if ((nd->flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET)) == 0) {
+			path_put_conditional(&pgpath, nd);
+			path_put_conditional(&origpath, nd);
+			return -ENEEDPGCOPY;
+		}
+		goto use_pg;
 	}
 use_orig:
 	path_put_conditional(&pgpath, nd);
@@ -1381,7 +1442,7 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 {
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
 	struct qstr pgname;
-	int err;
+	int err, is_create;
 	struct dentry *pgdentry, *origdentry;
 
 	if (pgid == 0 || isdot(&nd->last) ||
@@ -1402,16 +1463,45 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 	origdentry = lookup_hash_pg(nd, &nd->last);
 	if (IS_ERR(origdentry))
 		goto use_orig;
-	if (nd->flags & (LOOKUP_CREATE|LOOKUP_RENAME_TARGET)) {
-		/* orig does not exist and we create => use playground */
-		if (origdentry->d_inode == NULL)
+	is_create = (nd->flags & (LOOKUP_CREATE|LOOKUP_RENAME_TARGET));
+	if (is_create) {
+		/*
+		 * orig does not exist and we create => use playground
+		 * However, if the create flag is forced by the playgound
+		 * return an error instead.
+		 */
+		if (origdentry->d_inode == NULL) {
+			err = -ENOENT;
+			if (nd->flags & LOOKUP_PLAYGROUND_CREATE)
+				goto error;
 			goto use_pg;
-		/* Orig exists and O_EXCL lookup => EEXIST */
-		if (nd->flags & LOOKUP_EXCL) {
-			dput(origdentry);
-			dput(pgdentry);
-			return ERR_PTR(-EEXIST);
 		}
+		/* Orig exists and O_EXCL lookup => EEXIST */
+		err = -EEXIST;
+		if (nd->flags & LOOKUP_EXCL)
+			goto error;
+		/* Fall through to the open case. */
+	}
+	if (nd->flags & LOOKUP_OPEN) {
+		struct inode *inode = origdentry->d_inode;
+		int is_write = (nd->intent.open.flags &
+					(FMODE_WRITE | O_APPEND | O_TRUNC));
+
+		/* Use original file for non-write accesses. */
+		if (!is_write)
+			goto use_orig;
+		/* Use original file for writes to non-regular files. */
+		if (inode && !S_ISREG(inode->i_mode))
+			goto use_orig;
+		BUG_ON(!is_create);
+		/* No need to copy data if file is being truncated. */
+		if (nd->intent.open.flags & O_TRUNC)
+			goto use_pg;
+		err = anoubis_pg_needcopy(nd->intent.open.file,
+						nd->path.mnt, origdentry);
+		if (err)
+			goto error;
+		goto use_pg;
 	}
 use_orig:
 	dput(pgdentry);
@@ -1419,6 +1509,10 @@ use_orig:
 use_pg:
 	dput(origdentry);
 	return pgdentry;
+error:
+	dput(pgdentry);
+	dput(origdentry);
+	return ERR_PTR(err);
 }
 
 #else
@@ -1956,6 +2050,7 @@ struct file *do_filp_open(int dfd, const char *pathname,
 	struct dentry *dir;
 	int count = 0;
 	int will_write;
+	int pg_create = 0;
 	int flag = open_to_namei_flags(open_flag);
 
 	if (!acc_mode)
@@ -1976,9 +2071,11 @@ struct file *do_filp_open(int dfd, const char *pathname,
 	if (!(flag & O_CREAT)) {
 		error = path_lookup_open(dfd, pathname, lookup_flags(flag),
 					 &nd, flag);
-		if (error)
+		if (error && error != -ENEEDPGCOPY)
 			return ERR_PTR(error);
-		goto ok;
+		if (error == 0)
+			goto ok;
+		pg_create = 1;
 	}
 
 	/*
@@ -2015,6 +2112,8 @@ struct file *do_filp_open(int dfd, const char *pathname,
 	dir = nd.path.dentry;
 	nd.flags &= ~LOOKUP_PARENT;
 	nd.flags |= LOOKUP_CREATE | LOOKUP_OPEN;
+	if (pg_create)
+		nd.flags |= LOOKUP_PLAYGROUND_CREATE;
 	if (flag & O_EXCL)
 		nd.flags |= LOOKUP_EXCL;
 	mutex_lock(&dir->d_inode->i_mutex);

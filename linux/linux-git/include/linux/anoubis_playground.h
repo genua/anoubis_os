@@ -44,6 +44,7 @@ extern anoubis_cookie_t anoubis_get_playgroundid(void);
 extern int anoubis_pg_validate_name(const char *name, struct dentry *base,
 					int len, anoubis_cookie_t pgid);
 extern int anoubis_playground_enabled(struct dentry *dentry);
+extern int anoubis_playground_set_lowerfile(struct file *up, struct file *low);
 
 #else
 

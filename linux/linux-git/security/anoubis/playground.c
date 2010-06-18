@@ -25,11 +25,13 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <linux/file.h>
 #include <linux/gfp.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/security.h>
 #include <linux/string.h>
+#include <linux/uaccess.h>
 #include <linux/xattr.h>
 
 #include <linux/anoubis.h>
@@ -97,6 +99,17 @@ struct pg_inode_sec {
 };
 
 /**
+ * The security label for file structures. We store the file handle of the
+ * lower file that needs to be copied for playground files that get copied
+ * during write.
+ * Fields:
+ * @lower: The lower file or NULL if no copy is needed.
+ */
+struct pg_file_sec {
+	struct file *lower;
+};
+
+/**
  * Playground security labels for task/credentials.
  * Fields:
  *
@@ -118,10 +131,12 @@ struct pg_task_sec {
 		((X)?((TYPE)anoubis_get_sublabel_const(X, ac_index)):NULL)
 #define ISEC(X) _SEC(struct pg_inode_sec *, (X)->i_security)
 #define CSEC(X) _SECCONST(struct pg_task_sec *, (X)->security)
+#define FSEC(X) _SEC(struct pg_file_sec *, (X)->f_security)
 
 #define _SETSEC(TYPE,X,V) ((TYPE)anoubis_set_sublabel(&(X), ac_index, (V)))
 #define SETISEC(X,V) _SETSEC(struct pg_inode_sec *, ((X)->i_security), (V))
 #define SETCSEC(X,V) _SETSEC(struct pg_task_sec *, ((X)->security), (V))
+#define SETFSEC(X,V) _SETSEC(struct pg_file_sec *, ((X)->f_security), (V))
 
 
 /**
@@ -481,6 +496,113 @@ static void pg_cred_free(struct cred * cred)
 }
 
 /**
+ * Release the handle of the lower file (if any) in the given file
+ * security label.
+ *
+ * @param fsec A pointer to the security label.
+ * @return None.
+ */
+static inline void pg_release_lowerfile(struct pg_file_sec *fsec)
+{
+	if (fsec->lower) {
+		allow_write_access(fsec->lower);
+		fput(fsec->lower);
+		fsec->lower = NULL;
+	}
+}
+
+/**
+ * This implements the file_alloc_security security hook.
+ * We allocate space for the file security label and initialize the
+ * lower file to NULL.
+ *
+ * @param file The file handle.
+ * @return Zero in case of success, a negative error code in case of an error.
+ */
+static int pg_file_alloc_security(struct file *file)
+{
+	struct pg_file_sec *fsec, *old;
+
+	fsec = kmalloc(sizeof(struct pg_file_sec), GFP_KERNEL);
+	if (fsec == NULL)
+		return -ENOMEM;
+	fsec->lower = NULL;
+	old = SETFSEC(file, fsec);
+	BUG_ON(old);
+	return 0;
+}
+
+/**
+ * This implements the file_free_security security hook.
+ * We release the label and the file handle of the lower file if it is
+ * still there.
+ *
+ * @param file The (upper) file handle.
+ */
+static void pg_file_free_security(struct file *file)
+{
+	struct pg_file_sec *fsec = SETFSEC(file, NULL);
+
+	if (!fsec)
+		return;
+	pg_release_lowerfile(fsec);
+	kfree(fsec);
+}
+
+/**
+ * This implements the dentry_open security hook. We use this to copy
+ * data from the lower file to the playground.
+ *
+ * @param file The upper file.
+ * @cred Credentials, unused here.
+ * @return Zero in case of success, a negative error code in case of an error.
+ */
+static int pg_dentry_open(struct file *file, const struct cred *cred)
+{
+	struct pg_file_sec *fsec = FSEC(file);
+	struct inode *lowerinode;
+	mm_segment_t oldfs;
+	loff_t size, rpos = 0, wpos = 0;
+	struct page *p;
+	int err;
+
+	if (fsec->lower == NULL)
+		return 0;
+	lowerinode = fsec->lower->f_path.dentry->d_inode;
+	p = alloc_page(GFP_KERNEL);
+	err = -ENOMEM;
+	if (!p)
+		goto err_fput;
+	size = i_size_read(lowerinode);
+	oldfs = get_fs();
+	set_fs(get_ds());
+	err = -EIO;
+	while (rpos < size) {
+		ssize_t ret;
+		int count = PAGE_SIZE;
+
+		if (unlikely(fatal_signal_pending(current)))
+			goto err;
+		if (size - rpos < count)
+			count = size - rpos;
+		ret = vfs_read(fsec->lower, page_address(p), count, &rpos);
+		if (ret != count)
+			goto err;
+		ret = vfs_write(file, page_address(p), count, &wpos);
+		if (ret != count)
+			goto err;
+	}
+	BUG_ON(rpos != wpos);
+	err = 0;
+err:
+	set_fs(oldfs);
+	__free_page(p);
+err_fput:
+	pg_release_lowerfile(fsec);
+	return err;
+}
+
+/**
  * Return the playground-ID of the current process.
  *
  * @param None.
@@ -557,6 +679,30 @@ int anoubis_playground_enabled(struct dentry *dentry)
 }
 
 /**
+ * Assign a lower file handle to the given playground file. The data of
+ * the lower handle will be copied to the upper file handle if open is
+ * successful.
+ *
+ * @param upper The upper file handle.
+ * @param lower The lower file hanlde.
+ * @return Zero in case of success, a negative error code (usually -EBUSY)
+ *     if an error occured.
+ */
+int anoubis_playground_set_lowerfile(struct file *upper, struct file *lower)
+{
+	struct pg_file_sec *fsec = FSEC(upper);
+	int err;
+
+	BUG_ON(fsec == NULL);
+	pg_release_lowerfile(fsec);
+	err = deny_write_access(lower);
+	if (err < 0)
+		return err;
+	fsec->lower = lower;
+	return 0;
+}
+
+/**
  * Security operations for the anoubis playground module.
  */
 static struct anoubis_hooks pg_ops = {
@@ -571,6 +717,9 @@ static struct anoubis_hooks pg_ops = {
 	.cred_prepare = pg_cred_prepare,
 	.cred_free = pg_cred_free,
 	.cred_commit = pg_cred_commit,
+	.file_alloc_security = pg_file_alloc_security,
+	.file_free_security = pg_file_free_security,
+	.dentry_open = pg_dentry_open,
 	.anoubis_stats = pg_getstats,
 };
 

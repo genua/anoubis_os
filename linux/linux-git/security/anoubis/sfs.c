@@ -119,7 +119,7 @@ sfs_is_allow_path(const char *path)
 	return 0;
 }
 
-/* Veratim copy from fs/namei.c because of a missing EXPORT_SYMBOL */
+/* Verbatim copy from fs/namei.c because of a missing EXPORT_SYMBOL */
 static inline int anoubis_deny_write_access(struct inode * inode)
 {
 	spin_lock(&inode->i_lock);

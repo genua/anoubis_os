@@ -164,6 +164,8 @@ struct anoubis_hooks {
 	DECLARE(inode_removexattr);
 	DECLARE(inode_follow_link);
 	DECLARE(dentry_open);
+	DECLARE(file_alloc_security);
+	DECLARE(file_free_security);
 	DECLARE(file_lock);
 #ifdef CONFIG_SECURITY_PATH
 	DECLARE(path_link);
