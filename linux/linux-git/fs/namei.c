@@ -999,7 +999,7 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 	if (nd->flags & LOOKUP_OPEN) {
 		struct inode *inode = origpath.dentry->d_inode;
 		int is_write = (nd->intent.open.flags &
-					(FMODE_WRITE | O_APPEND | O_TRUNC));
+					(FMODE_WRITE | O_TRUNC));
 
 		/* Use original file for non-write accesses. */
 		if (!is_write)
@@ -1476,17 +1476,27 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 				goto error;
 			goto use_pg;
 		}
-		/* Orig exists and O_EXCL lookup => EEXIST */
+		/*
+		 * Orig exists and O_EXCL lookup => EEXIST
+		 * However, if the create flag is foced by the playground
+		 * this can be ignore (O_EXCL without O_CREAT from the user).
+		 */
 		err = -EEXIST;
-		if (nd->flags & LOOKUP_EXCL)
-			goto error;
+		if (nd->flags & LOOKUP_EXCL) {
+			if ((nd->flags & LOOKUP_PLAYGROUND_CREATE) == 0)
+				goto error;
+		}
 		/* Fall through to the open case. */
 	}
 	if (nd->flags & LOOKUP_OPEN) {
 		struct inode *inode = origdentry->d_inode;
 		int is_write = (nd->intent.open.flags &
-					(FMODE_WRITE | O_APPEND | O_TRUNC));
-
+					(FMODE_WRITE | O_TRUNC));
+		if (nd->flags & LOOKUP_PLAYGROUND_CREATE) {
+			mode_t mode = origdentry->d_inode->i_mode;
+			mode &= (S_IRWXU|S_IRWXG|S_IRWXO);
+			nd->intent.open.create_mode = mode;
+		}
 		/* Use original file for non-write accesses. */
 		if (!is_write)
 			goto use_orig;
@@ -2076,6 +2086,7 @@ struct file *do_filp_open(int dfd, const char *pathname,
 		if (error == 0)
 			goto ok;
 		pg_create = 1;
+		mode = 0;
 	}
 
 	/*
@@ -2119,6 +2130,8 @@ struct file *do_filp_open(int dfd, const char *pathname,
 	mutex_lock(&dir->d_inode->i_mutex);
 	path.dentry = lookup_hash(&nd);
 	path.mnt = nd.path.mnt;
+	if (nd.flags & LOOKUP_PLAYGROUND_CREATE)
+		mode = nd.intent.open.create_mode;
 
 do_last:
 	error = PTR_ERR(path.dentry);
@@ -2285,6 +2298,8 @@ do_link:
 	mutex_lock(&dir->d_inode->i_mutex);
 	path.dentry = lookup_hash(&nd);
 	path.mnt = nd.path.mnt;
+	if (nd.flags & LOOKUP_PLAYGROUND_CREATE)
+		mode = nd.intent.open.create_mode;
 	__putname(nd.last.name);
 	goto do_last;
 }

@@ -230,7 +230,7 @@ static int pg_inode_permission(struct inode * inode, int mask)
 		 *
 		 * Reading production files is always ok.
 		 */
-		if ((mask & (MAY_WRITE | MAY_APPEND)) == 0)
+		if ((mask & MAY_WRITE) == 0)
 			return 0;
 
 		/*
