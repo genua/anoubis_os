@@ -65,9 +65,7 @@
 #include <linux/perf_event.h>
 #include <linux/posix-timers.h>
 
-#ifdef CONFIG_SECURITY_ANOUBIS
 #include <linux/anoubis.h>
-#endif
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>

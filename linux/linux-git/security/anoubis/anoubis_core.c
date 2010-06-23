@@ -736,6 +736,24 @@ static int ac_inode_permission(struct inode * inode, int mask)
 {
 	return HOOKS(inode_permission, (inode, mask));
 }
+static int ac_inode_link(struct dentry *old_dentry, struct inode *dir,
+						struct dentry *new_dentry)
+{
+	return HOOKS(inode_link, (old_dentry, dir, new_dentry));
+}
+static int ac_inode_unlink(struct inode *dir, struct dentry *dentry)
+{
+	return HOOKS(inode_unlink, (dir, dentry));
+}
+static int ac_inode_rmdir(struct inode *dir, struct dentry *dentry)
+{
+	return HOOKS(inode_rmdir, (dir, dentry));
+}
+static int ac_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
+			struct inode *new_dir, struct dentry *new_dentry)
+{
+	return HOOKS(inode_rename, (old_dir, old_dentry, new_dir, new_dentry));
+}
 static int ac_inode_setxattr(struct dentry * dentry, const char * name,
     const void * value, size_t size, int flags)
 {
@@ -1056,6 +1074,10 @@ static struct security_operations anoubis_core_ops = {
 	.inode_alloc_security = ac_inode_alloc_security,
 	.inode_free_security = ac_inode_free_security,
 	.inode_permission = ac_inode_permission,
+	.inode_link = ac_inode_link,
+	.inode_unlink = ac_inode_unlink,
+	.inode_rmdir = ac_inode_rmdir,
+	.inode_rename = ac_inode_rename,
 	.inode_setxattr = ac_inode_setxattr,
 	.inode_removexattr = ac_inode_removexattr,
 	.inode_init_security = ac_inode_init_security,

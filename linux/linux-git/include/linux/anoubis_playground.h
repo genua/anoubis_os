@@ -45,6 +45,7 @@ extern int anoubis_pg_validate_name(const char *name, struct dentry *base,
 					int len, anoubis_cookie_t pgid);
 extern int anoubis_playground_enabled(struct dentry *dentry);
 extern int anoubis_playground_set_lowerfile(struct file *up, struct file *low);
+extern int anoubis_playground_copy(int atfd, const char __user *oldname);
 
 #else
 
@@ -62,6 +63,11 @@ static inline int anoubis_pg_validate_name(const char *name,
 			struct dentry *base, int len, anoubis_cookie_t pgid)
 {
 	return 1;
+}
+
+static inline int anoubis_playground_copy(int atfd, const char __user *oldname)
+{
+	return 0;
 }
 
 #endif

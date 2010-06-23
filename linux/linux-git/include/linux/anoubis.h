@@ -131,9 +131,24 @@ extern int anoubis_raise(void * buf, size_t len, int src);
 extern int anoubis_raise_flags(void * buf, size_t len, int src, int *flags);
 extern int anoubis_notify(void * buf, size_t len, int src);
 extern int anoubis_notify_atomic(void * buf, size_t len, int src);
+extern int anoubis_need_secureexec(struct linux_binprm *bprm);
+
+#ifdef CONFIG_SECURITY_ANOUBIS
+
 extern void anoubis_task_create(struct task_struct *tsk);
 extern void anoubis_task_destroy(struct task_struct *tsk);
-extern int anoubis_need_secureexec(struct linux_binprm *bprm);
+
+#else
+
+static inline void anoubis_task_create(struct task_struct *tsk)
+{
+}
+
+static inline void anoubis_task_destroy(struct task_struct *tsk)
+{
+}
+
+#endif
 
 /*
  * Module mulitplexor functions
@@ -160,6 +175,10 @@ struct anoubis_hooks {
 	DECLARE(inode_alloc_security);
 	DECLARE(inode_free_security);
 	DECLARE(inode_permission);
+	DECLARE(inode_link);
+	DECLARE(inode_unlink);
+	DECLARE(inode_rmdir);
+	DECLARE(inode_rename);
 	DECLARE(inode_setxattr);
 	DECLARE(inode_removexattr);
 	DECLARE(inode_follow_link);

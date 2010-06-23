@@ -33,12 +33,10 @@
 #include <linux/fcntl.h>
 #include <linux/device_cgroup.h>
 #include <linux/fs_struct.h>
-#include <asm/uaccess.h>
-
-#ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 #include <linux/anoubis.h>
 #include <linux/anoubis_playground.h>
-#endif
+#include <asm/uaccess.h>
+
 
 #define ACC_MODE(x) ("\000\004\002\006"[(x)&O_ACCMODE])
 
@@ -962,40 +960,26 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 		(*pathp) = pgpath;
 		return 0;
 	}
+	path_put_conditional(&pgpath, nd);
 	err = do_lookup_pg(nd, name, &origpath);
-	if (err < 0) {
-		path_put_conditional(&pgpath, nd);
+	if (err < 0)
 		return err;
-	}
+
+	/* If this is not the last component, return now. */
+	if (nd->flags & (LOOKUP_PARENT | LOOKUP_CONTINUE))
+		goto out;
 
 	/*
 	 * At this point we know that:
 	 * - Both lookups were done without error.
 	 * - The playground lookup returned a negative dentry.
 	 * We can either:
-	 * - Return the negative playground path which will potentially
-	 *   create the playground file
-	 * - or return the non-playground version.
+	 * - Return the special error code -ENEEDPGCOPY that will cause
+	 *   the caller to copy the file into the playground or
+	 * - Return the original dentry.
+	 * All creates should be done via lookup_hash not this path.
 	 */
-
-	/*
-	 * If we lookup an intermediate path component, we always return
-	 * the non-playground version.
-	 */
-	if (nd->flags & LOOKUP_PARENT)
-		goto use_orig;
-	if (nd->flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET)) {
-		/* Use playground version if original file does not exist. */
-		if (origpath.dentry->d_inode == NULL)
-			goto use_pg;
-		/* O_EXCL and original file exists => EEXIST */
-		if (nd->flags & LOOKUP_EXCL) {
-			path_put_conditional(&origpath, nd);
-			path_put_conditional(&pgpath, nd);
-			return -EEXIST;
-		}
-		/* Fall through to LOOKUP_OPEN */
-	}
+	BUG_ON(nd->flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET));
 	if (nd->flags & LOOKUP_OPEN) {
 		struct inode *inode = origpath.dentry->d_inode;
 		int is_write = (nd->intent.open.flags &
@@ -1003,25 +987,30 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 
 		/* Use original file for non-write accesses. */
 		if (!is_write)
-			goto use_orig;
+			goto out;
 		/* Use original file for writes to non-regular files. */
 		if (inode && !S_ISREG(inode->i_mode))
-			goto use_orig;
-		if ((nd->flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET)) == 0) {
-			path_put_conditional(&pgpath, nd);
-			path_put_conditional(&origpath, nd);
-			return -ENEEDPGCOPY;
-		}
-		goto use_pg;
+			goto out;
+		goto copy;
 	}
-use_orig:
-	path_put_conditional(&pgpath, nd);
+	/*
+	 * The playground file does not yet exist, this is the last
+	 * component of the path and the file is the source of a
+	 * hardlink or rename: Tell the caller that the file must be
+	 * copied before we can continue.
+	 */
+	if (nd->flags & LOOKUP_PLAYGROUND_CREATE) {
+		struct inode *inode = origpath.dentry->d_inode;
+
+		if (inode && S_ISREG(inode->i_mode))
+			goto copy;
+	}
+out:
 	(*pathp) = origpath;
 	return 0;
-use_pg:
+copy:
 	path_put_conditional(&origpath, nd);
-	(*pathp) = pgpath;
-	return 0;
+	return -ENEEDPGCOPY;
 }
 
 #else
@@ -1438,6 +1427,34 @@ static struct dentry *lookup_hash_pg(struct nameidata *nd, struct qstr *last)
 
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 
+/**
+ * Check if we can ignore an O_EXCL flag in lookup_create.
+ * We can ignore the flag if the target of the lookup will not be
+ * created anyway because it is a symlink the will be followed.
+ * Additionally, an O_EXCL flag can be ignored if it was given by
+ * user without O_CREAT and the O_CREAT flag was only added by the
+ * playground copy trigger (LOOKUP_PLAYGROUND_CREATE).
+ * This function only applies to the case where the file does not yet
+ * exist in the playground. An exiting file in the playground has handled
+ * by the normal O_EXCL code in the open path.
+ *
+ * @param dentry The dentry of the original file.
+ * @param flags The lookup flags from the nameidata structure.
+ * @return True if the O_EXCL flag can ignored without an error.
+ */
+static inline int pg_ignore_excl(struct dentry *dentry, unsigned long flags)
+{
+	struct inode *inode = dentry->d_inode;
+
+	if (inode == NULL)
+		return 1;
+	if (flags & LOOKUP_PLAYGROUND_CREATE)
+		return 1;
+	if (S_ISLNK(inode->i_mode) && (flags & LOOKUP_FOLLOW))
+		return 1;
+	return 0;
+}
+
 static struct dentry *lookup_hash(struct nameidata *nd)
 {
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
@@ -1459,7 +1476,7 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 		return pgdentry;
 
 	/* lookup_hash cannot be used for parent lookup. */
-	BUG_ON(nd->flags & LOOKUP_PARENT);
+	BUG_ON(nd->flags & (LOOKUP_PARENT | LOOKUP_CONTINUE));
 	origdentry = lookup_hash_pg(nd, &nd->last);
 	if (IS_ERR(origdentry))
 		goto use_orig;
@@ -1477,26 +1494,19 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 			goto use_pg;
 		}
 		/*
-		 * Orig exists and O_EXCL lookup => EEXIST
-		 * However, if the create flag is foced by the playground
-		 * this can be ignore (O_EXCL without O_CREAT from the user).
+		 * Orig exists and O_EXCL lookup => EEXIST. However, there
+		 * are some cases where this error must be suppressed.
 		 */
 		err = -EEXIST;
-		if (nd->flags & LOOKUP_EXCL) {
-			if ((nd->flags & LOOKUP_PLAYGROUND_CREATE) == 0)
-				goto error;
-		}
+		if ((nd->flags & LOOKUP_EXCL) &&
+					!pg_ignore_excl(origdentry, nd->flags))
+			goto error;
 		/* Fall through to the open case. */
 	}
 	if (nd->flags & LOOKUP_OPEN) {
 		struct inode *inode = origdentry->d_inode;
 		int is_write = (nd->intent.open.flags &
 					(FMODE_WRITE | O_TRUNC));
-		if (nd->flags & LOOKUP_PLAYGROUND_CREATE) {
-			mode_t mode = origdentry->d_inode->i_mode;
-			mode &= (S_IRWXU|S_IRWXG|S_IRWXO);
-			nd->intent.open.create_mode = mode;
-		}
 		/* Use original file for non-write accesses. */
 		if (!is_write)
 			goto use_orig;
@@ -1504,6 +1514,11 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 		if (inode && !S_ISREG(inode->i_mode))
 			goto use_orig;
 		BUG_ON(!is_create);
+		if (nd->flags & LOOKUP_PLAYGROUND_CREATE) {
+			mode_t mode = origdentry->d_inode->i_mode;
+			mode &= (S_IRWXU|S_IRWXG|S_IRWXO);
+			nd->intent.open.create_mode = mode;
+		}
 		/* No need to copy data if file is being truncated. */
 		if (nd->intent.open.flags & O_TRUNC)
 			goto use_pg;
@@ -1513,6 +1528,14 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 			goto error;
 		goto use_pg;
 	}
+	/*
+	 * LOOKUP_PLAYGROUND_CREATE without LOOKUP_OPEN, i.e. this is the
+	 * source of a rename or hardlink. Return ENEEDPGCOPY if the
+	 * playground file does not exist.
+	 */
+	err = -ENEEDPGCOPY;
+	if (nd->flags & LOOKUP_PLAYGROUND_CREATE)
+		goto error;
 use_orig:
 	dput(pgdentry);
 	return origdentry;
@@ -2180,7 +2203,7 @@ do_last:
 	audit_inode(pathname, path.dentry);
 
 	error = -EEXIST;
-	if (flag & O_EXCL)
+	if ((flag & O_EXCL) && !pg_create)
 		goto exit_dput;
 
 	if (__follow_mount(&path)) {
@@ -2886,14 +2909,21 @@ SYSCALL_DEFINE5(linkat, int, olddfd, const char __user *, oldname,
 	struct nameidata nd;
 	struct path old_path;
 	int error;
+	unsigned int lookup_flags = LOOKUP_PLAYGROUND_CREATE;
 	char *to;
 
 	if ((flags & ~AT_SYMLINK_FOLLOW) != 0)
 		return -EINVAL;
 
-	error = user_path_at(olddfd, oldname,
-			     flags & AT_SYMLINK_FOLLOW ? LOOKUP_FOLLOW : 0,
-			     &old_path);
+retry:
+	if (flags & AT_SYMLINK_FOLLOW)
+		lookup_flags |= LOOKUP_FOLLOW;
+	error = user_path_at(olddfd, oldname, lookup_flags, &old_path);
+	if (error == -ENEEDPGCOPY) {
+		error = anoubis_playground_copy(olddfd, oldname);
+		if (error == 0)
+			goto retry;
+	}
 	if (error)
 		return error;
 
@@ -3091,6 +3121,7 @@ SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
 	char *to;
 	int error;
 
+retry:
 	error = user_path_parent(olddfd, oldname, &oldnd, &from);
 	if (error)
 		goto exit;
@@ -3113,6 +3144,7 @@ SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
 		goto exit2;
 
 	oldnd.flags &= ~LOOKUP_PARENT;
+	oldnd.flags |= LOOKUP_PLAYGROUND_CREATE;
 	newnd.flags &= ~LOOKUP_PARENT;
 	newnd.flags |= LOOKUP_RENAME_TARGET;
 
@@ -3120,8 +3152,16 @@ SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
 
 	old_dentry = lookup_hash(&oldnd);
 	error = PTR_ERR(old_dentry);
-	if (IS_ERR(old_dentry))
+	if (IS_ERR(old_dentry)) {
+		if (error == -ENEEDPGCOPY) {
+			unlock_rename(new_dir, old_dir);
+			error = anoubis_playground_copy(olddfd, oldname);
+			if (error == 0)
+				error = -ENEEDPGCOPY;
+			goto exit2;
+		}
 		goto exit3;
+	}
 	/* source must exist */
 	error = -ENOENT;
 	if (!old_dentry->d_inode)
@@ -3171,6 +3211,8 @@ exit1:
 	path_put(&oldnd.path);
 	putname(from);
 exit:
+	if (error == -ENEEDPGCOPY)
+		goto retry;
 	return error;
 }
 

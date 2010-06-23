@@ -31,6 +31,7 @@
 #include <linux/sched.h>
 #include <linux/security.h>
 #include <linux/string.h>
+#include <linux/syscalls.h>
 #include <linux/uaccess.h>
 #include <linux/xattr.h>
 
@@ -258,13 +259,92 @@ static int pg_inode_permission(struct inode * inode, int mask)
 	/*
 	 * At this point we know that the process is in a playground
 	 * and the file is in a playground, too. Access is allowed iff
-	 * the playground IDs match. EACCESS seems somewhat more correct
+	 * the playground IDs match. EACCES seems somewhat more correct
 	 * for this case than EPERM. In theory we would want to return
 	 * ENOENT for this case but this is a bit risky because it might
 	 * cause the caller to create a negative dentry.
 	 */
 	if (pgid != isec->pgid)
 		return -EACCES;
+	return 0;
+}
+
+/**
+ * This implements the inode_link security hook. A playground process
+ * can only create hard links to playground files in the same playground.
+ * A non-playground process cannot create links to playground files at all.
+ *
+ * @param The directory entry of the old name.
+ * @param dir The inode of the directory where the link will be created.
+ * @param new_dentry The directory entry of the new name.
+ * @return Zero in case of success, a negative error code in case of errors.
+ */
+static int pg_inode_link(struct dentry *old_dentry, struct inode *dir,
+						struct dentry *new_dentry)
+{
+	struct pg_inode_sec *sec;
+	anoubis_cookie_t pgid = anoubis_get_playgroundid();
+
+	if (!anoubis_playground_enabled(old_dentry))
+		return 0;
+	sec = ISEC(old_dentry->d_inode);
+	if (sec->pgid != pgid)
+		return -EACCES;
+	return 0;
+}
+
+/**
+ * This implements the inode_unlink and inode_rmdir security hooks. A
+ * playground process can only unlink files that are in the same playground.
+ * Processes that are not in a playground can unlink all files.
+ *
+ * @param dir The directory of the file.
+ * @param dentry The file itself.
+ * @return Zero if unlink is allowed or a negative error code.
+ */
+static int pg_inode_unlink(struct inode *dir, struct dentry *dentry)
+{
+	struct pg_inode_sec *sec;
+
+	anoubis_cookie_t pgid = anoubis_get_playgroundid();
+	if (!pgid)
+		return 0;
+	if (!anoubis_playground_enabled(dentry))
+		return 0;
+	sec = ISEC(dentry->d_inode);
+	if (sec->pgid != pgid)
+		return -EACCES;
+	return 0;
+}
+
+/**
+ * This implements the inode_rename security hook. A playground process
+ * can only rename files that are marked as playground files. If the
+ * victim of the rename already exists, it must be a playground file, too.
+ *
+ * @param old_dir The directory of the rename source.
+ * @param old_dentry The directory entry of the rename source.
+ * @param new_dir The directory of the rename target.
+ * @param new_dentry The directory entry of the rename target.
+ * @return Zero if rename is allow, a negative error code otherwise.
+ */
+static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
+                             struct inode *new_dir, struct dentry *new_dentry)
+{
+	struct pg_inode_sec *sec;
+	anoubis_cookie_t pgid = anoubis_get_playgroundid();
+
+	if (anoubis_playground_enabled(old_dentry)) {
+		sec = ISEC(old_dentry->d_inode);
+		if (sec->pgid != pgid)
+			return -EACCES;
+	}
+	if (anoubis_playground_enabled(new_dentry)) {
+		/* Implies new_dentry->d_inode != 0. */
+		sec = ISEC(new_dentry->d_inode);
+		if (sec->pgid != pgid)
+			return -EACCES;
+	}
 	return 0;
 }
 
@@ -703,6 +783,30 @@ int anoubis_playground_set_lowerfile(struct file *upper, struct file *lower)
 }
 
 /**
+ * Open the file given by oldname (interpreted relative to atfd) for
+ * writing. This should only happend for playground processes and will
+ * trigger a copy of the file into the playground. The file is closed
+ * immediately after opening because we are only interested in the side
+ * effect. Only regular files are copied.
+ *
+ * @param atfd The filedescriptor of the base directory. Relative paths in
+ *     oldname are interpreted relative to this directory (see openat(2)).
+ * @param oldname The name of the file that is to be copied.
+ * @return Zero if nothing was done, -ENEEDPGCOPY if the copy operation
+ *    was performed and another negative error code if an error occured.
+ */
+int anoubis_playground_copy(int atfd, const char __user *oldname)
+{
+	int fd;
+
+	fd = sys_openat(atfd, oldname, O_WRONLY, 0);
+	if (fd < 0)
+		return fd;
+	sys_close(fd);
+	return -ENEEDPGCOPY;
+}
+
+/**
  * Security operations for the anoubis playground module.
  */
 static struct anoubis_hooks pg_ops = {
@@ -710,6 +814,10 @@ static struct anoubis_hooks pg_ops = {
 	.inode_alloc_security = pg_inode_alloc_security,
 	.inode_free_security = pg_inode_free_security,
 	.inode_permission = pg_inode_permission,
+	.inode_link = pg_inode_link,
+	.inode_unlink = pg_inode_unlink,
+	.inode_rmdir = pg_inode_unlink,
+	.inode_rename = pg_inode_rename,
 	.inode_setxattr = pg_inode_setxattr,
 	.inode_removexattr = pg_inode_removexattr,
 	.d_instantiate = pg_d_instantiate,
