@@ -62,6 +62,8 @@ static const char *nopg_fs[] = {
 	"proc",
 	"usbfs",
 	"sysfs",
+	"fuse",
+	"fusectl",
 	NULL,
 };
 
