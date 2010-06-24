@@ -792,6 +792,7 @@ static __always_inline void follow_dotdot(struct nameidata *nd)
 }
 
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
+
 /**
  * Create a playground mangled name from the name in @orig. The playground-ID
  * to use is in @pgid.
@@ -801,6 +802,8 @@ static __always_inline void follow_dotdot(struct nameidata *nd)
  * @orig: The original name. At least @orig->len+@extra bytes in @orig->name
  *     must bue accessible as some users of qstrs assume that they can
  *     access the first byte after the actual name.
+ * @whiteout: If true, a whiteout name is created, otherwise a normal
+ *     name is created.
  * @pgid: The playground-ID.
  * @extra: Copy this many bytes after the actual name into the new name.
  *     Additionally, the name is always terminated by a zero byte. Most
@@ -808,8 +811,8 @@ static __always_inline void follow_dotdot(struct nameidata *nd)
  * @return Zero in case of success, a negative error code in case of
  *     errors.
  */
-static int pg_create_qstr(struct qstr *pgname, const struct qstr *orig,
-					anoubis_cookie_t pgid, int extra)
+static int __pg_create_qstr(struct qstr *pgname, const struct qstr *orig,
+				int whiteout, anoubis_cookie_t pgid, int extra)
 {
 	char pgidstr[40];
 	char *namebuf;
@@ -818,7 +821,11 @@ static int pg_create_qstr(struct qstr *pgname, const struct qstr *orig,
 	BUG_ON(sizeof(pgid) < sizeof(unsigned long long));
 	BUG_ON(sizeof(unsigned long long) > 8);
 	BUG_ON(pgid == 0);
-	snprintf(pgidstr, sizeof(pgidstr), ".plgr.%llx.",
+	if (whiteout)
+		snprintf(pgidstr, sizeof(pgidstr), ".plgrD%llx.",
+						(unsigned long long)pgid);
+	else
+		snprintf(pgidstr, sizeof(pgidstr), ".plgr.%llx.",
 						(unsigned long long)pgid);
 	prefixlen = strlen(pgidstr);
 	pgname->len = orig->len + prefixlen;
@@ -832,6 +839,44 @@ static int pg_create_qstr(struct qstr *pgname, const struct qstr *orig,
 	pgname->hash = full_name_hash(pgname->name, pgname->len);
 	return 0;
 }
+
+/**
+ * Call __pg_create_qstr with the whiteout parameter set to false.
+ */
+static inline int pg_create_qstr(struct qstr *pgname, const struct qstr *orig,
+					anoubis_cookie_t pgid, int extra)
+{
+	return __pg_create_qstr(pgname, orig, 0, pgid, extra);
+}
+
+/**
+ * Call __pg_create_qstr with the whiteout parameter set to true.
+ */
+static inline int pg_create_whiteout_qstr(struct qstr *pgname,
+		const struct qstr *orig, anoubis_cookie_t pgid, int extra)
+{
+	return __pg_create_qstr(pgname, orig, 1, pgid, extra);
+}
+
+/**
+ * Call the directory specific hash function for file names (if any)
+ * and assign the resulting value to the hash field of the qstr.
+ *
+ * @param dir The directory.
+ * @param name The file name to hash.
+ * @return Zero in case of success, a negative error code in case of an
+ *     error.
+ */
+static inline int pg_hash_qstr(struct dentry *dir, struct qstr *name)
+{
+	int err;
+
+	if (dir->d_op == NULL || dir->d_op->d_hash == NULL)
+		return 0;
+	err = dir->d_op->d_hash(dir, name);
+	return err;
+}
+
 #endif
 
 /*
@@ -917,6 +962,13 @@ static int anoubis_pg_needcopy(struct file *dst, struct vfsmount *srcmnt,
 	return 0;
 }
 
+/**
+ * Return true if the name in the qstr is either "." or "..".
+ *
+ * @param name The string to test.
+ * @return False if the name is a normal directory entry, true if the name
+ *     is either "." or "..".
+ */
 static inline int isdot(struct qstr *name)
 {
 	if (name->name[0] == '.') {
@@ -944,12 +996,10 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 	err = pg_create_qstr(&pgname, name, pgid, 1);
 	if (err < 0)
 		return err;
-	if (nd->path.dentry->d_op && nd->path.dentry->d_op->d_hash) {
-		err = nd->path.dentry->d_op->d_hash(nd->path.dentry, &pgname);
-		if (err < 0) {
-			kfree(pgname.name);
-			return err;
-		}
+	err = pg_hash_qstr(nd->path.dentry, &pgname);
+	if (err < 0) {
+		kfree(pgname.name);
+		return err;
 	}
 	err = do_lookup_pg(nd, &pgname, &pgpath);
 	kfree(pgname.name);
@@ -961,6 +1011,29 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 		return 0;
 	}
 	path_put_conditional(&pgpath, nd);
+
+	/* Check for whiteouts. */
+	err = pg_create_whiteout_qstr(&pgname, name, pgid, 1);
+	if (err < 0)
+		return err;
+	err = pg_hash_qstr(nd->path.dentry, &pgname);
+	if (err < 0) {
+		kfree(pgname.name);
+		return err;
+	}
+	err = do_lookup_pg(nd, &pgname, &pgpath);
+	kfree(pgname.name);
+	if (err < 0)
+		return err;
+	if (pgpath.dentry->d_inode != NULL)
+		err = -ENOENT;
+	path_put_conditional(&pgpath, nd);
+	if (err)
+		return err;
+
+	/*
+	 * Search for the original file.
+	 */
 	err = do_lookup_pg(nd, name, &origpath);
 	if (err < 0)
 		return err;
@@ -1428,6 +1501,56 @@ static struct dentry *lookup_hash_pg(struct nameidata *nd, struct qstr *last)
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 
 /**
+ * Create a whiteout marker file. This is always a regular file with
+ * zero permissions. Must be called with the inode mutex of the directory
+ * already held.
+ *
+ * @param nd The nameidata of the directory.
+ * @param origname The original (non-playground name to whiteout.
+ * @return Zero if the whiteout was created and did not exist before. 
+ *     -EEXIST if the whiteout already exists and another error code
+ *     if something else went wrong.
+ *
+ * NOTE: The tail of this function is a simplified version of mknodat.
+ * NOTE: Changes in mknodat must be done in this function, too.
+ */
+static int anoubis_pg_create_whiteout(struct nameidata *nd,
+					struct qstr *origname)
+{
+	struct qstr pgname;
+	struct dentry *white;
+	int err;
+	anoubis_cookie_t pgid = anoubis_get_playgroundid();
+
+	BUG_ON(nd->flags & LOOKUP_OPEN);
+	BUG_ON(pgid == 0);
+	err = pg_create_whiteout_qstr(&pgname, origname, pgid, 0);
+	if (err < 0)
+		return err;
+	err = pg_hash_qstr(nd->path.dentry, &pgname);
+	if (err < 0)
+		return err; 
+	white = lookup_hash_pg(nd, &pgname);
+	kfree(pgname.name);
+	if (IS_ERR(white))
+		return PTR_ERR(white);
+	if (white->d_inode) {
+		dput(white);
+		return -EEXIST;
+	}
+	err = mnt_want_write(nd->path.mnt);
+	if (err)
+		goto out_dput;
+	err = security_path_mknod(&nd->path, white, S_IFREG, 0 /* dev */);
+	if (err == 0)
+		err = vfs_create(nd->path.dentry->d_inode, white, S_IFREG, nd);
+	mnt_drop_write(nd->path.mnt);
+out_dput:
+	dput(white);
+	return err;
+}
+
+/**
  * Check if we can ignore an O_EXCL flag in lookup_create.
  * We can ignore the flag if the target of the lookup will not be
  * created anyway because it is a symlink the will be followed.
@@ -1460,7 +1583,8 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
 	struct qstr pgname;
 	int err, is_create;
-	struct dentry *pgdentry, *origdentry;
+	struct dentry *pgdentry, *origdentry, *whiteout;
+	int unlink = (nd->flags & LOOKUP_PLAYGROUND_UNLINK);
 
 	if (pgid == 0 || isdot(&nd->last) ||
 				!anoubis_playground_enabled(nd->path.dentry))
@@ -1471,9 +1595,55 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 		return ERR_PTR(err);
 	pgdentry = lookup_hash_pg(nd, &pgname);
 	kfree(pgname.name);
-	/* Error or positive dentry? Just return it. */
-	if (IS_ERR(pgdentry) || pgdentry->d_inode)
+	/*
+	 * Error or positive dentry? Just return it. However, if this is
+	 * going to be an unlink, make sure that the original file does not
+	 * exist of is hidden by a whiteout.
+	 * NOTE: Consider the following case:
+	 * - The playground creates a new directory foo/ and a file bar
+	 *   within foo: This creates
+	 *     .plgr.xxx.foo/   and
+	 *     .plgr.xxx.foo/.plgr.xxx.bar
+	 * - The playground then removes foo/bar: If .plgr.xxx.foo/bar does
+	 *   not exist we must remove .plgr.xxx.foo/.plgr.xxx.bar without
+	 *   creating a whiteout. This is important, if the playground
+	 *   tries then tries to remove the directory foo. This is only
+	 *   possible if .plgr.xxx.foo/ is an empty direcotry, i.e. it
+	 *   must not contain whiteouts.
+	 */
+	if (IS_ERR(pgdentry))
 		return pgdentry;
+	if (pgdentry->d_inode) {
+		if (!unlink)
+			return pgdentry;
+		origdentry = lookup_hash_pg(nd, &nd->last);
+		if (IS_ERR(origdentry))
+			goto use_orig;
+		if (origdentry->d_inode != NULL) {
+			err = anoubis_pg_create_whiteout(nd, &nd->last);
+			if (err < 0 && err != -EEXIST)
+				goto error;
+		}
+		goto use_pg;
+	}
+
+	/*
+	 * The playground dentry is negative, check for whiteouts and
+	 * return the negative playground dentry if a whiteout is present.
+	 * We must never touch the original dentry if a whiteout exists.
+	 */
+	err = pg_create_whiteout_qstr(&pgname, &nd->last, pgid, 1);
+	if (err < 0)
+		return ERR_PTR(err);
+	whiteout = lookup_hash_pg(nd, &pgname);
+	kfree(pgname.name);
+	if (!IS_ERR(whiteout)) {
+		if (whiteout->d_inode) {
+			dput(whiteout);
+			return pgdentry;
+		}
+		dput(whiteout);
+	}
 
 	/* lookup_hash cannot be used for parent lookup. */
 	BUG_ON(nd->flags & (LOOKUP_PARENT | LOOKUP_CONTINUE));
@@ -1501,6 +1671,27 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 		if ((nd->flags & LOOKUP_EXCL) &&
 					!pg_ignore_excl(origdentry, nd->flags))
 			goto error;
+		/*
+		 * This is create without an open where the original file
+		 * exists. Most calllers want EEXIST in this case. However,
+		 * the target of a rename can in fact exist. In the renam
+		 */
+		if ((nd->flags & LOOKUP_OPEN) == 0) {
+			err = -EEXIST;
+			if ((nd->flags & LOOKUP_RENAME_TARGET) == 0)
+				goto error;
+			err = 0;
+			if (!S_ISDIR(origdentry->d_inode->i_mode))
+				goto use_pg;
+			/*
+			 * XXX CEH: In theory a rename is possible, if the
+			 * XXX CEH: target directory is empty and both the
+			 * XXX CEH: src and the target of the rename are
+			 * XXX CEH: directories. For now, give EEXIST, too.
+			 */
+			err = -EEXIST;
+			goto error;
+		}
 		/* Fall through to the open case. */
 	}
 	if (nd->flags & LOOKUP_OPEN) {
@@ -1515,8 +1706,7 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 			goto use_orig;
 		BUG_ON(!is_create);
 		if (nd->flags & LOOKUP_PLAYGROUND_CREATE) {
-			mode_t mode = origdentry->d_inode->i_mode;
-			mode &= (S_IRWXU|S_IRWXG|S_IRWXO);
+			mode_t mode = origdentry->d_inode->i_mode & S_IRWXU;
 			nd->intent.open.create_mode = mode;
 		}
 		/* No need to copy data if file is being truncated. */
@@ -1536,6 +1726,20 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 	err = -ENEEDPGCOPY;
 	if (nd->flags & LOOKUP_PLAYGROUND_CREATE)
 		goto error;
+	/*
+	 * Unlink where the playground file does not exist but the
+	 * original file does exist.
+	 */
+	if (unlink && origdentry->d_inode) {
+		/*
+		 * Do not allow removal of directories in the production
+		 * system for now. We must make sure that the directory is
+		 * empty before we can delete it.
+		 */
+		if (S_ISDIR(origdentry->d_inode->i_mode))
+			err = -EACCES;
+		goto error;
+	}
 use_orig:
 	dput(pgdentry);
 	return origdentry;
@@ -1610,7 +1814,7 @@ struct dentry *lookup_one_len(const char *name, struct dentry *base, int len)
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 
 static inline int anoubis_is_pg_file(const char *name, int len,
-    int *prefixlen, anoubis_cookie_t *cookie)
+    int *prefixlen, anoubis_cookie_t *cookie, int *whiteout)
 {
 	int off;
 
@@ -1620,8 +1824,18 @@ static inline int anoubis_is_pg_file(const char *name, int len,
 	 * - one for the playground id itself
 	 * - one for the final dot
 	 */
-	if (len < 8 || memcmp(name, ".plgr.", 6) != 0)
+	if (len < 8 || memcmp(name, ".plgr", 5) != 0)
 		return 0;
+	switch (name[5]) {
+	default:
+		return 0;
+	case 'D':
+		(*whiteout) = 1;
+		break;
+	case '.':
+		(*whiteout) = 0;
+		break;
+	}
 	for (off=6; off<len; ++off) {
 		if (name[off] == '.')
 			break;
@@ -1649,7 +1863,7 @@ int anoubis_pg_validate_name(const char *name, struct dentry *base, int len,
 {
 	struct qstr origname, pgname;
 	struct dentry *tmp;
-	int err, exists, off;
+	int err, exists, off, whiteout;
 	anoubis_cookie_t file_cookie;
 
 	if (pgid == 0 || !anoubis_playground_enabled(base))
@@ -1659,28 +1873,36 @@ int anoubis_pg_validate_name(const char *name, struct dentry *base, int len,
 	origname.len = len;
 	if (isdot(&origname))
 		return 0;
-	if (anoubis_is_pg_file(name, len, &off, &file_cookie)) {
+	if (anoubis_is_pg_file(name, len, &off, &file_cookie, &whiteout)) {
 		/*
 		 * This is a playground file. It is valid iff the
 		 * file's playground id matches the playground id of the
 		 * process.
 		 */
-		if (file_cookie != pgid)
+		if (file_cookie != pgid || whiteout)
 			return -ENOENT;
 		return off;
 	}
-	err = pg_create_qstr(&pgname, &origname, pgid, 0);
-	if (err < 0)
-		return -ENOMEM;
-	tmp = lookup_one_len(pgname.name, base, pgname.len);
-	kfree(pgname.name);
-	if (IS_ERR(tmp))
-		return PTR_ERR(tmp);
-	exists = (tmp->d_inode != NULL);
-	dput(tmp);
-	/* If a playground version exists, this entry is not valid. */
-	if (exists)
-		return -ENOENT;
+
+	/*
+	 * First check for a playground version of this entry. If one exists,
+	 * the playground version must be reported and this entry is skipped.
+	 * Additionally, if a whiteout exists for the file, the file is
+	 * skipped, too. This is the second iteration through the loop.
+	 */
+	for (whiteout = 0; whiteout < 2; ++whiteout) {
+		err = __pg_create_qstr(&pgname, &origname, whiteout, pgid, 0);
+		if (err < 0)
+			return -ENOMEM;
+		tmp = lookup_one_len(pgname.name, base, pgname.len);
+		kfree(pgname.name);
+		if (IS_ERR(tmp))
+			return PTR_ERR(tmp);
+		exists = (tmp->d_inode != NULL);
+		dput(tmp);
+		if (exists)
+			return -ENOENT;
+	}
 	return 0;
 }
 
@@ -2650,12 +2872,19 @@ static long do_rmdir(int dfd, const char __user *pathname)
 	}
 
 	nd.flags &= ~LOOKUP_PARENT;
+	nd.flags |= LOOKUP_PLAYGROUND_UNLINK;
 
 	mutex_lock_nested(&nd.path.dentry->d_inode->i_mutex, I_MUTEX_PARENT);
 	dentry = lookup_hash(&nd);
 	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	if (IS_ERR(dentry)) {
+		if (error != -ENEEDPGCOPY)
+			goto exit2;
+		error = anoubis_pg_create_whiteout(&nd, &nd.last);
+		if (error == -EEXIST)
+			error = -ENOENT;
 		goto exit2;
+	}
 	error = mnt_want_write(nd.path.mnt);
 	if (error)
 		goto exit3;
@@ -2734,10 +2963,18 @@ static long do_unlinkat(int dfd, const char __user *pathname)
 		goto exit1;
 
 	nd.flags &= ~LOOKUP_PARENT;
+	nd.flags |= LOOKUP_PLAYGROUND_UNLINK;
 
 	mutex_lock_nested(&nd.path.dentry->d_inode->i_mutex, I_MUTEX_PARENT);
 	dentry = lookup_hash(&nd);
 	error = PTR_ERR(dentry);
+	if (IS_ERR(dentry) && error == -ENEEDPGCOPY) {
+		error = anoubis_pg_create_whiteout(&nd, &nd.last);
+		if (error == -EEXIST)
+			error = -ENOENT;
+		mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
+		goto exit1;
+	}
 	if (!IS_ERR(dentry)) {
 		/* Why not before? Because we want correct error value */
 		if (nd.last.name[nd.last.len])
@@ -3144,7 +3381,7 @@ retry:
 		goto exit2;
 
 	oldnd.flags &= ~LOOKUP_PARENT;
-	oldnd.flags |= LOOKUP_PLAYGROUND_CREATE;
+	oldnd.flags |= LOOKUP_PLAYGROUND_CREATE | LOOKUP_PLAYGROUND_UNLINK;
 	newnd.flags &= ~LOOKUP_PARENT;
 	newnd.flags |= LOOKUP_RENAME_TARGET;
 
@@ -3156,6 +3393,19 @@ retry:
 		if (error == -ENEEDPGCOPY) {
 			unlock_rename(new_dir, old_dir);
 			error = anoubis_playground_copy(olddfd, oldname);
+			/*
+			 * We do not create the whiteout at this point.
+			 * It will be created by the next retry in lookup_hash
+			 * because the playground file now exists.
+			 * This has two reasons:
+			 * - The directory is already unlocked, i.e. we
+			 *   must not call anoubis_pg_create_whiteout.
+			 * - anoubis_playground_copy is unreliable as it does
+			 *   a complete path traversal again and is thus
+			 *   prone to rename attacks of the user, i.e. we
+			 *   do not really know if the file that will
+			 *   be renamed, has a whiteout.
+			 */
 			if (error == 0)
 				error = -ENEEDPGCOPY;
 			goto exit2;
