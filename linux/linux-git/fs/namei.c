@@ -1759,6 +1759,12 @@ static inline struct dentry *lookup_hash(struct nameidata *nd)
 	return lookup_hash_pg(nd, &nd->last);
 }
 
+static int anoubis_pg_create_whiteout(struct nameidata *nd,
+					struct qstr *origname)
+{
+	return 0;
+}
+
 #endif
 
 static int __lookup_one_len(const char *name, struct qstr *this,
