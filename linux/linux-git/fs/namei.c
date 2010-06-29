@@ -288,7 +288,7 @@ int inode_permission(struct inode *inode, int mask)
 		return retval;
 
 	return security_inode_permission(inode,
-			mask & (MAY_READ|MAY_WRITE|MAY_EXEC|MAY_APPEND));
+		mask & (MAY_READ|MAY_WRITE|MAY_EXEC|MAY_APPEND|MAY_ACCESS));
 }
 
 /**
@@ -988,6 +988,7 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
 	struct path pgpath, origpath;
 	struct qstr pgname;
+	struct inode *inode;
 	int err;
 
 	if (pgid == 0 || isdot(name) ||
@@ -1042,19 +1043,23 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 	if (nd->flags & (LOOKUP_PARENT | LOOKUP_CONTINUE))
 		goto out;
 
+	/* If the object does not exist, we are done. Use production. */
+	inode = origpath.dentry->d_inode;
+	if (inode == NULL)
+		goto out;
+
 	/*
 	 * At this point we know that:
 	 * - Both lookups were done without error.
 	 * - The playground lookup returned a negative dentry.
 	 * We can either:
-	 * - Return the special error code -ENEEDPGCOPY that will cause
+	 * - Return the special error code -EPGCLONEREG that will cause
 	 *   the caller to copy the file into the playground or
 	 * - Return the original dentry.
 	 * All creates should be done via lookup_hash not this path.
 	 */
 	BUG_ON(nd->flags & (LOOKUP_CREATE | LOOKUP_RENAME_TARGET));
 	if (nd->flags & LOOKUP_OPEN) {
-		struct inode *inode = origpath.dentry->d_inode;
 		int is_write = (nd->intent.open.flags &
 					(FMODE_WRITE | O_TRUNC));
 
@@ -1062,8 +1067,9 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 		if (!is_write)
 			goto out;
 		/* Use original file for writes to non-regular files. */
-		if (inode && !S_ISREG(inode->i_mode))
+		if (!S_ISREG(inode->i_mode))
 			goto out;
+		err = -EPGCLONEREG;
 		goto copy;
 	}
 	/*
@@ -1073,17 +1079,22 @@ static int do_lookup(struct nameidata *nd, struct qstr *name,
 	 * copied before we can continue.
 	 */
 	if (nd->flags & LOOKUP_PLAYGROUND_CREATE) {
-		struct inode *inode = origpath.dentry->d_inode;
-
-		if (inode && S_ISREG(inode->i_mode))
+		if (S_ISREG(inode->i_mode)) {
+			err = -EPGCLONEREG;
 			goto copy;
+		}
+		if (S_ISLNK(inode->i_mode)) {
+			err = -EPGCLONESYMLINK;
+			goto copy;
+		}
 	}
 out:
 	(*pathp) = origpath;
 	return 0;
 copy:
+	BUG_ON(!S_ISREG(inode->i_mode) && !S_ISLNK(inode->i_mode));
 	path_put_conditional(&origpath, nd);
-	return -ENEEDPGCOPY;
+	return err;
 }
 
 #else
@@ -1585,6 +1596,7 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 	int err, is_create;
 	struct dentry *pgdentry, *origdentry, *whiteout;
 	int unlink = (nd->flags & LOOKUP_PLAYGROUND_UNLINK);
+	struct inode *originode;
 
 	if (pgid == 0 || isdot(&nd->last) ||
 				!anoubis_playground_enabled(nd->path.dentry))
@@ -1650,6 +1662,7 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 	origdentry = lookup_hash_pg(nd, &nd->last);
 	if (IS_ERR(origdentry))
 		goto use_orig;
+	originode = origdentry->d_inode;
 	is_create = (nd->flags & (LOOKUP_CREATE|LOOKUP_RENAME_TARGET));
 	if (is_create) {
 		/*
@@ -1657,12 +1670,19 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 		 * However, if the create flag is forced by the playgound
 		 * return an error instead.
 		 */
-		if (origdentry->d_inode == NULL) {
+		if (originode == NULL) {
 			err = -ENOENT;
 			if (nd->flags & LOOKUP_PLAYGROUND_CREATE)
 				goto error;
 			goto use_pg;
 		}
+		/*
+		 * This process is creating an object in the playground
+		 * explicitly (e.g. via anoubis_playground_clone_symlink.
+		 * Use playground file to allow create.
+		 */
+		if (anoubis_playground_get_pgcreate())
+			goto use_pg;
 		/*
 		 * Orig exists and O_EXCL lookup => EEXIST. However, there
 		 * are some cases where this error must be suppressed.
@@ -1681,7 +1701,7 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 			if ((nd->flags & LOOKUP_RENAME_TARGET) == 0)
 				goto error;
 			err = 0;
-			if (!S_ISDIR(origdentry->d_inode->i_mode))
+			if (!S_ISDIR(originode->i_mode))
 				goto use_pg;
 			/*
 			 * XXX CEH: In theory a rename is possible, if the
@@ -1695,18 +1715,17 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 		/* Fall through to the open case. */
 	}
 	if (nd->flags & LOOKUP_OPEN) {
-		struct inode *inode = origdentry->d_inode;
 		int is_write = (nd->intent.open.flags &
 					(FMODE_WRITE | O_TRUNC));
 		/* Use original file for non-write accesses. */
 		if (!is_write)
 			goto use_orig;
 		/* Use original file for writes to non-regular files. */
-		if (inode && !S_ISREG(inode->i_mode))
+		if (originode && !S_ISREG(originode->i_mode))
 			goto use_orig;
 		BUG_ON(!is_create);
 		if (nd->flags & LOOKUP_PLAYGROUND_CREATE) {
-			mode_t mode = origdentry->d_inode->i_mode & S_IRWXU;
+			mode_t mode = originode->i_mode & S_IRWXU;
 			nd->intent.open.create_mode = mode;
 		}
 		/* No need to copy data if file is being truncated. */
@@ -1718,25 +1737,39 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 			goto error;
 		goto use_pg;
 	}
+
+	/*
+	 * Use the negative dentry if the file does not exist at all.
+	 * Cases where we might create the non-existing file have been
+	 * handled above, i.e.  we can safely use the original dentry.
+	 */
+	if (originode == NULL)
+		goto use_orig;
 	/*
 	 * LOOKUP_PLAYGROUND_CREATE without LOOKUP_OPEN, i.e. this is the
-	 * source of a rename or hardlink. Return ENEEDPGCOPY if the
-	 * playground file does not exist.
+	 * source of a rename or hardlink. Return EPGCLONE* where supported
+	 * if the playground file does not exist.
 	 */
-	err = -ENEEDPGCOPY;
-	if (nd->flags & LOOKUP_PLAYGROUND_CREATE)
+	err = -EACCES;
+	if (nd->flags & LOOKUP_PLAYGROUND_CREATE) {
+		if (S_ISREG(originode->i_mode))
+			err = -EPGCLONEREG;
+		if (S_ISLNK(originode->i_mode))
+			err = -EPGCLONESYMLINK;
 		goto error;
+	}
 	/*
 	 * Unlink where the playground file does not exist but the
 	 * original file does exist.
 	 */
-	if (unlink && origdentry->d_inode) {
+	if (unlink) {
 		/*
 		 * Do not allow removal of directories in the production
 		 * system for now. We must make sure that the directory is
 		 * empty before we can delete it.
 		 */
-		if (S_ISDIR(origdentry->d_inode->i_mode))
+		err = -EPGWHITEOUT;
+		if (S_ISDIR(originode->i_mode))
 			err = -EACCES;
 		goto error;
 	}
@@ -2332,8 +2365,11 @@ struct file *do_filp_open(int dfd, const char *pathname,
 	if (!(flag & O_CREAT)) {
 		error = path_lookup_open(dfd, pathname, lookup_flags(flag),
 					 &nd, flag);
-		if (error && error != -ENEEDPGCOPY)
+		if (error && error != -EPGCLONEREG) {
+			BUG_ON(error == -EPGWHITEOUT);
+			BUG_ON(error == -EPGCLONESYMLINK);
 			return ERR_PTR(error);
+		}
 		if (error == 0)
 			goto ok;
 		pg_create = 1;
@@ -2884,7 +2920,8 @@ static long do_rmdir(int dfd, const char __user *pathname)
 	dentry = lookup_hash(&nd);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry)) {
-		if (error != -ENEEDPGCOPY)
+		BUG_ON(error == -EPGCLONEREG || error == -EPGCLONESYMLINK);
+		if (error != -EPGWHITEOUT)
 			goto exit2;
 		error = anoubis_pg_create_whiteout(&nd, &nd.last);
 		if (error == -EEXIST)
@@ -2974,7 +3011,9 @@ static long do_unlinkat(int dfd, const char __user *pathname)
 	mutex_lock_nested(&nd.path.dentry->d_inode->i_mutex, I_MUTEX_PARENT);
 	dentry = lookup_hash(&nd);
 	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry) && error == -ENEEDPGCOPY) {
+	BUG_ON(IS_ERR(dentry)
+	    && (error == -EPGCLONEREG || error == -EPGCLONESYMLINK));
+	if (IS_ERR(dentry) && error == -EPGWHITEOUT) {
 		error = anoubis_pg_create_whiteout(&nd, &nd.last);
 		if (error == -EEXIST)
 			error = -ENOENT;
@@ -3162,13 +3201,25 @@ retry:
 	if (flags & AT_SYMLINK_FOLLOW)
 		lookup_flags |= LOOKUP_FOLLOW;
 	error = user_path_at(olddfd, oldname, lookup_flags, &old_path);
-	if (error == -ENEEDPGCOPY) {
-		error = anoubis_playground_copy(olddfd, oldname);
-		if (error == 0)
-			goto retry;
+	if (error) {
+		switch(error) {
+		default:
+			return error;
+		case -EPGCLONEREG:
+			error = anoubis_playground_clone_reg(olddfd, oldname);
+			if (error == 0)
+				goto retry;
+			return error;
+		case -EPGCLONESYMLINK:
+			error = anoubis_playground_clone_symlink(olddfd,
+								 oldname);
+			if (error == 0)
+				goto retry;
+			return error;
+		case -EPGWHITEOUT:
+			BUG();
+		}
 	}
-	if (error)
-		return error;
 
 	error = user_path_parent(newdfd, newname, &nd, &to);
 	if (error)
@@ -3362,9 +3413,10 @@ SYSCALL_DEFINE4(renameat, int, olddfd, const char __user *, oldname,
 	struct nameidata oldnd, newnd;
 	char *from;
 	char *to;
-	int error;
+	int error, do_retry;
 
 retry:
+	do_retry = 0;
 	error = user_path_parent(olddfd, oldname, &oldnd, &from);
 	if (error)
 		goto exit;
@@ -3396,27 +3448,36 @@ retry:
 	old_dentry = lookup_hash(&oldnd);
 	error = PTR_ERR(old_dentry);
 	if (IS_ERR(old_dentry)) {
-		if (error == -ENEEDPGCOPY) {
+		/*
+		 * We do not create whiteouts at this point. They will be
+		 * be created by the next retry in lookup_hash because the
+		 * playground file will exist in the next retry. Apart from
+		 * that we cannot create the whiteout now, because:
+		 * - The directory is already unlocked, i.e. we must not
+		 *   call anoubis_pg_create_whiteout.
+		 * - anoubis_playground_clone_* is unreliable as it does a
+		 *   complete path traversal again and is thus prone to
+		 *   rename attacks of the user, i.e. we do not really know
+		 *   if the file that will be renamed, has a whiteout.
+		 */
+		switch(error) {
+		default:
+			goto exit3;
+		case -EPGWHITEOUT:
+			BUG();
+		case -EPGCLONEREG:
 			unlock_rename(new_dir, old_dir);
-			error = anoubis_playground_copy(olddfd, oldname);
-			/*
-			 * We do not create the whiteout at this point.
-			 * It will be created by the next retry in lookup_hash
-			 * because the playground file now exists.
-			 * This has two reasons:
-			 * - The directory is already unlocked, i.e. we
-			 *   must not call anoubis_pg_create_whiteout.
-			 * - anoubis_playground_copy is unreliable as it does
-			 *   a complete path traversal again and is thus
-			 *   prone to rename attacks of the user, i.e. we
-			 *   do not really know if the file that will
-			 *   be renamed, has a whiteout.
-			 */
-			if (error == 0)
-				error = -ENEEDPGCOPY;
-			goto exit2;
+			error = anoubis_playground_clone_reg(olddfd, oldname);
+			break;
+		case -EPGCLONESYMLINK:
+			unlock_rename(new_dir, old_dir);
+			error = anoubis_playground_clone_symlink(olddfd,
+								 oldname);
+			break;
 		}
-		goto exit3;
+		if (error == 0)
+			do_retry = 1;
+		goto exit2;
 	}
 	/* source must exist */
 	error = -ENOENT;
@@ -3467,7 +3528,7 @@ exit1:
 	path_put(&oldnd.path);
 	putname(from);
 exit:
-	if (error == -ENEEDPGCOPY)
+	if (do_retry)
 		goto retry;
 	return error;
 }

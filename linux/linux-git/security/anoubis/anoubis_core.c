@@ -754,6 +754,10 @@ static int ac_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 {
 	return HOOKS(inode_rename, (old_dir, old_dentry, new_dir, new_dentry));
 }
+static int ac_inode_readlink(struct dentry *dentry)
+{
+	return HOOKS(inode_readlink, (dentry));
+}
 static int ac_inode_setxattr(struct dentry * dentry, const char * name,
     const void * value, size_t size, int flags)
 {
@@ -1078,6 +1082,7 @@ static struct security_operations anoubis_core_ops = {
 	.inode_unlink = ac_inode_unlink,
 	.inode_rmdir = ac_inode_rmdir,
 	.inode_rename = ac_inode_rename,
+	.inode_readlink = ac_inode_readlink,
 	.inode_setxattr = ac_inode_setxattr,
 	.inode_removexattr = ac_inode_removexattr,
 	.inode_init_security = ac_inode_init_security,

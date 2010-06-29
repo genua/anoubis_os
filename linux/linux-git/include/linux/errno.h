@@ -30,7 +30,9 @@
 #define EIOCBRETRY	530	/* iocb queued, will trigger a retry */
 
 /* Defined for the anoubis Playground */
-#define ENEEDPGCOPY	600	/* File must be copied into the playground */
+#define EPGCLONEREG	600	/* file must be copied into playground */
+#define EPGCLONESYMLINK	601	/* Symlink must be copied into playground */
+#define EPGWHITEOUT	602	/* Create whiteout in playground */
 
 #endif
 

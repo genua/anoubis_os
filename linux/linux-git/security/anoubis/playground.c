@@ -117,9 +117,13 @@ struct pg_file_sec {
  * Fields:
  *
  * @pgid: The playgroudn-ID of the current task.
+ * @pgcreate: True if newly created file of this process should always
+ *     be created in the playground even if the open is exclusive and
+ *     the original file already exists.
  */
 struct pg_task_sec {
 	anoubis_cookie_t	pgid;
+	unsigned int		pgcreate:1;
 };
 
 /*
@@ -255,6 +259,13 @@ static int pg_inode_permission(struct inode * inode, int mask)
 		if (S_ISDIR(inode->i_mode) && isec && isec->havexattr == 1)
 			return 0;
 
+		/*
+		 * Report success, if the caller is sys_access. The file
+		 * will be copied in case of an actual access.
+		 */
+		if (mask & MAY_ACCESS)
+			return 0;
+
 		/* Deny all other writes. */
 		return -EPERM;
 	}
@@ -331,7 +342,7 @@ static int pg_inode_unlink(struct inode *dir, struct dentry *dentry)
  * @return Zero if rename is allow, a negative error code otherwise.
  */
 static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
-                             struct inode *new_dir, struct dentry *new_dentry)
+			   struct inode *new_dir, struct dentry *new_dentry)
 {
 	struct pg_inode_sec *sec;
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
@@ -348,6 +359,29 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 			return -EACCES;
 	}
 	return 0;
+}
+
+/**
+ * This implements the inode_readlink security hook. Reading symlinks is
+ * allowed for production file symlinks and for symlinks that live in the
+ * same playground as the process.
+ *
+ * @param dentry The symlink to read.
+ * @return Zero if readlink is allowed, or a negative error code.
+ */
+int pg_inode_readlink(struct dentry *dentry)
+{
+	struct pg_inode_sec *sec;
+	anoubis_cookie_t pgid = anoubis_get_playgroundid();
+
+	if (!anoubis_playground_enabled(dentry))
+		return 0;
+	sec = ISEC(dentry->d_inode);
+	if (sec->pgid == 0)
+		return 0;
+	if (sec->pgid == pgid)
+		return 0;
+	return -EACCES;
 }
 
 /**
@@ -534,6 +568,7 @@ static int pg_cred_prepare(struct cred *cred, const struct cred *ocred,
 	sec = kmalloc(sizeof(struct pg_task_sec), gfp);
 	if (!sec)
 		return -ENOMEM;
+	sec->pgcreate = 0;
 	old = CSEC(ocred);
 	if (old)
 		sec->pgid = old->pgid;
@@ -705,6 +740,24 @@ anoubis_cookie_t anoubis_get_playgroundid(void)
 }
 
 /**
+ * Return true if the current process has the pgcreate flag set in
+ * its task label.
+ *
+ * @param None.
+ * @return True if the flag is set.
+ */
+int anoubis_playground_get_pgcreate(void)
+{
+	const struct cred *cred = __task_cred(current);
+	struct pg_task_sec *sec;
+
+	if (unlikely(!cred))
+		return 0;
+	sec = CSEC(cred);
+	return sec && sec->pgcreate;
+}
+
+/**
  * Move the current process into a new playground. This is done
  * by assigning a playground-ID to the current process if it does not
  * have one.
@@ -785,19 +838,20 @@ int anoubis_playground_set_lowerfile(struct file *upper, struct file *lower)
 }
 
 /**
- * Open the file given by oldname (interpreted relative to atfd) for
- * writing. This should only happend for playground processes and will
+ * Open the regular file given by oldname (interpreted relative to atfd)
+ * for writing. This should only happend for playground processes and will
  * trigger a copy of the file into the playground. The file is closed
  * immediately after opening because we are only interested in the side
- * effect. Only regular files are copied.
+ * effect. Only regular files can be copied with this function.
  *
  * @param atfd The filedescriptor of the base directory. Relative paths in
  *     oldname are interpreted relative to this directory (see openat(2)).
  * @param oldname The name of the file that is to be copied.
- * @return Zero if nothing was done, -ENEEDPGCOPY if the copy operation
- *    was performed and another negative error code if an error occured.
+ * @return Zero if the file is now cloned, either because this function
+ *    call initiated the copy or because some other process did.
+ *    A negative error code if an error occured.
  */
-int anoubis_playground_copy(int atfd, const char __user *oldname)
+int anoubis_playground_clone_reg(int atfd, const char __user *oldname)
 {
 	int fd;
 
@@ -805,7 +859,58 @@ int anoubis_playground_copy(int atfd, const char __user *oldname)
 	if (fd < 0)
 		return fd;
 	sys_close(fd);
-	return -ENEEDPGCOPY;
+	return 0;
+}
+
+/**
+ * This function clones an existing production file symlink into
+ * the currently active playground. This is done by creating a new
+ * symlink with the same link target.
+ *
+ * @param atfd The file descriptor of the start directory. Relative
+ *     pathnames in __oldname are interpreted relative to this directory.
+ * @param __oldname The non-playground name of the symlink to clone.
+ * @return Zero if the link was created, a negative error code if something
+ *     went wrong.
+ */
+int anoubis_playground_clone_symlink(int atfd, const char __user *__oldname)
+{
+	char *oldname = getname(__oldname);
+	char *link = __getname();
+	int err;
+	mm_segment_t oldfs;
+	const struct cred *cred = __task_cred(current);
+	struct pg_task_sec *sec;
+
+
+	if (unlikely(!cred))
+		return -EACCES;
+	sec = CSEC(cred);
+	if (unlikely(!sec))
+		return -EACCES;
+	if (!sec->pgid)
+		return -EIO;
+	err = -ENOMEM;
+	if (!oldname || !link)
+		goto err_free;
+	oldfs = get_fs();
+	set_fs(get_ds());
+	err = sys_readlinkat(atfd, oldname, link, PATH_MAX-1);
+	if (err < 0)
+		goto err;
+	link[err] = 0;
+	BUG_ON(sec->pgcreate);
+	sec->pgcreate = 1;
+	err = sys_symlinkat(link, atfd, oldname);
+	sec->pgcreate = 0;
+err:
+	set_fs(oldfs);
+err_free:
+	if (oldname)
+		__putname(oldname);
+	if (link)
+		__putname(link);
+	return err;
 }
 
 /**
@@ -820,6 +925,7 @@ static struct anoubis_hooks pg_ops = {
 	.inode_unlink = pg_inode_unlink,
 	.inode_rmdir = pg_inode_unlink,
 	.inode_rename = pg_inode_rename,
+	.inode_readlink = pg_inode_readlink,
 	.inode_setxattr = pg_inode_setxattr,
 	.inode_removexattr = pg_inode_removexattr,
 	.d_instantiate = pg_d_instantiate,

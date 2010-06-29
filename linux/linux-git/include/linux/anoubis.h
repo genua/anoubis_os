@@ -179,6 +179,7 @@ struct anoubis_hooks {
 	DECLARE(inode_unlink);
 	DECLARE(inode_rmdir);
 	DECLARE(inode_rename);
+	DECLARE(inode_readlink);
 	DECLARE(inode_setxattr);
 	DECLARE(inode_removexattr);
 	DECLARE(inode_follow_link);
