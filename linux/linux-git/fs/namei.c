@@ -3513,6 +3513,7 @@ retry:
 		goto exit6;
 	error = vfs_rename(old_dir->d_inode, old_dentry,
 				   new_dir->d_inode, new_dentry);
+	anoubis_playground_clear_accessok(old_dir->d_inode);
 exit6:
 	mnt_drop_write(oldnd.path.mnt);
 exit5:

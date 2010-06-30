@@ -27,15 +27,45 @@
 #ifndef ANOUBIS_PLAYGROUND_H
 #define ANOUBIS_PLAYGROUND_H
 
-#include <linux/errno.h>
-#include <linux/anoubis.h>
-
 /* Statistic Keys for ANOUBIS_SOURCE_PLAYGROUND */
 #define PG_STAT_LOADTIME		10
+#define PG_STAT_DEVICEWRITE_DELAY	11
+#define PG_STAT_DEVICEWRITE_ASK		12
+#define PG_STAT_DEVICEWRITE_DENY	13
+#define PG_STAT_RENAME_ASK		14
+#define PG_STAT_RENAME_OVERRIDE		15
+
+#define ANOUBIS_PLAYGROUND_OP_OPEN	1
+#define ANOUBIS_PLAYGROUND_OP_RENAME	2
+
+/**
+ * This message is sent to the daemon if a playground process is
+ * trying to perform an action that requires user confirmation because
+ * it will affect the production system. Fields:
+ * @common: The common data for all anoubis events.
+ * @pgid: The playground-ID of the process that wants to perform the access.
+ * @op: The operation that the process wants to perfrom, e.g.
+ *    ANOUBIS_PLAYGROUND_OP_OPEN or ANOUBIS_PLAYGROUND_OP_RENAME.
+ * @mode: The file mode of the (first) inode involved in the operation.
+ *    (Taken directly forom inode->i_mode).
+ * @pathbuf: Contains one or two NUL-terminated path names, depending on
+ *    the value of the op field.
+ */
+struct pg_open_message {
+	struct anoubis_event_common common;
+	anoubis_cookie_t pgid;
+	int op;
+	mode_t mode;
+	char pathbuf[0];
+};
 
 #ifdef __KERNEL__
 
 #include <linux/dcache.h>
+#include <linux/errno.h>
+
+#include <linux/anoubis.h>
+
 
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 
@@ -49,6 +79,7 @@ extern int anoubis_playground_clone_reg(int atfd, const char __user *oldname);
 extern int anoubis_playground_clone_symlink(int atfd, const char __user *);
 
 extern int anoubis_playground_get_pgcreate(void);
+extern void anoubis_playground_clear_accessok(struct inode *inode);
 
 #else
 
@@ -83,6 +114,10 @@ static inline int anoubis_playground_clone_symlink(int atfd,
 static inline int anoubis_playground_get_pgcreate(void)
 {
 	return 0;
+}
+
+static inline void anoubis_playground_clear_accessok(struct inode *inode)
+{
 }
 
 #endif

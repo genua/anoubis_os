@@ -571,26 +571,6 @@ static int sfs_inode_permission(struct inode * inode, int mask)
 	return 0;
 }
 
-/*
- * The use of "root" below is somewhat of a hack. We should actually pass
- * the global file system root but we don't have that. However, __d_path
- * is prepared to handle paths that are not below the given root. Thus
- * this trick should be ok for now.
- */
-static inline char * global_dpath(struct path * path, char * buf, int len)
-{
-	char * ret;
-	struct path root;
-
-	root.mnt = NULL;
-	root.dentry = NULL;
-	spin_lock(&dcache_lock);
-	ret = __d_path(path, &root, buf, len);
-	spin_unlock(&dcache_lock);
-	return ret;
-}
-
-/* We rely on the fact that GFP_KERNEL allocations cannot fail. */
 static struct sfs_open_message * sfs_open_fill(struct path * f_path, int mask,
     int * lenp)
 {

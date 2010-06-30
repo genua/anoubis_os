@@ -29,7 +29,11 @@
 
 #include <linux/eventdev.h>
 
-#define ANOUBISCORE_VERSION		0x00010004UL
+/*
+ * Changes between diffenrt versions:
+ * 0x00010005: Add playground messages.
+ */
+#define ANOUBISCORE_VERSION		0x00010005UL
 
 #define ANOUBIS_CS_LEN		32
 struct anoubis_ioctl_csum {
@@ -216,6 +220,35 @@ extern void * anoubis_set_sublabel(void ** labelp, int idx, void * subl);
 extern void * anoubis_get_sublabel(void ** labelp, int idx);
 extern void * anoubis_get_sublabel_const(void *label, int idx);
 extern anoubis_cookie_t anoubis_get_task_cookie(void);
+
+/**
+ * Reconstruct the absolute path name of the dentry/vfsmnt pair
+ * given by path. This function is used by both the sfs and the
+ * playground module.
+ * The use of "root" below is somewhat of a hack. We should actually pass
+ * the global file system root but we don't have that. However, __d_path
+ * is prepared to handle paths that are not below the given root. Thus
+ * this trick should be ok for now.
+ *
+ * @param path The dentry and vfsmnt of the path.
+ * @param buf A preallocated buffer where the path will be stored. The
+ *     path will be terminated by a NUL byte.
+ * @param len The lenght of the preallocated buffer.
+ * @return A pointer to the first byte of the path. This pointer will
+ *     point somewhere into the middle of the buffer buf.
+ */
+static inline char * global_dpath(struct path * path, char * buf, int len)
+{
+	char * ret;
+	struct path root;
+
+	root.mnt = NULL;
+	root.dentry = NULL;
+	spin_lock(&dcache_lock);
+	ret = __d_path(path, &root, buf, len);
+	spin_unlock(&dcache_lock);
+	return ret;
+}
 
 #endif
 

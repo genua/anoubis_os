@@ -44,12 +44,26 @@
 static int ac_index = -1;
 
 static u_int64_t pg_stat_loadtime;
+static u_int64_t pg_stat_devicewrite_delay;
+static u_int64_t pg_stat_devicewrite_ask;
+static u_int64_t pg_stat_devicewrite_deny;
+static u_int64_t pg_stat_rename_ask;
+static u_int64_t pg_stat_rename_override;
 
 /**
  * Statistic counters for the REQUEST_STATS ioctl on /dev/anoubis.
  */
 struct anoubis_internal_stat_value pg_stats[] = {
 	{ ANOUBIS_SOURCE_PLAYGROUND, PG_STAT_LOADTIME, &pg_stat_loadtime },
+	{ ANOUBIS_SOURCE_PLAYGROUND, PG_STAT_DEVICEWRITE_DELAY,
+	  &pg_stat_devicewrite_delay },
+	{ ANOUBIS_SOURCE_PLAYGROUND, PG_STAT_DEVICEWRITE_ASK,
+	  &pg_stat_devicewrite_ask},
+	{ ANOUBIS_SOURCE_PLAYGROUND, PG_STAT_DEVICEWRITE_DENY,
+	  &pg_stat_devicewrite_deny },
+	{ ANOUBIS_SOURCE_PLAYGROUND, PG_STAT_RENAME_ASK, &pg_stat_rename_ask },
+	{ ANOUBIS_SOURCE_PLAYGROUND, PG_STAT_RENAME_OVERRIDE,
+	  &pg_stat_rename_override },
 };
 
 /**
@@ -89,16 +103,24 @@ static void pg_getstats(struct anoubis_internal_stat_value **ptr, int * count)
  * @pgid: The playground-ID of the playground that this inode belongs to.
  *     A value of zero means that the inode is not part of particular
  *     playground.
+ * @accesstask: This value is set to the task cookie of a process if
+ *     one of the renameok flag is set. Only the given task is allowed to
+ *     perform the rename operation.
  * @havexattr: True if the file system has extended attributes, i.e. if
  *     there is a security label for the file, it can be read from the
  *     persistent storage on the file system.
  * @pglookupenabled: True if playground style lookups are enabled. Some
  *     filesystems do not support this and have this flag cleared.
+ * @renameok: Renaming this inode is ok for the task specified by
+ *     accesstask even if the process is in the playground and the inode
+ *     is not. This permission is only valid for a single rename.
  */
 struct pg_inode_sec {
 	anoubis_cookie_t	pgid;
+	anoubis_cookie_t	accesstask;
 	unsigned int		havexattr:1;
 	unsigned int		pgenabled:1;
+	unsigned int		renameok:1;
 };
 
 /**
@@ -117,7 +139,7 @@ struct pg_file_sec {
  * Fields:
  *
  * @pgid: The playgroudn-ID of the current task.
- * @pgcreate: True if newly created file of this process should always
+ * @pgcreate: True if a newly created file of this process should always
  *     be created in the playground even if the open is exclusive and
  *     the original file already exists.
  */
@@ -169,6 +191,8 @@ static int pg_inode_alloc_security(struct inode * inode)
 	sec->pgid = 0;
 	sec->havexattr = 0;
 	sec->pgenabled = 1;
+	sec->accesstask = 0;
+	sec->renameok = 0;
 	ftype = inode->i_sb->s_type->name;
 	for (i=0; nopg_fs[i]; ++i) {
 		if (strcmp(ftype, nopg_fs[i]) == 0) {
@@ -193,6 +217,76 @@ static void pg_inode_free_security(struct inode * inode)
 	struct pg_inode_sec *sec = SETISEC(inode, NULL);
 	if (sec)
 		kfree (sec);
+}
+
+/**
+ * Fill a struct pg_open_message with the information from the parameters
+ * and the current process. The file mode is taken from the first path.
+ *
+ * @param msgp A pointer to the resulting message is stored in the location
+ *     given by this parameter. The message is allocated using kmalloc.
+ * @param op This is the operation that is about to be performed.
+ * @param f_path1 The first path involved in the operation. Must be
+ *     non-NULL.
+ * @param f_path2 An optional second path involved in the operation. This
+ *     path can be NULL.
+ * @return The length of the message that was allocated or a negative
+ *     error code in case of an error. No memory is allocated if an error
+ *     is returned.
+ */
+static inline int pg_open_message_fill(void **msgp, int op,
+    struct path *f_path1, struct path *f_path2)
+{
+	struct pg_open_message *msg = NULL;
+	char *buf1, *buf2 = NULL, *path1, *path2 = NULL;
+	int error, pathlen1, pathlen2 = 0, alloclen;
+
+	buf1 = (char *)__get_free_page(GFP_KERNEL);
+	if (buf1 == NULL)
+		return -ENOMEM;
+	if (f_path2) {
+		error = -ENOMEM;
+		buf2 = (char *)__get_free_page(GFP_KERNEL);
+		if (!buf2)
+			goto err;
+	}
+	path1 = global_dpath(f_path1, buf1, PAGE_SIZE);
+	error = -EIO;
+	if (!path1 || IS_ERR(path1))
+		goto err;
+	pathlen1 = buf1+PAGE_SIZE - path1;
+	if (f_path2) {
+		path2 = global_dpath(f_path2, buf2, PAGE_SIZE);
+		error = -EIO;
+		if (!path2 || IS_ERR(path2))
+			goto err;
+		pathlen2 = buf2+PAGE_SIZE - path2;
+	}
+	alloclen = sizeof(struct pg_open_message) + pathlen1 + pathlen2;
+	error = -ENOMEM;
+	msg = kmalloc(alloclen, GFP_KERNEL);
+	if (!msg)
+		goto err;
+	msg->pgid = anoubis_get_playgroundid();
+	msg->op = ANOUBIS_PLAYGROUND_OP_OPEN;
+	msg->mode = f_path1->dentry->d_inode->i_mode;
+	memcpy(msg->pathbuf, path1, pathlen1);
+	if (pathlen2)
+		memcpy(msg->pathbuf + pathlen1, path2, pathlen2);
+	if (buf1)
+		free_page((unsigned long)buf1);
+	if (buf2)
+		free_page((unsigned long)buf2);
+	(*msgp) = msg;
+	return alloclen;
+err:
+	if (buf1)
+		free_page((unsigned long)buf1);
+	if (buf2)
+		free_page((unsigned long)buf2);
+	if (msg)
+		kfree(msg);
+	return error;
 }
 
 /**
@@ -242,12 +336,14 @@ static int pg_inode_permission(struct inode * inode, int mask)
 
 		/*
 		 * Writing to special files (devices, sockets, and fifos)
-		 * is ok for now. This might need more review later on but
-		 * it seems to be what we want.
+		 * is ok. However, the user must be asked for permission
+		 * first. This is done in dentry_open.
 		 */
 		if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode)
-		    || S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode))
+		    || S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode)) {
+			pg_stat_devicewrite_delay++;
 			return 0;
+		}
 
 		/*
 		 * Writing to production directories is allowed for playground
@@ -346,11 +442,22 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 {
 	struct pg_inode_sec *sec;
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
+	anoubis_cookie_t renametask = 0;
 
 	if (anoubis_playground_enabled(old_dentry)) {
 		sec = ISEC(old_dentry->d_inode);
-		if (sec->pgid != pgid)
+		if (sec->renameok)
+			renametask = sec->accesstask;
+		sec->renameok = 0;
+		sec->accesstask = 0;
+		if (sec->pgid != pgid) {
+			if (sec->pgid == 0
+			    && renametask == anoubis_get_task_cookie()) {
+				pg_stat_rename_override++;
+				return 0;
+			}
 			return -EACCES;
+		}
 	}
 	if (anoubis_playground_enabled(new_dentry)) {
 		/* Implies new_dentry->d_inode != 0. */
@@ -362,6 +469,69 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 }
 
 /**
+ * This implements the path_rename security hook. We only use this hook
+ * if we are about to rename a directory in the production system. This
+ * cannot be done in the playground and requires confirmation from the
+ * user. This hook asks the user for confirmation and marks the source inode
+ * appropriatly. This will prevent the subsequent inode_rename hook from
+ * denying the rename.
+ *
+ * @param old_dir The old directory that contains the dentry to be renamed.
+ * @param old_dentry The dentry to be renamed.
+ * @param new_dir The new directory that contains the target of the rename.
+ * @param new_dentry The target dentry of the rename.
+ * @return Zero if rename is allowed or a negative error code.
+ */
+static int pg_path_rename(struct path *old_dir, struct dentry *old_dentry,
+			  struct path *new_dir, struct dentry *new_dentry)
+{
+	struct path path1, path2;
+	void *msg;
+	int len, err;
+	struct pg_inode_sec *sec;
+	struct inode *inode;
+	anoubis_cookie_t pgid = anoubis_get_playgroundid();
+
+	inode = old_dentry->d_inode;
+	if (!pgid || !inode || !S_ISDIR(inode->i_mode))
+		return 0;
+	if (anoubis_playground_enabled(old_dentry))
+		return 0;
+	sec = ISEC(inode);
+	/*
+	 * No user confirmations for file systems that do not support
+	 * xattrs and the playground. inode_rename will take care of these
+	 * cases.
+	 */
+	if (!sec || sec->havexattr == 0)
+		return 0;
+	/*
+	 * No restrictions on known playground files here. inode_rename will
+	 * handle this.
+	 */
+	if (sec->pgid != 0)
+		return 0;
+	/* This is a playground process and source is a production file. */
+	path1.mnt = old_dir->mnt;
+	path1.dentry = old_dentry;
+	path2.mnt = new_dir->mnt;
+	path2.dentry = new_dentry;
+	pg_stat_rename_ask++;
+	len = pg_open_message_fill(&msg, ANOUBIS_PLAYGROUND_OP_RENAME,
+						&path1, &path2);
+	if (len < 0)
+		return len;
+	err = anoubis_raise(msg, len, ANOUBIS_SOURCE_PLAYGROUND);
+	if (err == -EPIPE)
+		err = -EIO;
+	if (err < 0)
+		return err;
+	sec->renameok = 1;
+	sec->accesstask = pgid;
+	return 0;
+}
+
+/**
  * This implements the inode_readlink security hook. Reading symlinks is
  * allowed for production file symlinks and for symlinks that live in the
  * same playground as the process.
@@ -369,7 +539,7 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
  * @param dentry The symlink to read.
  * @return Zero if readlink is allowed, or a negative error code.
  */
-int pg_inode_readlink(struct dentry *dentry)
+static int pg_inode_readlink(struct dentry *dentry)
 {
 	struct pg_inode_sec *sec;
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
@@ -668,7 +838,12 @@ static void pg_file_free_security(struct file *file)
 
 /**
  * This implements the dentry_open security hook. We use this to copy
- * data from the lower file to the playground.
+ * data from the lower file to the playground. Additionally, we do a
+ * delayed check for open of special files in this function. These open
+ * requests must trigger an event with a path name, which is not possible
+ * in inode_permission. Note that we can shortcut these checks compared
+ * to inode_permission, because inode_permission already denied stuff
+ * that does not require events.
  *
  * @param file The upper file.
  * @cred Credentials, unused here.
@@ -678,11 +853,55 @@ static int pg_dentry_open(struct file *file, const struct cred *cred)
 {
 	struct pg_file_sec *fsec = FSEC(file);
 	struct inode *lowerinode;
+	struct inode *upperinode;
 	mm_segment_t oldfs;
 	loff_t size, rpos = 0, wpos = 0;
 	struct page *p;
+	anoubis_cookie_t pgid = anoubis_get_playgroundid();
 	int err;
 
+	upperinode = file->f_path.dentry->d_inode;
+	/* These cases were properly handled by inode_permission. */
+	if (!anoubis_playground_enabled(file->f_path.dentry) || pgid == 0) {
+		BUG_ON(fsec->lower);
+		return 0;
+	}
+	BUG_ON(!upperinode || (fsec->lower && !S_ISREG(upperinode->i_mode)));
+	/*
+	 * We don't mediate access to character devices for now.
+	 * A typical program needs at least access to /dev/tty, /dev/ptmx
+	 */
+	if (S_ISCHR(upperinode->i_mode))
+		return 0;
+	if (S_ISSOCK(upperinode->i_mode) || S_ISCHR(upperinode->i_mode)
+	    || S_ISBLK(upperinode->i_mode) || S_ISFIFO(upperinode->i_mode)) {
+		struct pg_inode_sec *sec;
+		void *msg = NULL;
+		int len, ret;
+
+		/* Non-write opens were handled in inode_permission. */
+		if ((file->f_mode & FMODE_WRITE) == 0)
+			return 0;
+		sec = ISEC(upperinode);
+		/* Access to playground files is handled in inode_permission. */
+		if (sec && sec->havexattr && sec->pgid)
+			return 0;
+		/*
+		 * Ok, this is a production file. Access is only allowed, if
+		 * the user agrees.
+		 */
+		pg_stat_devicewrite_ask++;
+		len = pg_open_message_fill(&msg, ANOUBIS_PLAYGROUND_OP_OPEN,
+						&file->f_path, NULL);
+		if (len < 0)
+			return len;
+		ret = anoubis_raise(msg, len, ANOUBIS_SOURCE_PLAYGROUND);
+		if (ret == -EPIPE)
+			ret = -EIO;
+		if (ret)
+			pg_stat_devicewrite_deny++;
+		return ret;
+	}
 	if (fsec->lower == NULL)
 		return 0;
 	lowerinode = fsec->lower->f_path.dentry->d_inode;
@@ -913,6 +1132,19 @@ err_free:
 	return err;
 }
 
+void anoubis_playground_clear_accessok(struct inode *inode)
+{
+	struct pg_inode_sec *sec;
+
+	if (!inode)
+		return;
+	sec = ISEC(inode);
+	if (!sec)
+		return;
+	sec->accesstask = 0;
+	sec->renameok = 0;
+}
+
 /**
  * Security operations for the anoubis playground module.
  */
@@ -925,6 +1157,7 @@ static struct anoubis_hooks pg_ops = {
 	.inode_unlink = pg_inode_unlink,
 	.inode_rmdir = pg_inode_unlink,
 	.inode_rename = pg_inode_rename,
+	.path_rename = pg_path_rename,
 	.inode_readlink = pg_inode_readlink,
 	.inode_setxattr = pg_inode_setxattr,
 	.inode_removexattr = pg_inode_removexattr,
