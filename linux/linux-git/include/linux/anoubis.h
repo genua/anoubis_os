@@ -208,6 +208,7 @@ struct anoubis_hooks {
 	DECLARE(bprm_committed_creds);
 	DECLARE(bprm_secureexec);
 	DECLARE(capable);
+	DECLARE(ptrace_access_check);
 
 	DECLARE(d_instantiate);
 	DECLARE(inode_init_security);

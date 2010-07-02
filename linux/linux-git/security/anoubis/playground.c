@@ -1006,9 +1006,9 @@ err_fput:
  * @return The playground-ID of the current process. Zero means that
  *     the process is not in a playground.
  */
-anoubis_cookie_t anoubis_get_playgroundid(void)
+anoubis_cookie_t anoubis_get_playgroundid_tsk(struct task_struct *tsk)
 {
-	const struct cred *cred = __task_cred(current);
+	const struct cred *cred = __task_cred(tsk);
 	struct pg_task_sec *sec;
 
 	if (unlikely(!cred))
@@ -1279,7 +1279,7 @@ static int __init pg_init_early(void)
 security_initcall(pg_init_early);
 module_init(pg_init_late);
 
-EXPORT_SYMBOL(anoubis_get_playgroundid);
+EXPORT_SYMBOL(anoubis_get_playgroundid_tsk);
 EXPORT_SYMBOL(anoubis_playground_create);
 
 MODULE_AUTHOR("Christian Ehrhardt <ehrhardt@genua.de>");

@@ -1065,6 +1065,33 @@ int anoubis_capable(struct task_struct *tsk, const struct cred *cred,
 	return cap_capable(tsk, cred, cap, audit);
 }
 
+int ac_ptrace_access_check(struct task_struct *tsk, unsigned int mode)
+{
+	int rc = 0;
+	anoubis_cookie_t pgid, tpgid;
+
+	rc = cap_ptrace_access_check(tsk, mode);
+	if (rc != 0)
+		return rc;
+
+	rcu_read_lock();
+
+	pgid = anoubis_get_playgroundid_tsk(current);
+	tpgid = anoubis_get_playgroundid_tsk(tsk);
+
+	/* playground tasks can only trace tasks in the same playground */
+	if (pgid && pgid != tpgid)
+		rc = -EPERM;
+	/* non-playground tasks can only trace playground tasks
+	   when privileged */
+	else if (!pgid && tpgid && !capable(CAP_SYS_PTRACE))
+		rc = -EPERM;
+
+	rcu_read_unlock();
+
+	return rc;
+}
+
 static struct security_operations anoubis_core_ops = {
 	.unix_stream_connect = ac_unix_stream_connect,
 	.socket_post_create = ac_socket_post_create,
@@ -1110,6 +1137,7 @@ static struct security_operations anoubis_core_ops = {
 	.bprm_committed_creds = ac_bprm_committed_creds,
 	.bprm_secureexec = ac_bprm_secureexec,
 	.capable = anoubis_capable,
+	.ptrace_access_check = ac_ptrace_access_check,
 };
 
 /*

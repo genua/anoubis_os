@@ -67,10 +67,12 @@ struct pg_open_message {
 #include <linux/anoubis.h>
 
 
+#define anoubis_get_playgroundid()	anoubis_get_playgroundid_tsk(current)
+
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 
 extern int anoubis_playground_create(void);
-extern anoubis_cookie_t anoubis_get_playgroundid(void);
+extern anoubis_cookie_t anoubis_get_playgroundid_tsk(struct task_struct *tsk);
 extern int anoubis_pg_validate_name(const char *name, struct dentry *base,
 					int len, anoubis_cookie_t pgid);
 extern int anoubis_playground_enabled(struct dentry *dentry);
@@ -88,7 +90,8 @@ static inline int anoubis_playground_create(void)
 	return -ENOSYS;
 }
 
-static inline anoubis_cookie_t anoubis_get_playgroundid(void)
+static inline anoubis_cookie_t anoubis_get_playgroundid_tsk(
+			struct task_struct *tsk)
 {
 	return 0;
 }
