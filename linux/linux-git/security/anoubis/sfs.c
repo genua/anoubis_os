@@ -1197,7 +1197,7 @@ static int sfs_socket_connect(struct socket * sock, struct sockaddr * address,
     int addrlen)
 {
 	struct sockaddr_un *sunname = (struct sockaddr_un *)address;
-	struct nameidata nd;
+	struct path path;
 	int err = 0;
 
 	if (!sock || !sock->sk)
@@ -1207,12 +1207,12 @@ static int sfs_socket_connect(struct socket * sock, struct sockaddr * address,
 	if (sunname->sun_path[0] == 0)
 		return 0;
 
-	/* XXX: use kern_path() for 2.6.29+ */
-	err = path_lookup(sunname->sun_path, LOOKUP_FOLLOW, &nd);
+	err = kern_path(sunname->sun_path, LOOKUP_FOLLOW, &path);
 	if (err)
 		return 0;
-
-	return sfs_path_write(&nd.path);
+	err = sfs_path_write(&path);
+	path_put(&path);
+	return err;
 }
 
 

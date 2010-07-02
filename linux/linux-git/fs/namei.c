@@ -1674,6 +1674,8 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 			err = -ENOENT;
 			if (nd->flags & LOOKUP_PLAYGROUND_CREATE)
 				goto error;
+			if (nd->flags & LOOKUP_PLAYGROUND_DIRRENAME)
+				goto use_orig;
 			goto use_pg;
 		}
 		/*
@@ -1691,6 +1693,12 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 		if ((nd->flags & LOOKUP_EXCL) &&
 					!pg_ignore_excl(origdentry, nd->flags))
 			goto error;
+		/*
+		 * Directory rename. Return original dentry and let
+		 * inode_rename handle fobidden cases.
+		 */
+		if (nd->flags & LOOKUP_PLAYGROUND_DIRRENAME)
+			goto use_orig;
 		/*
 		 * This is create without an open where the original file
 		 * exists. Most calllers want EEXIST in this case. However,
@@ -1756,6 +1764,11 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 			err = -EPGCLONEREG;
 		if (S_ISLNK(originode->i_mode))
 			err = -EPGCLONESYMLINK;
+		/* Dirs are accessed in the production system. */
+		if (S_ISDIR(originode->i_mode)) {
+			nd->flags |= LOOKUP_PLAYGROUND_DIRRENAME;
+			goto use_orig;
+		}
 		goto error;
 	}
 	/*
@@ -3490,6 +3503,8 @@ retry:
 			goto exit4;
 		if (newnd.last.name[newnd.last.len])
 			goto exit4;
+	} else {
+		newnd.flags |= (oldnd.flags & LOOKUP_PLAYGROUND_DIRRENAME);
 	}
 	/* source should not be ancestor of target */
 	error = -EINVAL;

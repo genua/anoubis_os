@@ -28,12 +28,18 @@
 #include <linux/file.h>
 #include <linux/gfp.h>
 #include <linux/module.h>
+#include <linux/namei.h>
+#include <linux/net.h>
 #include <linux/sched.h>
 #include <linux/security.h>
+#include <linux/socket.h>
 #include <linux/string.h>
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
+#include <linux/un.h>
 #include <linux/xattr.h>
+
+#include <net/sock.h>
 
 #include <linux/anoubis.h>
 #include <linux/anoubis_playground.h>
@@ -268,7 +274,7 @@ static inline int pg_open_message_fill(void **msgp, int op,
 	if (!msg)
 		goto err;
 	msg->pgid = anoubis_get_playgroundid();
-	msg->op = ANOUBIS_PLAYGROUND_OP_OPEN;
+	msg->op = op;
 	msg->mode = f_path1->dentry->d_inode->i_mode;
 	memcpy(msg->pathbuf, path1, pathlen1);
 	if (pathlen2)
@@ -443,6 +449,7 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 	struct pg_inode_sec *sec;
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
 	anoubis_cookie_t renametask = 0;
+	int rename_override = 0;
 
 	if (anoubis_playground_enabled(old_dentry)) {
 		sec = ISEC(old_dentry->d_inode);
@@ -451,18 +458,25 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 		sec->renameok = 0;
 		sec->accesstask = 0;
 		if (sec->pgid != pgid) {
-			if (sec->pgid == 0
+			if (sec->pgid == 0 && renametask
 			    && renametask == anoubis_get_task_cookie()) {
+				rename_override = 1;
 				pg_stat_rename_override++;
-				return 0;
+			} else {
+				return -EACCES;
 			}
-			return -EACCES;
 		}
 	}
 	if (anoubis_playground_enabled(new_dentry)) {
-		/* Implies new_dentry->d_inode != 0. */
 		sec = ISEC(new_dentry->d_inode);
-		if (sec->pgid != pgid)
+		/*
+		 * If this rename happens in the production system,
+		 * (user override) do not allow the target in the playground.
+		 */
+		if (rename_override) {
+			if (sec->pgid)
+				return -EACCES;
+		} else if (sec->pgid != pgid)
 			return -EACCES;
 	}
 	return 0;
@@ -495,7 +509,7 @@ static int pg_path_rename(struct path *old_dir, struct dentry *old_dentry,
 	inode = old_dentry->d_inode;
 	if (!pgid || !inode || !S_ISDIR(inode->i_mode))
 		return 0;
-	if (anoubis_playground_enabled(old_dentry))
+	if (!anoubis_playground_enabled(old_dentry))
 		return 0;
 	sec = ISEC(inode);
 	/*
@@ -527,7 +541,7 @@ static int pg_path_rename(struct path *old_dir, struct dentry *old_dentry,
 	if (err < 0)
 		return err;
 	sec->renameok = 1;
-	sec->accesstask = pgid;
+	sec->accesstask = anoubis_get_task_cookie();
 	return 0;
 }
 
@@ -834,6 +848,53 @@ static void pg_file_free_security(struct file *file)
 		return;
 	pg_release_lowerfile(fsec);
 	kfree(fsec);
+}
+
+/**
+ * This implements the pg_socket_connect hook. We do not allow socket
+ * connects of a playground process if the user does not confirm that this
+ * is ok.
+ *
+ * @param sock The socket.
+ * @param address The target address of the connect.
+ * @param addlen The length of the address.
+ * @return Zero if access is allowed or a negative error code.
+ */
+static int pg_socket_connect(struct socket *sock, struct sockaddr *address,
+    int addrlen)
+{
+	struct sockaddr_un *sunname = (struct sockaddr_un *)address;
+	struct path path;
+	int err = 0, len;
+	anoubis_cookie_t pgid = anoubis_get_playgroundid();
+	void *msg;
+
+	if (!sock || !sock->sk)
+		return -EBADF;
+	if (sock->sk->sk_family != AF_UNIX)
+		return 0;
+	if (sunname->sun_path[0] == 0)
+		return 0;
+	if (!pgid)
+		return 0;
+
+	err = kern_path(sunname->sun_path, LOOKUP_FOLLOW, &path);
+	if (err)
+		return err;
+	pg_stat_devicewrite_ask++;
+	len = pg_open_message_fill(&msg, ANOUBIS_PLAYGROUND_OP_OPEN,
+							&path, NULL);
+	if (len < 0) {
+		path_put(&path);
+		return len;
+	}
+	err = anoubis_raise(msg, len, ANOUBIS_SOURCE_PLAYGROUND);
+	if (err == -EPIPE)
+		err = -EIO;
+	if (err)
+		pg_stat_devicewrite_deny++;
+	path_put(&path);
+	return err;
 }
 
 /**
@@ -1169,6 +1230,7 @@ static struct anoubis_hooks pg_ops = {
 	.file_alloc_security = pg_file_alloc_security,
 	.file_free_security = pg_file_free_security,
 	.dentry_open = pg_dentry_open,
+	.socket_connect = pg_socket_connect,
 	.anoubis_stats = pg_getstats,
 };
 
