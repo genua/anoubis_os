@@ -119,6 +119,7 @@ static int __anoubis_event_common(void * buf, size_t len, int src, int wait,
 	} else {
 		common->task_cookie = 0;
 	}
+	common->pgid = anoubis_get_playgroundid();
 	if (flags)
 		(*flags) = 0;
 	rcu_read_lock();

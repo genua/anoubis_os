@@ -59,6 +59,16 @@ struct pg_open_message {
 	char pathbuf[0];
 };
 
+/**
+ * This message is sent by the anoubis-Daemon after a new playground ID
+ * has been assigned to a process. Fields:
+ * common: Common data for all anoubis events. This contains both the task
+ *     cookie and the playground-ID of the current process.
+ */
+struct pg_proc_message {
+	struct anoubis_event_common common;
+};
+
 #ifdef __KERNEL__
 
 #include <linux/dcache.h>

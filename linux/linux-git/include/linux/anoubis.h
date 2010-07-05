@@ -64,11 +64,13 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_SOURCE_STAT		50
 #define ANOUBIS_SOURCE_IPC		60
 #define ANOUBIS_SOURCE_PLAYGROUND	70
+#define ANOUBIS_SOURCE_PLAYGROUNDPROC	71
 
 typedef u_int64_t anoubis_cookie_t;
 
 struct anoubis_event_common {
 	anoubis_cookie_t task_cookie;
+	anoubis_cookie_t pgid;
 };
 
 /* flags returned via anoubis_raise */

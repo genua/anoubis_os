@@ -296,6 +296,25 @@ err:
 }
 
 /**
+ * This function notifies the anoubis Daemon about a modified playground
+ * ID of a process. The kernel does not depend on the notification to succeed,
+ * i.e. memory allocation errors are simply discarded.
+ *
+ * @param None. The Message is always sent for the current process.
+ * @return None.
+ */
+static inline void pg_notify_pgid_change(void)
+{
+	struct pg_proc_message *procmsg;
+
+	procmsg = kmalloc(sizeof(struct pg_proc_message), GFP_ATOMIC);
+	if (!procmsg)
+		return;
+	anoubis_notify_atomic(procmsg, sizeof(struct pg_proc_message),
+	    ANOUBIS_SOURCE_PLAYGROUNDPROC);
+}
+
+/**
  * This implements the inode_permission security hook for the anoubis
  * playground security module.
  *
@@ -776,8 +795,10 @@ static void pg_cred_commit(struct cred *nc, const struct cred* old)
 	struct pg_task_sec *nsec = CSEC(nc);
 	struct pg_task_sec *osec = CSEC(old);
 
-	if (nsec && osec) {
+	if (nsec && osec && nsec->pgid != osec->pgid) {
 		nsec->pgid = osec->pgid;
+		if (nsec->pgid)
+			pg_notify_pgid_change();
 	}
 }
 
@@ -1065,7 +1086,14 @@ int anoubis_playground_create(void)
 	 */
 	if (current->flags & PF_SUPERPRIV)
 		return -EPERM;
+	/*
+	 * A process that already has multiple threads cannot start a
+	 * new playground.
+	 */
+	if (!thread_group_empty(current))
+		return -EPERM;
 	sec->pgid = anoubis_get_task_cookie();
+	pg_notify_pgid_change();
 	return 0;
 }
 
