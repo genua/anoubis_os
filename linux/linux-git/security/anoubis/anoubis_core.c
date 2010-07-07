@@ -873,6 +873,10 @@ static int ac_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	return HOOKS(inode_follow_link, (dentry, nd));
 }
+static void ac_inode_delete(struct inode *inode)
+{
+	VOIDHOOKS(inode_delete, (inode));
+}
 
 /* FILES and DENTRIES*/
 static int ac_dentry_open(struct file *file, const struct cred *cred)
@@ -1115,6 +1119,7 @@ static struct security_operations anoubis_core_ops = {
 	.inode_removexattr = ac_inode_removexattr,
 	.inode_init_security = ac_inode_init_security,
 	.inode_follow_link = ac_inode_follow_link,
+	.inode_delete = ac_inode_delete,
 	.dentry_open = ac_dentry_open,
 	.d_instantiate = ac_d_instantiate,
 	.file_alloc_security = ac_file_alloc_security,

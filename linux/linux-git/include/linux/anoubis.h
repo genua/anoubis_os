@@ -65,6 +65,7 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_SOURCE_IPC		60
 #define ANOUBIS_SOURCE_PLAYGROUND	70
 #define ANOUBIS_SOURCE_PLAYGROUNDPROC	71
+#define ANOUBIS_SOURCE_PLAYGROUNDFILE	72
 
 typedef u_int64_t anoubis_cookie_t;
 
@@ -214,6 +215,7 @@ struct anoubis_hooks {
 
 	DECLARE(d_instantiate);
 	DECLARE(inode_init_security);
+	DECLARE(inode_delete);
 };
 #undef DECLARE
 
@@ -249,6 +251,49 @@ static inline char * global_dpath(struct path * path, char * buf, int len)
 	root.dentry = NULL;
 	spin_lock(&dcache_lock);
 	ret = __d_path(path, &root, buf, len);
+	spin_unlock(&dcache_lock);
+	return ret;
+}
+
+/**
+ * Reconstruct the path name of the dentry relative to the root of the
+ * device that the dentry lives on. This is similar to global_dpath except
+ * that this function does not travers mount points. This has the benefit
+ * that no vfsmount is required. The use of root is even more or a hack
+ * than  in global_dpath. It relies to some extent on the implementation of
+ * __d_path. This function is designed to work, even if dentry->d_inode
+ * is NULL. The root of the file system is taken from the dentry's parent
+ * in this case.
+ *
+ * @param dentry The dentry of the path.
+ * @param buf The buffer where the path will be stored.
+ * @param len The length of the path name buffer.
+ * @return A pointer to the start of the pathname in the path name buffer.
+ *     This function will fill the buffer starting at the end.
+ */
+static inline char * local_dpath(struct dentry *dentry, char *buf, int len)
+{
+	struct path root;
+	struct path path;
+	char * ret;
+	struct super_block *super = NULL;
+
+	if (dentry->d_inode) {
+		super = dentry->d_inode->i_sb;
+	} else {
+		struct dentry *parent = dentry->d_parent;
+		if (!parent || !parent->d_inode)
+			return 0;
+		super = parent->d_inode->i_sb;
+	}
+	if (!super)
+		return NULL;
+	root.mnt = NULL;
+	root.dentry = super->s_root;
+	path.dentry = dentry;
+	path.mnt = NULL;
+	spin_lock(&dcache_lock);
+	ret = __d_path(&path, &root, buf, len);
 	spin_unlock(&dcache_lock);
 	return ret;
 }

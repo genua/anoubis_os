@@ -69,6 +69,30 @@ struct pg_proc_message {
 	struct anoubis_event_common common;
 };
 
+#define ANOUBIS_PGFILE_INSTANTIATE	1
+#define ANOUBIS_PGFILE_DELETE		2
+
+/**
+ * This message is used to inform the anoubis daemon about an operation
+ * to an inode with a playground label. The daemon uses these messages
+ * to track file names and inodes with playground labels.
+ * Fields:
+ * common: The common event data for all anoubis events.
+ * pgid: The playground ID of the file.
+ * dev: The device of the file.
+ * ino: The inode number of the file.
+ * op: The operation that is performed with the file (ANOUBIS_PGFILE_*).
+ * path: The path name of the file relative to the device given by dev.
+ */
+struct pg_file_message {
+	struct anoubis_event_common common;
+	anoubis_cookie_t pgid;
+	u_int64_t dev;
+	u_int64_t ino;
+	int op;
+	char path[0];
+};
+
 #ifdef __KERNEL__
 
 #include <linux/dcache.h>

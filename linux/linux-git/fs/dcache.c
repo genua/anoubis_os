@@ -1926,7 +1926,7 @@ char *__d_path(const struct path *path, struct path *root,
 
 		if (dentry == root->dentry && vfsmnt == root->mnt)
 			break;
-		if (dentry == vfsmnt->mnt_root || IS_ROOT(dentry)) {
+		if ((vfsmnt && dentry == vfsmnt->mnt_root) || IS_ROOT(dentry)) {
 			/* Global root? */
 			if (vfsmnt->mnt_parent == vfsmnt) {
 				goto global_root;

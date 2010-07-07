@@ -315,6 +315,64 @@ static inline void pg_notify_pgid_change(void)
 }
 
 /**
+ * This function notifies the anoubis daemon about a newly instantiated
+ * inode with a playground label. This event is sent for both newly
+ * created files and inodes that are read from disk. The daemon must
+ * handle cases where the same inode is reported more than once.
+ *
+ * @param dentry The directory entry to report. If this is NULL, the
+ *     inode data is reported without a pathname.
+ * @param inode The inode to report. If this is NULL, the inode data is
+ *     taken from the dentry.
+ * @param pgid The (new) playground ID of the file.
+ * @return None.
+ */
+static inline void pg_notify_file(struct dentry *dentry, struct inode * inode,
+    int op, anoubis_cookie_t pgid)
+{
+	char *buf = NULL, *path = NULL;
+	struct pg_file_message *fmsg;
+	int pathlen = 1, alloclen;
+
+	if (!inode)
+		inode = dentry->d_inode;
+	if (!inode)
+		return;
+	if (dentry)
+		buf = (char *)__get_free_page(GFP_KERNEL);
+	if (buf) {
+		path = local_dpath(dentry, buf, PAGE_SIZE);
+		if (path && !IS_ERR(path)) {
+			pathlen = PAGE_SIZE - (path-buf);
+		} else {
+			pathlen = 1;
+			path = NULL;
+		}
+	}
+	alloclen = sizeof(struct pg_file_message) + pathlen;
+	fmsg = kmalloc(alloclen, GFP_KERNEL);
+	if (fmsg == NULL) {
+		printk(KERN_CRIT "pg_notify_file: Out of memory\n");
+		if (buf)
+			free_page((unsigned long)buf);
+		return;
+	}
+	fmsg->pgid = pgid;
+	fmsg->ino = inode->i_ino;
+	fmsg->dev = inode->i_sb->s_dev;
+	fmsg->op = op;
+	if (path) {
+		memcpy(fmsg->path, path, pathlen);
+	} else {
+		fmsg->path[0] = 0;
+	}
+	if (buf)
+		free_page((unsigned long)buf);
+	anoubis_notify(fmsg, alloclen, ANOUBIS_SOURCE_PLAYGROUNDFILE);
+}
+
+
+/**
  * This implements the inode_permission security hook for the anoubis
  * playground security module.
  *
@@ -540,10 +598,14 @@ static int pg_path_rename(struct path *old_dir, struct dentry *old_dentry,
 		return 0;
 	/*
 	 * No restrictions on known playground files here. inode_rename will
-	 * handle this.
+	 * handle this. However, make sure that we notify anoubis daemon of
+	 * the pending rename.
 	 */
-	if (sec->pgid != 0)
+	if (sec->pgid != 0) {
+		pg_notify_file(new_dentry, inode, ANOUBIS_PGFILE_INSTANTIATE,
+		    sec->pgid);
 		return 0;
+	}
 	/* This is a playground process and source is a production file. */
 	path1.mnt = old_dir->mnt;
 	path1.dentry = old_dentry;
@@ -676,8 +738,12 @@ static void pg_d_instantiate(struct dentry *dentry, struct inode *inode)
 							"attribute\n");
 		goto noxattr;
 	}
+	BUG_ON(dentry->d_inode != inode);
 	isec->pgid = fspgid;
 	isec->havexattr = 1;
+	if (fspgid)
+		pg_notify_file(dentry, NULL, ANOUBIS_PGFILE_INSTANTIATE,
+		    fspgid);
 	return;
 noxattr:
 	isec->havexattr = 0;
@@ -748,6 +814,23 @@ static int pg_inode_init_security(struct inode *inode, struct inode *dir,
 	else
 		kfree(value);
 	return 0;
+}
+
+/**
+ * This implements the inode_delete security hook. This hook is called
+ * immediately before an on disk inode is released. We use this to notify
+ * the anoubis daemon about the deleted inode. The anoubis daemon can use
+ * this to remove the inode from its playground.
+ *
+ * @param inode The inode that is deleted.
+ * @return None.
+ */
+static void pg_inode_delete(struct inode *inode)
+{
+	struct pg_inode_sec *sec = ISEC(inode);
+
+	if (sec && sec->pgid)
+		pg_notify_file(NULL, inode, ANOUBIS_PGFILE_DELETE, sec->pgid);
 }
 
 /**
@@ -1252,6 +1335,7 @@ static struct anoubis_hooks pg_ops = {
 	.inode_removexattr = pg_inode_removexattr,
 	.d_instantiate = pg_d_instantiate,
 	.inode_init_security = pg_inode_init_security,
+	.inode_delete = pg_inode_delete,
 	.cred_prepare = pg_cred_prepare,
 	.cred_free = pg_cred_free,
 	.cred_commit = pg_cred_commit,

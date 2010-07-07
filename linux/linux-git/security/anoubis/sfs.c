@@ -577,7 +577,6 @@ static struct sfs_open_message * sfs_open_fill(struct path * f_path, int mask,
 	struct sfs_open_message * msg;
 	char * path = NULL;
 	char * buf = NULL;
-	struct kstat kstat;
 	struct sfs_inode_sec * sec = NULL;
 	int pathlen, alloclen;
 	struct dentry * dentry = f_path->dentry;
@@ -610,13 +609,10 @@ static struct sfs_open_message * sfs_open_fill(struct path * f_path, int mask,
 		free_page((unsigned long)buf);
 	msg->ino = 0;
 	msg->dev = 0;
-	if (f_path->mnt && dentry && inode) {
-		int err = vfs_getattr(f_path->mnt, dentry, &kstat);
-		if (err == 0) {
-			msg->ino = kstat.ino;
-			msg->dev = kstat.dev;
-			msg->flags |= ANOUBIS_OPEN_FLAG_STATDATA;
-		}
+	if (dentry && inode) {
+		msg->ino = inode->i_ino;
+		msg->dev = inode->i_sb->s_dev;
+		msg->flags |= ANOUBIS_OPEN_FLAG_STATDATA;
 	}
 	if (inode)
 		sec = ISEC(inode);
