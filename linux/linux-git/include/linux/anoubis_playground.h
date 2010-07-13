@@ -43,7 +43,6 @@
  * trying to perform an action that requires user confirmation because
  * it will affect the production system. Fields:
  * @common: The common data for all anoubis events.
- * @pgid: The playground-ID of the process that wants to perform the access.
  * @op: The operation that the process wants to perfrom, e.g.
  *    ANOUBIS_PLAYGROUND_OP_OPEN or ANOUBIS_PLAYGROUND_OP_RENAME.
  * @mode: The file mode of the (first) inode involved in the operation.
@@ -53,9 +52,8 @@
  */
 struct pg_open_message {
 	struct anoubis_event_common common;
-	anoubis_cookie_t pgid;
-	int op;
-	mode_t mode;
+	u_int32_t op;
+	u_int32_t mode;
 	char pathbuf[0];
 };
 

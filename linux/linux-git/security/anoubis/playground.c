@@ -273,7 +273,6 @@ static inline int pg_open_message_fill(void **msgp, int op,
 	msg = kmalloc(alloclen, GFP_KERNEL);
 	if (!msg)
 		goto err;
-	msg->pgid = anoubis_get_playgroundid();
 	msg->op = op;
 	msg->mode = f_path1->dentry->d_inode->i_mode;
 	memcpy(msg->pathbuf, path1, pathlen1);
