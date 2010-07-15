@@ -35,10 +35,17 @@
  */
 #define ANOUBISCORE_VERSION		0x00010005UL
 
+typedef u_int64_t anoubis_cookie_t;
+
 #define ANOUBIS_CS_LEN		32
 struct anoubis_ioctl_csum {
 	int fd;
 	u_int8_t csum[ANOUBIS_CS_LEN];
+};
+
+struct anoubis_ioctl_lastpgid {
+	anoubis_cookie_t lastpgid;
+	int fd;
 };
 
 #define	ANOUBIS_TYPE			'a'
@@ -51,8 +58,9 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_GETVERSION		_IOR(ANOUBIS_TYPE,0x15, unsigned long)
 #define ANOUBIS_GETCSUM			_IOWR(ANOUBIS_TYPE,0x16, \
 					    struct anoubis_ioctl_csum)
-
 #define ANOUBIS_CREATE_PLAYGROUND	_IO(ANOUBIS_TYPE,0x17)
+#define ANOUBIS_SET_LASTPGID		_IOW(ANOUBIS_TYPE,0x18, \
+					    struct anoubis_ioctl_lastpgid)
 
 #define ANOUBIS_SOURCE_TEST		0
 #define ANOUBIS_SOURCE_ALF		10
@@ -66,8 +74,6 @@ struct anoubis_ioctl_csum {
 #define ANOUBIS_SOURCE_PLAYGROUND	70
 #define ANOUBIS_SOURCE_PLAYGROUNDPROC	71
 #define ANOUBIS_SOURCE_PLAYGROUNDFILE	72
-
-typedef u_int64_t anoubis_cookie_t;
 
 struct anoubis_event_common {
 	anoubis_cookie_t task_cookie;
@@ -225,6 +231,7 @@ extern void * anoubis_set_sublabel(void ** labelp, int idx, void * subl);
 extern void * anoubis_get_sublabel(void ** labelp, int idx);
 extern void * anoubis_get_sublabel_const(void *label, int idx);
 extern anoubis_cookie_t anoubis_get_task_cookie(void);
+extern anoubis_cookie_t anoubis_alloc_pgid(void);
 
 /**
  * Reconstruct the absolute path name of the dentry/vfsmnt pair
@@ -283,7 +290,7 @@ static inline char * local_dpath(struct dentry *dentry, char *buf, int len)
 	} else {
 		struct dentry *parent = dentry->d_parent;
 		if (!parent || !parent->d_inode)
-			return 0;
+			return NULL;
 		super = parent->d_inode->i_sb;
 	}
 	if (!super)

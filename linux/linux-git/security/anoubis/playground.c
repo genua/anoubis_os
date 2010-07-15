@@ -1174,7 +1174,7 @@ int anoubis_playground_create(void)
 	 */
 	if (!thread_group_empty(current))
 		return -EPERM;
-	sec->pgid = anoubis_get_task_cookie();
+	sec->pgid = anoubis_alloc_pgid();
 	pg_notify_pgid_change();
 	return 0;
 }

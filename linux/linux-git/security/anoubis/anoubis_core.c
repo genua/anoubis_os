@@ -55,7 +55,9 @@ static struct eventdev_queue * anoubis_queue;
 static spinlock_t queuelock;
 
 static anoubis_cookie_t task_cookie;
+static anoubis_cookie_t last_pgid;
 static spinlock_t task_cookie_lock;
+
 
 #define MAX_ANOUBIS_MODULES 10
 
@@ -408,6 +410,35 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 		}
 	case ANOUBIS_CREATE_PLAYGROUND:
 		return anoubis_playground_create();
+	case ANOUBIS_SET_LASTPGID:
+		{
+			struct anoubis_ioctl_lastpgid __user *uptr;
+			struct anoubis_ioctl_lastpgid lastpgid;
+			int ret;
+
+			if (!capable(CAP_SYS_ADMIN))
+				return -EPERM;
+			uptr = (void*)arg;
+			if (copy_from_user(&lastpgid, uptr, sizeof(lastpgid)))
+				return -EFAULT;
+			eventfile = fget(lastpgid.fd);
+			if (!eventfile)
+				return -EBADF;
+			q = eventdev_get_queue(eventfile);
+			fput(eventfile);
+			spin_lock(&task_cookie_lock);
+			ret = -EPERM;
+			if (q == rcu_dereference(anoubis_queue)) {
+				ret = -ERANGE;
+				if (lastpgid.lastpgid > last_pgid) {
+					last_pgid = lastpgid.lastpgid;
+					ret = 0;
+				}
+			}
+			spin_unlock(&task_cookie_lock);
+			eventdev_put_queue(q);
+			return ret;
+		}
 	default:
 		return -EINVAL;
 	}
@@ -985,6 +1016,25 @@ static int ac_cred_prepare(struct cred * nc, const struct cred * old, gfp_t gfp)
 	ac_process_message(ANOUBIS_PROCESS_OP_FORK, cl->task_cookie);
 
 	return HOOKS(cred_prepare, (nc, old, gfp));
+}
+
+/**
+ * Return a new and previously unused playground ID. We simply increment
+ * use the value of the next_pgid counter and increment its value. The
+ * anoubis daemon can use an ioctl to increase the playground ID if old
+ * playgrounds are still 
+ *
+ * @param None.
+ * @return A unique an previously unused cookie.
+ */
+anoubis_cookie_t anoubis_alloc_pgid(void)
+{
+	anoubis_cookie_t	ret;
+	spin_lock(&task_cookie_lock);
+	ret = ++last_pgid;
+	spin_unlock(&task_cookie_lock);
+	BUG_ON(ret == 0);	/* playground ID 64 bit wrap around? */
+	return ret;
 }
 
 static void ac_cred_free(struct cred * cred)
