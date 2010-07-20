@@ -114,6 +114,7 @@ extern int anoubis_playground_clone_symlink(int atfd, const char __user *);
 
 extern int anoubis_playground_get_pgcreate(void);
 extern void anoubis_playground_clear_accessok(struct inode *inode);
+extern int anoubis_playground_readdirok(struct inode *inode);
 
 #else
 

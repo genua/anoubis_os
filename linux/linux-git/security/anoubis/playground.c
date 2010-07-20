@@ -88,6 +88,15 @@ static const char *nopg_fs[] = {
 };
 
 /**
+ * List file systems that can deadlock if readdir does a lookup on the
+ * same directory during filldir.
+ */
+static const char *broken_readdir_fs[] = {
+	"xfs",
+	NULL,
+};
+
+/**
  * This implements the anoubis statistics gathering function for the
  * anoubis playground module.
  *
@@ -120,6 +129,8 @@ static void pg_getstats(struct anoubis_internal_stat_value **ptr, int * count)
  * @renameok: Renaming this inode is ok for the task specified by
  *     accesstask even if the process is in the playground and the inode
  *     is not. This permission is only valid for a single rename.
+ * @readdirok: True if a lookup during filldir/readdir does not deadlock on
+ *     this inode. This value depends on the file system type.
  */
 struct pg_inode_sec {
 	anoubis_cookie_t	pgid;
@@ -127,6 +138,7 @@ struct pg_inode_sec {
 	unsigned int		havexattr:1;
 	unsigned int		pgenabled:1;
 	unsigned int		renameok:1;
+	unsigned int		readdirok:1;
 };
 
 /**
@@ -197,12 +209,19 @@ static int pg_inode_alloc_security(struct inode * inode)
 	sec->pgid = 0;
 	sec->havexattr = 0;
 	sec->pgenabled = 1;
+	sec->readdirok = 1;
 	sec->accesstask = 0;
 	sec->renameok = 0;
 	ftype = inode->i_sb->s_type->name;
 	for (i=0; nopg_fs[i]; ++i) {
 		if (strcmp(ftype, nopg_fs[i]) == 0) {
 			sec->pgenabled = 0;
+			break;
+		}
+	}
+	for (i=0; broken_readdir_fs[i]; ++i) {
+		if (strcmp(ftype, broken_readdir_fs[i]) == 0) {
+			sec->readdirok = 0;
 			break;
 		}
 	}
@@ -784,10 +803,17 @@ static int pg_inode_init_security(struct inode *inode, struct inode *dir,
 	sec->havexattr = 1;
 	sec->pgid = pgid;
 	sec->pgenabled = 1;
+	sec->readdirok = 1;
 	ftype = inode->i_sb->s_type->name;
 	for (i=0; nopg_fs[i]; ++i) {
 		if (strcmp(ftype, nopg_fs[i]) == 0) {
 			sec->pgenabled = 0;
+			break;
+		}
+	}
+	for (i=0; broken_readdir_fs[i]; ++i) {
+		if (strcmp(ftype, broken_readdir_fs[i]) == 0) {
+			sec->readdirok = 0;
 			break;
 		}
 	}
@@ -1201,6 +1227,24 @@ int anoubis_playground_enabled(struct dentry *dentry)
 		return 0;
 	}
 	return sec->pgenabled;
+}
+
+/**
+ * Return true if a lookup during filldir/readdir is ok on this inode.
+ *
+ * @param inode The inode to check.
+ * @return True if lookup during readdir is ok.
+ */
+int anoubis_playground_readdirok(struct inode *inode)
+{
+	struct pg_inode_sec	*sec;
+
+	if (!inode)
+		return 1;
+	sec = ISEC(inode);
+	if (!sec)
+		return 1;
+	return sec->readdirok;
 }
 
 /**

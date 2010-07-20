@@ -1865,6 +1865,28 @@ struct dentry *lookup_one_len(const char *name, struct dentry *base, int len)
 
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 
+struct dentry *lookup_one_len_cached(const char *name, struct dentry *base,
+    int len)
+{
+	int err;
+	struct qstr this;
+
+	WARN_ON_ONCE(!mutex_is_locked(&base->d_inode->i_mutex));
+
+	err = __lookup_one_len(name, &this, base, len);
+	if (err)
+		return ERR_PTR(err);
+	err = inode_permission(base->d_inode, MAY_EXEC);
+	if (err)
+		return ERR_PTR(err);
+	if (base->d_op && base->d_op->d_hash) {
+		err = base->d_op->d_hash(base, &this);
+		if (err < 0)
+			return ERR_PTR(err);
+	}
+	return cached_lookup(base, &this, NULL);
+}
+
 static inline int anoubis_is_pg_file(const char *name, int len,
     int *prefixlen, anoubis_cookie_t *cookie, int *whiteout)
 {
@@ -1946,10 +1968,24 @@ int anoubis_pg_validate_name(const char *name, struct dentry *base, int len,
 		err = __pg_create_qstr(&pgname, &origname, whiteout, pgid, 0);
 		if (err < 0)
 			return -ENOMEM;
-		tmp = lookup_one_len(pgname.name, base, pgname.len);
+		/*
+		 * Some filesystems deadlock if we try to do a lookup in
+		 * a directory while a readdir is still in progress.
+		 */
+		if (anoubis_playground_readdirok(base->d_inode)) {
+			tmp = lookup_one_len(pgname.name, base, pgname.len);
+		} else {
+			tmp = lookup_one_len_cached(pgname.name, base,
+			    pgname.len);
+		}
 		kfree(pgname.name);
-		if (IS_ERR(tmp))
+		if (tmp == NULL)
+			continue;
+		if (IS_ERR(tmp)) {
+			if (PTR_ERR(tmp) == -ENOENT)
+				continue;
 			return PTR_ERR(tmp);
+		}
 		exists = (tmp->d_inode != NULL);
 		dput(tmp);
 		if (exists)
