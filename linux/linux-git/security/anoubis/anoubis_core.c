@@ -825,7 +825,7 @@ static int ac_inode_init_security(struct inode *inode, struct inode *dir,
 	unsigned int mymagic, lastmagic = 0;
 	char *myname = NULL, *name = NULL;
 	void *myvalue = NULL, *value = NULL;
-	int mylen = 0, len = 0;
+	size_t mylen = 0, len = 0;
 
 	if (original_ops->inode_init_security) {
 		ret = original_ops->inode_init_security(inode, dir,
