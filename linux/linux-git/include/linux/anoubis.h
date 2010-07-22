@@ -145,6 +145,7 @@ extern int anoubis_raise_flags(void * buf, size_t len, int src, int *flags);
 extern int anoubis_notify(void * buf, size_t len, int src);
 extern int anoubis_notify_atomic(void * buf, size_t len, int src);
 extern int anoubis_need_secureexec(struct linux_binprm *bprm);
+extern int anoubis_is_listener(void);
 
 #ifdef CONFIG_SECURITY_ANOUBIS
 

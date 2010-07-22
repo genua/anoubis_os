@@ -413,6 +413,10 @@ static int pg_inode_permission(struct inode * inode, int mask)
 	struct pg_inode_sec *isec = ISEC(inode);
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
 
+	if (unlikely(anoubis_is_listener())) {
+		if ((mask & (MAY_WRITE | MAY_APPEND)) == 0)
+			return 0;
+	}
 	if (pgid == 0) {
 		/* Not a playground process: Deny access to playground files */
 		if (isec && isec->pgid)
