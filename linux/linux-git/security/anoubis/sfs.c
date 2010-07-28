@@ -565,6 +565,8 @@ static struct sfs_open_message * sfs_open_fill(struct path * f_path, int mask,
 	struct inode * inode = dentry->d_inode;
 
 	buf = (char *)__get_free_page(GFP_KERNEL);
+	if (buf == NULL)
+		return NULL;
 	path = global_dpath(f_path, buf, PAGE_SIZE);
 	if (path && !IS_ERR(path)) {
 		pathlen = PAGE_SIZE - (path-buf);
@@ -813,7 +815,7 @@ static struct sfs_path_message * sfs_path_fill(unsigned int op,
 	struct path *new_dir, struct dentry *new_dentry,
 	struct dentry *old_dentry, int * lenp)
 {
-	struct sfs_path_message * msg;
+	struct sfs_path_message * msg = NULL;
 	unsigned int pathlen[2] = { 0, 0 };
 	unsigned int pathcnt, i;
 	char * pathstr[2];
@@ -834,23 +836,19 @@ static struct sfs_path_message * sfs_path_fill(unsigned int op,
 
 	for (i=0; i<pathcnt; i++) {
 		bufs[i] = (char *)__get_free_page(GFP_KERNEL);
+		if (bufs[i] == NULL)
+			goto nomem;
 		pathstr[i] = global_dpath(&paths[i], bufs[i], PAGE_SIZE);
-		if (pathstr[i] && !IS_ERR(pathstr[i])) {
-			pathlen[i] = PAGE_SIZE - (pathstr[i]-bufs[i]);
-		} else {
-			/* bail if the path cannot be resolved */
-			if (bufs[0])
-				free_page((unsigned long)bufs[0]);
-			if (bufs[1])
-				free_page((unsigned long)bufs[1]);
-
-			return NULL;
-		}
+		if (pathstr[i] == NULL || IS_ERR(pathstr[i]))
+			goto nomem;
+		pathlen[i] = PAGE_SIZE - (pathstr[i]-bufs[i]);
 	}
 
 	alloclen = sizeof(struct sfs_path_message) + pathlen[0] + pathlen[1];
 
 	msg = kmalloc(alloclen, GFP_KERNEL);
+	if (msg == NULL)
+		goto nomem;
 	msg->op = op;
 
 	msg->pathlen[0] =  pathlen[0];
@@ -866,6 +864,14 @@ static struct sfs_path_message * sfs_path_fill(unsigned int op,
 
 	(*lenp) = alloclen;
 	return msg;
+nomem:
+	if (bufs[0])
+		free_page((unsigned long)bufs[0]);
+	if (bufs[1])
+		free_page((unsigned long)bufs[1]);
+	if (msg)
+		kfree(msg);
+	return NULL;
 }
 
 static int sfs_path_checks(struct sfs_path_message * msg, int len)

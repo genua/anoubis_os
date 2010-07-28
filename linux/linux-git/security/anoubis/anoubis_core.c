@@ -877,8 +877,8 @@ void * anoubis_set_sublabel(void ** lp, int idx, void * subl)
 
 /**
  * Deny write access to the file. Trying to open it for writing will
- * result in -ETXTBUSY. This simply exports the deny_write_access function
- * from fs/namei.c to anoubis sub-modules.
+ * result in -ETXTBUSY. This simply exports the core's deny_write_access
+ * function to anoubis sub-modules.
  *
  * @param inode The inode.
  * @return Zero in case of success, -ETXTBUSY otherwise.
@@ -890,8 +890,8 @@ int anoubis_deny_write_access(struct file *file)
 
 /**
  * Allow write access after a successful call to anoubis_deny_write_access.
- * This simply exports the deny_write_access function from fs/namei.c to
- * anoubis sub-modules.
+ * This simply exports the core's allow_write_access function to anoubis
+ * sub-modules.
  *
  * @param inode The inode.
  * @return Zero in case of success, -ETXTBUSY otherwise.
