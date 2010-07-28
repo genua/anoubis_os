@@ -119,24 +119,6 @@ sfs_is_allow_path(const char *path)
 	return 0;
 }
 
-/* Verbatim copy from fs/namei.c because of a missing EXPORT_SYMBOL */
-static inline int anoubis_deny_write_access(struct inode * inode)
-{
-	spin_lock(&inode->i_lock);
-	if (atomic_read(&inode->i_writecount) > 0) {
-		spin_unlock(&inode->i_lock);
-		return -ETXTBSY;
-	}
-	atomic_dec(&inode->i_writecount);
-	spin_unlock(&inode->i_lock);
-	return 0;
-}
-
-static inline void anoubis_allow_write_access(struct inode * inode)
-{
-	atomic_inc(&inode->i_writecount);
-}
-
 /* Flags for @sfsmask in @sfs_inode_sec */
 #define SFS_CS_REQUIRED		0x01UL	/* Checksum should be calculated */
 #define SFS_CS_UPTODATE		0x02UL	/* Checksum in ISEC is uptodate */
@@ -313,11 +295,11 @@ static int sfs_do_csum(struct file * file, struct inode * inode,
 	struct page * p;
 
 	BUG_ON(!sec);
-	err = anoubis_deny_write_access(inode);
+	err = anoubis_deny_write_access(file);
 	if (err)
 		return err;
 	if (csum_uptodate(sec)) {
-		anoubis_allow_write_access(inode);
+		anoubis_allow_write_access(file);
 		return 0;
 	}
 	sfs_stat_csum_recalc++;
@@ -374,7 +356,7 @@ static int sfs_do_csum(struct file * file, struct inode * inode,
 out:
 	crypto_free_hash(cdesc.tfm);
 out_allow_write:
-	anoubis_allow_write_access(inode);
+	anoubis_allow_write_access(file);
 	if (p)
 		__free_page(p);
 	return err;

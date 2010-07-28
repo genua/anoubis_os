@@ -37,6 +37,7 @@
 
 #define ANOUBIS_PLAYGROUND_OP_OPEN	1
 #define ANOUBIS_PLAYGROUND_OP_RENAME	2
+#define ANOUBIS_PLAYGROUND_OP_SCAN	3
 
 /**
  * This message is sent to the daemon if a playground process is
@@ -69,6 +70,7 @@ struct pg_proc_message {
 
 #define ANOUBIS_PGFILE_INSTANTIATE	1
 #define ANOUBIS_PGFILE_DELETE		2
+#define ANOUBIS_PGFILE_SCAN		3
 
 /**
  * This message is used to inform the anoubis daemon about an operation
@@ -115,6 +117,8 @@ extern int anoubis_playground_clone_symlink(int atfd, const char __user *);
 extern int anoubis_playground_get_pgcreate(void);
 extern void anoubis_playground_clear_accessok(struct inode *inode);
 extern int anoubis_playground_readdirok(struct inode *inode);
+extern int anoubis_playground_scanstarted(struct file *file);
+extern int anoubis_playground_scansuccess(struct file *file);
 
 #else
 
@@ -154,6 +158,16 @@ static inline int anoubis_playground_get_pgcreate(void)
 
 static inline void anoubis_playground_clear_accessok(struct inode *inode)
 {
+}
+
+static inline int anoubis_playground_scanstarted(struct file *file)
+{
+	return -ENOSYS;
+}
+
+static inline int anoubis_playground_scansuccess(struct file *file)
+{
+	return -ENOSYS;
 }
 
 #endif

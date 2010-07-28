@@ -89,14 +89,14 @@ static spinlock_t task_cookie_lock;
 
 /**
  * A serial number that is increased when a new set of security hooks
- * is registered. The current serial number is stored  is stored in the
+ * is registered. The current serial number is stored in the
  * hook registration and can be used to destinguish outdated security labels
  * from labels that are still valid.
  */
 static unsigned int serial = 1;
 
 /**
- * This flag is used lock out a new registration from a slot that is
+ * This flag is used to lock out a new registration from a slot that is
  * in the process of being unregistred.
  */
 static char blocked[MAX_ANOUBIS_MODULES];
@@ -142,7 +142,7 @@ struct anoubis_label {
 };
 
 /**
- * This is an extension of th anoubis_label structure that is used for
+ * This is an extension of the anoubis_label structure that is used for
  * labels on task credentials. This is neccessary because the basic task
  * tracking infrastructure is provided by anobuis_core and not by a
  * sub-module.
@@ -665,6 +665,22 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 			eventdev_put_queue(q);
 			return ret;
 		}
+	case ANOUBIS_SCAN_STARTED:
+	case ANOUBIS_SCAN_SUCCESS:
+		{
+			struct file *file;
+			if (!capable(CAP_SYS_ADMIN) || !anoubis_is_listener())
+				return -EPERM;
+			if (anoubis_get_playgroundid())
+				return -EPERM;
+			file = fget(arg);
+			if (!file)
+				return -EBADF;
+			if (cmd == ANOUBIS_SCAN_STARTED)
+				return anoubis_playground_scanstarted(file);
+			else
+				return anoubis_playground_scansuccess(file);
+		}
 	default:
 		return -EINVAL;
 	}
@@ -816,7 +832,7 @@ out:
  *     sub-label.
  * @param subl The new value of the sub-label.
  * @return The old value of the sub-label (as it would have been returned
- *     by anoubis_get_sublabel.
+ *     by anoubis_get_sublabel).
  */
 void * anoubis_set_sublabel(void ** lp, int idx, void * subl)
 {
@@ -860,7 +876,33 @@ void * anoubis_set_sublabel(void ** lp, int idx, void * subl)
 }
 
 /**
- * Register a new set of anoubis hooks from a sub-modul.
+ * Deny write access to the file. Trying to open it for writing will
+ * result in -ETXTBUSY. This simply exports the deny_write_access function
+ * from fs/namei.c to anoubis sub-modules.
+ *
+ * @param inode The inode.
+ * @return Zero in case of success, -ETXTBUSY otherwise.
+ */
+int anoubis_deny_write_access(struct file *file)
+{
+	return deny_write_access(file);
+}
+
+/**
+ * Allow write access after a successful call to anoubis_deny_write_access.
+ * This simply exports the deny_write_access function from fs/namei.c to
+ * anoubis sub-modules.
+ *
+ * @param inode The inode.
+ * @return Zero in case of success, -ETXTBUSY otherwise.
+ */
+void anoubis_allow_write_access(struct file *file)
+{
+	allow_write_access(file);
+}
+
+/**
+ * Register a new set of anoubis hooks from a sub-module.
  *
  * This is difficult because the hooks might be called immediately after
  * we insert the hooks. This may be before the module knows its index. In
@@ -1646,6 +1688,8 @@ EXPORT_SYMBOL(anoubis_get_sublabel_const);
 EXPORT_SYMBOL(anoubis_set_sublabel);
 EXPORT_SYMBOL(anoubis_get_task_cookie);
 EXPORT_SYMBOL(anoubis_need_secureexec);
+EXPORT_SYMBOL(anoubis_deny_write_access);
+EXPORT_SYMBOL(anoubis_allow_write_access);
 
 /* Register the anoubis_core module initialization functions. */
 security_initcall(anoubis_core_init);

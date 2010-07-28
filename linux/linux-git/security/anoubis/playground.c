@@ -113,6 +113,15 @@ static void pg_getstats(struct anoubis_internal_stat_value **ptr, int * count)
 }
 
 /**
+ * Values for the scanstatus field of pg_inode_sec. See below for
+ * the precise meaing.
+ */
+#define PG_SCANSTATUS_NONE		0
+#define	PG_SCANSTATUS_INPROGRESS	1
+#define PG_SCANSTATUS_SUCCESS		2
+#define PG_SCANSTATUS_COMMITTED		3
+
+/**
  * The inode security label of the playground anoubis module.
  * Fields:
  * @pgid: The playground-ID of the playground that this inode belongs to.
@@ -131,6 +140,16 @@ static void pg_getstats(struct anoubis_internal_stat_value **ptr, int * count)
  *     is not. This permission is only valid for a single rename.
  * @readdirok: True if a lookup during filldir/readdir does not deadlock on
  *     this inode. This value depends on the file system type.
+ * @scanstatus: This value determines the current scanning status of the file.
+ *     Possible values are:
+ *     PG_SCANSTATUS_NONE: Not scanned, no scanning in progress.
+ *     PG_SCANSTATUS_INPROGRESS: The daemon has started the scan process.
+ *         This value is set via an ioclt.
+ *     PG_SCANSTATUS_SUCCESS: Scanning completed successfully. The user
+ *         can now remove the security label.
+ *     PG_SCANSTATUS_COMMITTED: The security label has been or is about to
+ *         be removed. A playground process is no longer allowed to write
+ *         to the file.
  */
 struct pg_inode_sec {
 	anoubis_cookie_t	pgid;
@@ -139,6 +158,7 @@ struct pg_inode_sec {
 	unsigned int		pgenabled:1;
 	unsigned int		renameok:1;
 	unsigned int		readdirok:1;
+	atomic_t		scanstatus;
 };
 
 /**
@@ -212,6 +232,7 @@ static int pg_inode_alloc_security(struct inode * inode)
 	sec->readdirok = 1;
 	sec->accesstask = 0;
 	sec->renameok = 0;
+	atomic_set(&sec->scanstatus, PG_SCANSTATUS_NONE);
 	ftype = inode->i_sb->s_type->name;
 	for (i=0; nopg_fs[i]; ++i) {
 		if (strcmp(ftype, nopg_fs[i]) == 0) {
@@ -416,6 +437,23 @@ static int pg_inode_permission(struct inode * inode, int mask)
 	if (unlikely(anoubis_is_listener())) {
 		if ((mask & (MAY_WRITE | MAY_APPEND)) == 0)
 			return 0;
+	}
+	if (isec && (mask & (MAY_WRITE | MAY_APPEND))) {
+		/*
+		 * This loop is here to make sure that we never change
+		 * the scanstatus value from PG_SCANSTATUS_COMMITTED to
+		 * something else.
+		 */
+		while (1) {
+			int old = atomic_read(&isec->scanstatus);
+
+			if (old == PG_SCANSTATUS_NONE)
+				break;
+			if (old == PG_SCANSTATUS_COMMITTED)
+				return -EPERM;
+			atomic_cmpxchg(&isec->scanstatus, old,
+						PG_SCANSTATUS_NONE);
+		}
 	}
 	if (pgid == 0) {
 		/* Not a playground process: Deny access to playground files */
@@ -692,8 +730,9 @@ static int pg_inode_setxattr(struct dentry * dentry, const char * name,
 }
 
 /**
- * This implements the inode_removexattr security hook. We simply deny
- * access to the playground security attribute for everyone.
+ * This implements the inode_removexattr security hook. Removing the
+ * extended attribute is the first step of a commit. However, this may
+ * require the daemon to perform a scan first.
  *
  * @param dentry The dentry for the file.
  * @param name The name of the security attribute.
@@ -702,9 +741,51 @@ static int pg_inode_setxattr(struct dentry * dentry, const char * name,
  */
 static int pg_inode_removexattr(struct dentry *dentry, const char *name)
 {
-	if (strcmp(name, XATTR_ANOUBIS_PG) == 0)
+	struct inode *inode = dentry->d_inode;
+	struct pg_inode_sec *sec;
+	int ret = -EPERM;
+
+	if (strcmp(name, XATTR_ANOUBIS_PG) != 0)
+		return 0;
+	if (!inode)
+		return 0;
+	if (!is_owner_or_cap(inode))
+		return -EACCES;
+	sec = ISEC(inode);
+	if (sec == NULL || !sec->havexattr || !sec->pgenabled || sec->pgid == 0)
 		return -EPERM;
-	return 0;
+	switch(atomic_read(&sec->scanstatus)) {
+	case PG_SCANSTATUS_NONE:
+	case PG_SCANSTATUS_INPROGRESS:
+		/*
+		 * Send an event even if the scan appears to be in
+		 * progress already. This can happen if a previous scan
+		 * failed.
+		 */
+		pg_notify_file(dentry, NULL, ANOUBIS_PGFILE_SCAN, sec->pgid);
+		ret = -EINPROGRESS;
+		break;
+	case PG_SCANSTATUS_SUCCESS:
+		atomic_cmpxchg(&sec->scanstatus, PG_SCANSTATUS_SUCCESS,
+						PG_SCANSTATUS_COMMITTED);
+		ret = -ETXTBSY;
+		if (atomic_read(&sec->scanstatus) == PG_SCANSTATUS_COMMITTED) {
+			anoubis_cookie_t pgid = sec->pgid;
+
+			sec->pgid = 0;
+			if (pgid)
+				pg_notify_file(dentry, NULL,
+				    ANOUBIS_PGFILE_DELETE, pgid);
+			ret = 0;
+		}
+		break;
+	case PG_SCANSTATUS_COMMITTED:
+		ret = 0;
+		break;
+	default:
+		BUG();
+	}
+	return ret;
 }
 
 /**
@@ -1052,6 +1133,7 @@ static int pg_dentry_open(struct file *file, const struct cred *cred)
 	loff_t size, rpos = 0, wpos = 0;
 	struct page *p;
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
+	struct pg_inode_sec *uppersec;
 	int err;
 
 	upperinode = file->f_path.dentry->d_inode;
@@ -1067,6 +1149,16 @@ static int pg_dentry_open(struct file *file, const struct cred *cred)
 	 */
 	if (S_ISCHR(upperinode->i_mode))
 		return 0;
+	uppersec = ISEC(upperinode);
+	/*
+	 * inode_permission should have cleared the scanstatus. However,
+	 * this can race with the anoubisd starting (and potentially
+	 * completing) a scan. Catch this and return ETXTBSY in this case.
+	 */
+	if (uppersec && (file->f_mode & FMODE_WRITE) &&
+	    atomic_read(&uppersec->scanstatus) != PG_SCANSTATUS_NONE) {
+		return -ETXTBSY;
+	}
 	if (S_ISSOCK(upperinode->i_mode) || S_ISCHR(upperinode->i_mode)
 	    || S_ISBLK(upperinode->i_mode) || S_ISFIFO(upperinode->i_mode)) {
 		struct pg_inode_sec *sec;
@@ -1362,6 +1454,73 @@ void anoubis_playground_clear_accessok(struct inode *inode)
 		return;
 	sec->accesstask = 0;
 	sec->renameok = 0;
+}
+
+/**
+ * Try to change the scan status of the inode associated with the given
+ * file from oldstate to newstate. The return value is zero if the
+ * scan status has the new value either because it already had the new value
+ * or because the old value was replaced by the value. The scan status
+ * is never modifed if it differs from oldstate. Additionally, there
+ * must not be any file handle that have the inode open for writing.
+ *
+ * @param file The file that will have its scan status changed.
+ * @param oldstate The old expected scan status that should be replaced.
+ * @param newstate The new scan status.
+ * @return Zero if the scan status has the value newstate and all writers
+ *     have been locked out. A negative error code if the scan status
+ *     could not be set or if there still is a writer.
+ */
+static inline int anoubis_playground_scanioctl(struct file *file,
+					int oldstate, int newstate)
+{
+	struct pg_inode_sec *sec;
+	int ret;
+
+	if (file->f_path.dentry == NULL || file->f_path.dentry->d_inode == NULL)
+		return -EINVAL;
+	sec = ISEC(file->f_path.dentry->d_inode);
+	if (!sec || !sec->pgenabled)
+		return -EINVAL;
+	/* Lock out writers. */
+	ret = anoubis_deny_write_access(file);
+	if (ret < 0)
+		return ret;
+	ret = -EBUSY;
+	atomic_cmpxchg(&sec->scanstatus, oldstate, newstate);
+	if (atomic_read(&sec->scanstatus) == newstate)
+		ret = 0;
+	anoubis_allow_write_access(file);
+	return ret;
+}
+
+/**
+ * This implements the ANOUBIS_SCAN_STARTED ioctl. We change the
+ * scan status of the file from PG_SCANSTATUS_NONE to PG_SCANSTATUS_INPROGRESS.
+ *
+ * @param file The file affected by the ioctl.
+ * @return Zero in case of success, a negative error code in case of an
+ *     error, usually because the file is open for writing.
+ */
+int anoubis_playground_scanstarted(struct file *file)
+{
+	return anoubis_playground_scanioctl(file, PG_SCANSTATUS_NONE,
+	    PG_SCANSTATUS_INPROGRESS);
+}
+
+/**
+ * This implements the ANOUBIS_SCAN_STARTED ioctl. We change the
+ * scan status of the file from PG_SCANSTATUS_INPROGRESS to
+ * PG_SCANSTATUS_SUCCESS.
+ *
+ * @param file The file affected by the ioctl.
+ * @return Zero in case of success, a negative error code in case of an
+ *     error, usually because the file is open for writing.
+ */
+int anoubis_playground_scansuccess(struct file *file)
+{
+	return anoubis_playground_scanioctl(file, PG_SCANSTATUS_INPROGRESS,
+	    PG_SCANSTATUS_SUCCESS);
 }
 
 /**

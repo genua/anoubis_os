@@ -61,6 +61,8 @@ struct anoubis_ioctl_lastpgid {
 #define ANOUBIS_CREATE_PLAYGROUND	_IO(ANOUBIS_TYPE,0x17)
 #define ANOUBIS_SET_LASTPGID		_IOW(ANOUBIS_TYPE,0x18, \
 					    struct anoubis_ioctl_lastpgid)
+#define ANOUBIS_SCAN_STARTED		_IO(ANOUBIS_TYPE, 0x19)
+#define ANOUBIS_SCAN_SUCCESS		_IO(ANOUBIS_TYPE, 0x1a)
 
 #define ANOUBIS_SOURCE_TEST		0
 #define ANOUBIS_SOURCE_ALF		10
@@ -225,6 +227,9 @@ struct anoubis_hooks {
 	DECLARE(inode_delete);
 };
 #undef DECLARE
+
+extern int anoubis_deny_write_access(struct file *file);
+extern void anoubis_allow_write_access(struct file *file);
 
 extern int anoubis_register(struct anoubis_hooks *, int *);
 extern void anoubis_unregister(int idx);
