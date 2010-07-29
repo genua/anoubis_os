@@ -277,6 +277,11 @@ static inline char * global_dpath(struct path * path, char * buf, int len)
  * __d_path. This function is designed to work, even if dentry->d_inode
  * is NULL. The root of the file system is taken from the dentry's parent
  * in this case.
+ * NOTE: The kernel might append the string " (deleted)" to the path name.
+ * NOTE: If this happens for an unlinked dentry this function remove the
+ * NOTE: deleted part automaticall. This differs from the behaviour of
+ * NOTE: global_dpath. It also means that the string might end before the
+ * NOTE: end of the buffer.
  *
  * @param dentry The dentry of the path.
  * @param buf The buffer where the path will be stored.
@@ -308,6 +313,16 @@ static inline char * local_dpath(struct dentry *dentry, char *buf, int len)
 	spin_lock(&dcache_lock);
 	ret = __d_path(&path, &root, buf, len);
 	spin_unlock(&dcache_lock);
+	/*
+	 * Remove the trailing string " (deleted)" if the dentry is
+	 * unlinked. This happens in the playground before the rename.
+	 */
+	if (ret && !IS_ERR(ret) && d_unlinked(dentry)) {
+		int	slen = strlen(ret);
+	
+		if (slen > 10 && strcmp(ret + slen-10, " (deleted)") == 0)
+			ret[slen-10] = 0;
+	}
 	return ret;
 }
 

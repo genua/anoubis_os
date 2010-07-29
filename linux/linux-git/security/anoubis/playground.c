@@ -382,7 +382,7 @@ static inline void pg_notify_file(struct dentry *dentry, struct inode * inode,
 	if (buf) {
 		path = local_dpath(dentry, buf, PAGE_SIZE);
 		if (path && !IS_ERR(path)) {
-			pathlen = PAGE_SIZE - (path-buf);
+			pathlen = 1 + strlen(path);
 		} else {
 			pathlen = 1;
 			path = NULL;
@@ -584,12 +584,14 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 			   struct inode *new_dir, struct dentry *new_dentry)
 {
 	struct pg_inode_sec *sec;
-	anoubis_cookie_t pgid = anoubis_get_playgroundid();
+	anoubis_cookie_t oldpgid = 0, pgid = anoubis_get_playgroundid();
 	anoubis_cookie_t renametask = 0;
 	int rename_override = 0;
 
 	if (anoubis_playground_enabled(old_dentry)) {
 		sec = ISEC(old_dentry->d_inode);
+		if (sec->pgid)
+			oldpgid = sec->pgid;
 		if (sec->renameok)
 			renametask = sec->accesstask;
 		sec->renameok = 0;
@@ -616,6 +618,9 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 		} else if (sec->pgid != pgid)
 			return -EACCES;
 	}
+	if (oldpgid)
+		pg_notify_file(new_dentry, old_dentry->d_inode,
+		    ANOUBIS_PGFILE_INSTANTIATE, oldpgid);
 	return 0;
 }
 
@@ -656,16 +661,9 @@ static int pg_path_rename(struct path *old_dir, struct dentry *old_dentry,
 	 */
 	if (!sec || sec->havexattr == 0)
 		return 0;
-	/*
-	 * No restrictions on known playground files here. inode_rename will
-	 * handle this. However, make sure that we notify anoubis daemon of
-	 * the pending rename.
-	 */
-	if (sec->pgid != 0) {
-		pg_notify_file(new_dentry, inode, ANOUBIS_PGFILE_INSTANTIATE,
-		    sec->pgid);
+	/* No restrictions on known playground files here. */
+	if (sec->pgid != 0)
 		return 0;
-	}
 	/* This is a playground process and source is a production file. */
 	path1.mnt = old_dir->mnt;
 	path1.dentry = old_dentry;
