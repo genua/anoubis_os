@@ -191,7 +191,11 @@ struct anoubis_hooks {
 	DECLARE(inode_alloc_security);
 	DECLARE(inode_free_security);
 	DECLARE(inode_permission);
+	DECLARE(inode_create);
+	DECLARE(inode_mknod);
+	DECLARE(inode_mkdir);
 	DECLARE(inode_link);
+	DECLARE(inode_symlink);
 	DECLARE(inode_unlink);
 	DECLARE(inode_rmdir);
 	DECLARE(inode_rename);
@@ -319,7 +323,7 @@ static inline char * local_dpath(struct dentry *dentry, char *buf, int len)
 	 */
 	if (ret && !IS_ERR(ret) && d_unlinked(dentry)) {
 		int	slen = strlen(ret);
-	
+
 		if (slen > 10 && strcmp(ret + slen-10, " (deleted)") == 0)
 			ret[slen-10] = 0;
 	}

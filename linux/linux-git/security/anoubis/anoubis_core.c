@@ -1144,10 +1144,28 @@ static int ac_inode_permission(struct inode * inode, int mask)
 {
 	return HOOKS(inode_permission, (inode, mask));
 }
+static int ac_inode_create(struct inode *dir, struct dentry *dentry, int mode)
+{
+	return HOOKS(inode_create, (dir, dentry, mode));
+}
+static int ac_inode_mknod(struct inode *dir, struct dentry *dentry, int mode,
+								dev_t dev)
+{
+	return HOOKS(inode_mknod, (dir, dentry, mode, dev));
+}
+static int ac_inode_mkdir(struct inode *dir, struct dentry *dentry, int mode)
+{
+	return HOOKS(inode_mkdir, (dir, dentry, mode));
+}
 static int ac_inode_link(struct dentry *old_dentry, struct inode *dir,
 						struct dentry *new_dentry)
 {
 	return HOOKS(inode_link, (old_dentry, dir, new_dentry));
+}
+static int ac_inode_symlink(struct inode *dir, struct dentry *new_dentry,
+    const char *oldname)
+{
+	return HOOKS(inode_symlink, (dir, new_dentry, oldname));
 }
 static int ac_inode_unlink(struct inode *dir, struct dentry *dentry)
 {
@@ -1593,7 +1611,11 @@ static struct security_operations anoubis_core_ops = {
 	.inode_alloc_security = ac_inode_alloc_security,
 	.inode_free_security = ac_inode_free_security,
 	.inode_permission = ac_inode_permission,
+	.inode_create = ac_inode_create,
+	.inode_mknod = ac_inode_mknod,
+	.inode_mkdir = ac_inode_mkdir,
 	.inode_link = ac_inode_link,
+	.inode_symlink = ac_inode_symlink,
 	.inode_unlink = ac_inode_unlink,
 	.inode_rmdir = ac_inode_rmdir,
 	.inode_rename = ac_inode_rename,

@@ -456,6 +456,9 @@ static int pg_inode_permission(struct inode * inode, int mask)
 		}
 	}
 	if (pgid == 0) {
+		/* Allow access to playground dirs */
+		if (S_ISDIR(inode->i_mode))
+			return 0;
 		/* Not a playground process: Deny access to playground files */
 		if (isec && isec->pgid)
 			return -EPERM;
@@ -522,9 +525,81 @@ static int pg_inode_permission(struct inode * inode, int mask)
 }
 
 /**
+ * Utility function that checks if creating a new node in a directory
+ * is allowed. The inode_permission hook allows reads and writes in
+ * all directories including playground directories. However, it should
+ * not be possible to create non playground files in playground directories.
+ *
+ * @param dir The inode of the directory.
+ * @param pgid The playgroud ID of the newly created file.
+ * @return Zero if access is allowed, -EXDEV if access is not allowed.
+ */
+static int pg_can_create_in_dir(struct inode *dir, anoubis_cookie_t pgid)
+{
+	struct pg_inode_sec *sec;
+
+	sec = ISEC(dir);
+	if (sec && sec->pgenabled && sec->pgid && sec->pgid != pgid)
+		return -EXDEV;
+	return 0;
+}
+
+/**
+ * This implementes the inode_create security hook. We disallow the
+ * creation of non playground files in a playground directory. The rest
+ * is handled by inode_permission.
+ *
+ * @param dir The directory where the new file will be created.
+ * @param dentry The name of the file to create.
+ * @param mode The file creation mode.
+ * @return Zero if access is allowed, a negative error code if access is
+ *     denied.
+ */
+static int pg_inode_create(struct inode *dir, struct dentry *dentry, int mode)
+{
+	return pg_can_create_in_dir(dir, anoubis_get_playgroundid());
+}
+
+/**
+ * This implements the inode_mknod security hook. We disallow the
+ * creation of non playground inodes in a playground directory. The rest
+ * is handled by inode_permission.
+ *
+ * @param dir The directory where the new file will be created.
+ * @param dentry The name of the node to create.
+ * @param mode The file creation mode.
+ * @param dev The device ID if a device is created.
+ * @return Zero if access is allowed, a negative error code if access is
+ *     denied.
+ */
+static int pg_inode_mknod(struct inode *dir, struct dentry *dentry, int mode,
+								dev_t dev)
+{
+	return pg_can_create_in_dir(dir, anoubis_get_playgroundid());
+}
+
+/**
+ * This implements the inode_mkdir security hook. We disallow the
+ * creation of non playground directories in a playground directory. The
+ * rest is handled in inode_permission.
+ *
+ * @param dir The directory where the new directory will be created.
+ * @param dentry The name of the directory to create.
+ * @param mode The file creation mode of the directory.
+ * @return Zero if access is allowed, a negative error code if access is
+ *     denied.
+ */
+static int pg_inode_mkdir(struct inode *dir, struct dentry *dentry, int mode)
+{
+	return pg_can_create_in_dir(dir, anoubis_get_playgroundid());
+}
+
+/**
  * This implements the inode_link security hook. A playground process
  * can only create hard links to playground files in the same playground.
  * A non-playground process cannot create links to playground files at all.
+ * Additionally, if the target directory is in a playground, it must be in
+ * the same playground as the source file.
  *
  * @param The directory entry of the old name.
  * @param dir The inode of the directory where the link will be created.
@@ -538,11 +613,28 @@ static int pg_inode_link(struct dentry *old_dentry, struct inode *dir,
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
 
 	if (!anoubis_playground_enabled(old_dentry))
-		return 0;
+		return pg_can_create_in_dir(dir, pgid);
 	sec = ISEC(old_dentry->d_inode);
 	if (sec->pgid != pgid)
 		return -EACCES;
-	return 0;
+	return pg_can_create_in_dir(dir, pgid);
+}
+
+/**
+ * This implements the inode_symlink security hook. We disallow the
+ * creation of non playground symlinks in a playground directory. The
+ * rest is handled in inode_permission.
+ *
+ * @param dir The directory where the new symlink will be created.
+ * @param dentry The name of the symlink to create.
+ * @param oldpath The target name of the symlink.
+ * @return Zero if access is allowed, a negative error code if access is
+ *     denied.
+ */
+static int pg_inode_symlink(struct inode *dir, struct dentry *dentry,
+						const char *oldname)
+{
+	return pg_can_create_in_dir(dir, anoubis_get_playgroundid());
 }
 
 /**
@@ -584,14 +676,19 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 			   struct inode *new_dir, struct dentry *new_dentry)
 {
 	struct pg_inode_sec *sec;
-	anoubis_cookie_t oldpgid = 0, pgid = anoubis_get_playgroundid();
+	anoubis_cookie_t filepgid = 0, pgid = anoubis_get_playgroundid();
 	anoubis_cookie_t renametask = 0;
 	int rename_override = 0;
 
 	if (anoubis_playground_enabled(old_dentry)) {
 		sec = ISEC(old_dentry->d_inode);
-		if (sec->pgid)
-			oldpgid = sec->pgid;
+		if (sec->pgid) {
+			filepgid = sec->pgid;
+		} else {
+			int ret = pg_can_create_in_dir(new_dir, sec->pgid);
+			if (ret < 0)
+				return ret;
+		}
 		if (sec->renameok)
 			renametask = sec->accesstask;
 		sec->renameok = 0;
@@ -618,9 +715,9 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 		} else if (sec->pgid != pgid)
 			return -EACCES;
 	}
-	if (oldpgid)
+	if (filepgid)
 		pg_notify_file(new_dentry, old_dentry->d_inode,
-		    ANOUBIS_PGFILE_INSTANTIATE, oldpgid);
+		    ANOUBIS_PGFILE_INSTANTIATE, filepgid);
 	return 0;
 }
 
@@ -730,7 +827,9 @@ static int pg_inode_setxattr(struct dentry * dentry, const char * name,
 /**
  * This implements the inode_removexattr security hook. Removing the
  * extended attribute is the first step of a commit. However, this may
- * require the daemon to perform a scan first.
+ * require the daemon to perform a scan first. Additionally, it is not
+ * allowed to commit an inode into an uncommitted playground directory,
+ * in this case the user must commit the directory first.
  *
  * @param dentry The dentry for the file.
  * @param name The name of the security attribute.
@@ -740,6 +839,7 @@ static int pg_inode_setxattr(struct dentry * dentry, const char * name,
 static int pg_inode_removexattr(struct dentry *dentry, const char *name)
 {
 	struct inode *inode = dentry->d_inode;
+	struct dentry *parent = dentry->d_parent;
 	struct pg_inode_sec *sec;
 	int ret = -EPERM;
 
@@ -752,6 +852,12 @@ static int pg_inode_removexattr(struct dentry *dentry, const char *name)
 	sec = ISEC(inode);
 	if (sec == NULL || !sec->havexattr || !sec->pgenabled || sec->pgid == 0)
 		return -EPERM;
+	if (parent && anoubis_playground_enabled(parent)) {
+		struct pg_inode_sec *dsec = ISEC(parent->d_inode);
+
+		if (dsec && dsec->pgid)
+			return -ENOTEMPTY;
+	}
 	switch(atomic_read(&sec->scanstatus)) {
 	case PG_SCANSTATUS_NONE:
 	case PG_SCANSTATUS_INPROGRESS:
@@ -1529,7 +1635,11 @@ static struct anoubis_hooks pg_ops = {
 	.inode_alloc_security = pg_inode_alloc_security,
 	.inode_free_security = pg_inode_free_security,
 	.inode_permission = pg_inode_permission,
+	.inode_create = pg_inode_create,
+	.inode_mknod = pg_inode_mknod,
+	.inode_mkdir = pg_inode_mkdir,
 	.inode_link = pg_inode_link,
+	.inode_symlink = pg_inode_symlink,
 	.inode_unlink = pg_inode_unlink,
 	.inode_rmdir = pg_inode_unlink,
 	.inode_rename = pg_inode_rename,
