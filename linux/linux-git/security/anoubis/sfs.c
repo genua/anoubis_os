@@ -1263,11 +1263,13 @@ static struct anoubis_hooks sfs_ops = {
 	.anoubis_getcsum = sfs_getcsum,
 };
 
+#ifdef MODULE
 /*
  * Dummy hash to make sure that the checksum crypto module is loaded
  * while our security modules runs.
  */
 static struct crypto_hash * dummy_tfm;
+#endif
 
 /*
  * Remove the sfs module.
@@ -1279,8 +1281,10 @@ static void __exit sfs_exit(void)
 
 	if (ac_index >= 0)
 		anoubis_unregister(ac_index);
+#ifdef MODULE
 	if (dummy_tfm && !IS_ERR(dummy_tfm))
 		crypto_free_hash(dummy_tfm);
+#endif
 	while(allow_path_entries) {
 		tmp = allow_path_entries;
 		allow_path_entries = tmp->next;
@@ -1323,7 +1327,9 @@ static int __init sfs_init(void)
 	/* register ourselves with the security framework */
 	do_gettimeofday(&tv);
 	sfs_stat_loadtime = tv.tv_sec;
+#ifdef MODULE
 	dummy_tfm = crypto_alloc_hash("sha256", 0, CRYPTO_ALG_ASYNC);
+#endif
 	last = allow_path_buf;
 	for (p=allow_path_buf; *p; p++) {
 		if (*p == ',' && p - last > 0) {
@@ -1333,15 +1339,19 @@ static int __init sfs_init(void)
 	}
 	if (p - last > 0)
 		sfs_add_allow_path(last, p-last);
+#ifdef MODULE
 	if (IS_ERR(dummy_tfm)) {
 		printk(KERN_ERR "Cannot allocate sha256 hash "
 		    "(try modprobe sha256)\n");
 		return PTR_ERR(dummy_tfm);
 	}
+#endif
 	if ((rc = anoubis_register(&sfs_ops, &ac_index)) < 0) {
 		ac_index = -1;
 		printk(KERN_ERR "anoubis_sfs: Failure registering\n");
+#ifdef MODULE
 		crypto_free_hash(dummy_tfm);
+#endif
 		return rc;
 	}
 	printk(KERN_INFO "anoubis_sfs: Successfully initialized.\n");
