@@ -449,8 +449,11 @@ static int pg_inode_permission(struct inode * inode, int mask)
 
 			if (old == PG_SCANSTATUS_NONE)
 				break;
-			if (old == PG_SCANSTATUS_COMMITTED)
-				return -EPERM;
+			if (old == PG_SCANSTATUS_COMMITTED) {
+				if (pgid)
+					return -EPERM;
+				break;
+			}
 			atomic_cmpxchg(&isec->scanstatus, old,
 						PG_SCANSTATUS_NONE);
 		}
