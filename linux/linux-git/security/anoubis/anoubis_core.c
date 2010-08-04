@@ -1011,13 +1011,18 @@ void anoubis_unregister(int idx)
  *
  * @param FUNC The name of the hook.
  * @param ARGS The argument list for the hook (including parentheses).
+ * @param ORIGMAGIC The magic number in the hooks structure determines
+ *     the priority of the error codes returned by individual modules.
+ *     This parameter can be used to modify the magic code of the
+ *     original_ops operations (aka capability). Use zero her unless you
+ *     have some compelling reason to do this differently.
  * @return Zero if all hooks returned zero, an error code if at least one
  *     hook returned an error.
  */
-#define HOOKS(FUNC, ARGS) ({					\
+#define __HOOKS(FUNC, ARGS, ORIGMAGIC) ({			\
 	int i;							\
 	int ret = 0, ret2;					\
-	unsigned int mymagic, lastmagic = 0;			\
+	unsigned int mymagic, lastmagic = (ORIGMAGIC);		\
 	if (original_ops->FUNC)					\
 		ret = original_ops->FUNC ARGS;			\
 	for(i=0; i<MAX_ANOUBIS_MODULES; ++i) {			\
@@ -1044,6 +1049,13 @@ void anoubis_unregister(int idx)
 	}							\
 	ret;							\
 });
+
+/**
+ * The same as __HOOKS except that teh ORIGMAGIC parameter is set to
+ * zero explicitly.
+ */
+#define HOOKS(FUNC,ARGS)	__HOOKS(FUNC, ARGS, 0)
+
 
 /**
  * This is a helper macro that calls a particular hook in all available
@@ -1189,9 +1201,16 @@ static int ac_inode_setxattr(struct dentry * dentry, const char * name,
 {
 	return HOOKS(inode_setxattr, (dentry, name, value, size, flags));
 }
+/*
+ * NOTE: We use __HOOKS with a very low priority for the capability hook.
+ * NOTE: This is neccessary to make sure that user space sees an appropriate
+ * NOTE: error code in playground commit. Otherwise, the EINPROGRESS or EBUSY
+ * NOTE: would be will overruled by the EPERM returned from the capability
+ * NOTE: hook in original_ops.
+ */
 static int ac_inode_removexattr(struct dentry *dentry, const char *name)
 {
-	return HOOKS(inode_removexattr, (dentry, name));
+	return __HOOKS(inode_removexattr, (dentry, name), (unsigned int)-1);
 }
 
 /**
