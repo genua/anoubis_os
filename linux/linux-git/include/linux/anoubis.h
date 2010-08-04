@@ -321,7 +321,7 @@ static inline char * local_dpath(struct dentry *dentry, char *buf, int len)
 	 * Remove the trailing string " (deleted)" if the dentry is
 	 * unlinked. This happens in the playground before the rename.
 	 */
-	if (ret && !IS_ERR(ret) && d_unlinked(dentry)) {
+	if (ret && !IS_ERR(ret) && d_unhashed(dentry) && !IS_ROOT(dentry)) {
 		int	slen = strlen(ret);
 
 		if (slen > 10 && strcmp(ret + slen-10, " (deleted)") == 0)
