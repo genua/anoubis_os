@@ -676,10 +676,15 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 			file = fget(arg);
 			if (!file)
 				return -EBADF;
-			if (cmd == ANOUBIS_SCAN_STARTED)
-				return anoubis_playground_scanstarted(file);
-			else
-				return anoubis_playground_scansuccess(file);
+			if (cmd == ANOUBIS_SCAN_STARTED) {
+				ret = anoubis_playground_scanstarted(file);
+				fput(file);
+				return ret;
+			} else {
+				ret = anoubis_playground_scansuccess(file);
+				fput(file);
+				return ret;
+			}
 		}
 	default:
 		return -EINVAL;
