@@ -39,6 +39,8 @@
 #include <linux/un.h>
 #include <linux/xattr.h>
 
+#include <asm/system.h>
+
 #include <net/sock.h>
 
 #include <linux/anoubis.h>
@@ -884,6 +886,8 @@ static int pg_inode_removexattr(struct dentry *dentry, const char *name)
 				pg_notify_file(dentry, NULL,
 				    ANOUBIS_PGFILE_DELETE, pgid);
 			ret = 0;
+			smp_mb();
+			atomic_set(&sec->scanstatus, PG_SCANSTATUS_NONE);
 		}
 		break;
 	case PG_SCANSTATUS_COMMITTED:
