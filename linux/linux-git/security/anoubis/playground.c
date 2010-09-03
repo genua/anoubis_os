@@ -95,6 +95,7 @@ static const char *nopg_fs[] = {
  */
 static const char *broken_readdir_fs[] = {
 	"xfs",
+	"dazukofs",
 	NULL,
 };
 
