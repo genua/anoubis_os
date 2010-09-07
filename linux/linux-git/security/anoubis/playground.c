@@ -38,6 +38,7 @@
 #include <linux/uaccess.h>
 #include <linux/un.h>
 #include <linux/xattr.h>
+#include <linux/dazukofs_fs.h>
 
 #include <asm/system.h>
 
@@ -95,7 +96,6 @@ static const char *nopg_fs[] = {
  */
 static const char *broken_readdir_fs[] = {
 	"xfs",
-	"dazukofs",
 	NULL,
 };
 
@@ -125,6 +125,12 @@ static void pg_getstats(struct anoubis_internal_stat_value **ptr, int * count)
 #define PG_SCANSTATUS_COMMITTED		3
 
 /**
+ * Values for the stacktype field of pg_inode_sec.
+ */
+#define INODE_STACKTYPE_NONE		0
+#define	INODE_STACKTYPE_DAZUKO		1
+
+/**
  * The inode security label of the playground anoubis module.
  * Fields:
  * @pgid: The playground-ID of the playground that this inode belongs to.
@@ -133,6 +139,9 @@ static void pg_getstats(struct anoubis_internal_stat_value **ptr, int * count)
  * @accesstask: This value is set to the task cookie of a process if
  *     one of the renameok flag is set. Only the given task is allowed to
  *     perform the rename operation.
+ * @stacktype: If the inode belongs to a stacking file system and the
+ *     security information should be maintained on the lower inode, this
+ *     tells which stack type is used and how to find the lower inode.
  * @havexattr: True if the file system has extended attributes, i.e. if
  *     there is a security label for the file, it can be read from the
  *     persistent storage on the file system.
@@ -157,6 +166,7 @@ static void pg_getstats(struct anoubis_internal_stat_value **ptr, int * count)
 struct pg_inode_sec {
 	anoubis_cookie_t	pgid;
 	anoubis_cookie_t	accesstask;
+	int			stacktype;
 	unsigned int		havexattr:1;
 	unsigned int		pgenabled:1;
 	unsigned int		renameok:1;
@@ -199,7 +209,7 @@ struct pg_task_sec {
 #define _SEC(TYPE,X) ((TYPE)anoubis_get_sublabel(&(X), ac_index))
 #define _SECCONST(TYPE,X) \
 		((X)?((TYPE)anoubis_get_sublabel_const(X, ac_index)):NULL)
-#define ISEC(X) _SEC(struct pg_inode_sec *, (X)->i_security)
+#define _ISEC(X) _SEC(struct pg_inode_sec *, (X)->i_security)
 #define CSEC(X) _SECCONST(struct pg_task_sec *, (X)->security)
 #define FSEC(X) _SEC(struct pg_file_sec *, (X)->f_security)
 
@@ -208,6 +218,38 @@ struct pg_task_sec {
 #define SETCSEC(X,V) _SETSEC(struct pg_task_sec *, ((X)->security), (V))
 #define SETFSEC(X,V) _SETSEC(struct pg_file_sec *, ((X)->f_security), (V))
 
+/**
+ * Return the security attribute of the lowest inode in a chain of
+ * stacked inodes. Currently, we only support dazukofs as a stacking
+ * file system that is able to maintain security information on the lower
+ * inode.
+ *
+ * @param inode The upper inode.
+ * @return The security attribute to use for this inode.
+ */
+static inline struct pg_inode_sec * ISEC(struct inode *inode)
+{
+	struct pg_inode_sec	*sec;
+
+	while (1) {
+		if (unlikely(!inode))
+			return NULL;
+		sec  = _ISEC(inode);
+		if (unlikely(!sec))
+			return NULL;
+		if (likely(sec->stacktype == INODE_STACKTYPE_NONE))
+			return sec;
+		switch (sec->stacktype) {
+		case INODE_STACKTYPE_DAZUKO:
+			inode = get_lower_inode(inode);
+			if (inode == NULL)
+				return sec;
+			break;
+		default:
+			BUG();
+		}
+	}
+}
 
 /**
  * This implements the inode_alloc_security hook for the playground module.
@@ -235,8 +277,11 @@ static int pg_inode_alloc_security(struct inode * inode)
 	sec->readdirok = 1;
 	sec->accesstask = 0;
 	sec->renameok = 0;
+	sec->stacktype = INODE_STACKTYPE_NONE;
 	atomic_set(&sec->scanstatus, PG_SCANSTATUS_NONE);
 	ftype = inode->i_sb->s_type->name;
+	if (strcmp(ftype, "dazukofs") == 0)
+		sec->stacktype = INODE_STACKTYPE_DAZUKO;
 	for (i=0; nopg_fs[i]; ++i) {
 		if (strcmp(ftype, nopg_fs[i]) == 0) {
 			sec->pgenabled = 0;
@@ -366,7 +411,9 @@ static inline void pg_notify_pgid_change(void)
  *     inode data is reported without a pathname.
  * @param inode The inode to report. If this is NULL, the inode data is
  *     taken from the dentry.
- * @param pgid The (new) playground ID of the file.
+ * @param pgid The playground ID of the file. For ANOUBIS_PGFILE_DELETE,
+ *     this is the old playground ID. For other message types it is the new
+ *     playground ID.
  * @return None.
  */
 static inline void pg_notify_file(struct dentry *dentry, struct inode * inode,
@@ -412,6 +459,36 @@ static inline void pg_notify_file(struct dentry *dentry, struct inode * inode,
 		free_page((unsigned long)buf);
 	anoubis_notify(fmsg, alloclen, ANOUBIS_SOURCE_PLAYGROUNDFILE);
 }
+
+/**
+ * Notify the anoubis daemon of a delted inode. This function send one
+ * event for each inode in the stack of inodes if the inode is indeed
+ * on a stacking file system that we support.
+ *
+ * @param inode The inode to report.
+ * @param pgid The (new) playground ID of the file.
+ * @return None.
+ */
+static inline void pg_notify_delete_all(struct inode *inode,
+    anoubis_cookie_t pgid)
+{
+	struct		pg_inode_sec *sec;
+
+	while (inode) {
+		pg_notify_file(NULL, inode, ANOUBIS_PGFILE_DELETE, pgid);
+		sec = _ISEC(inode);
+		if (sec == NULL || sec->stacktype == INODE_STACKTYPE_NONE)
+			break;
+		switch (sec->stacktype) {
+		case INODE_STACKTYPE_DAZUKO:
+			inode = get_lower_inode(inode);
+			break;
+		default:
+			BUG();
+		}
+	}
+}
+
 
 
 /**
@@ -884,8 +961,7 @@ static int pg_inode_removexattr(struct dentry *dentry, const char *name)
 
 			sec->pgid = 0;
 			if (pgid)
-				pg_notify_file(dentry, NULL,
-				    ANOUBIS_PGFILE_DELETE, pgid);
+				pg_notify_delete_all(dentry->d_inode, pgid);
 			ret = 0;
 			smp_mb();
 			atomic_set(&sec->scanstatus, PG_SCANSTATUS_NONE);
@@ -1001,7 +1077,10 @@ static int pg_inode_init_security(struct inode *inode, struct inode *dir,
 	sec->pgid = pgid;
 	sec->pgenabled = 1;
 	sec->readdirok = 1;
+	sec->stacktype = INODE_STACKTYPE_NONE;
 	ftype = inode->i_sb->s_type->name;
+	if (strcmp(ftype, "dazukofs") == 0)
+		sec->stacktype = INODE_STACKTYPE_DAZUKO;
 	for (i=0; nopg_fs[i]; ++i) {
 		if (strcmp(ftype, nopg_fs[i]) == 0) {
 			sec->pgenabled = 0;
@@ -1449,7 +1528,7 @@ int anoubis_playground_readdirok(struct inode *inode)
 
 	if (!inode)
 		return 1;
-	sec = ISEC(inode);
+	sec = _ISEC(inode);
 	if (!sec)
 		return 1;
 	return sec->readdirok;
