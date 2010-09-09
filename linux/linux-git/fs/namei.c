@@ -1933,7 +1933,7 @@ static inline int anoubis_is_pg_file(const char *name, int len,
 }
 
 int anoubis_pg_validate_name(const char *name, struct dentry *base, int len,
-						anoubis_cookie_t pgid)
+					anoubis_cookie_t pgid, ino_t ino)
 {
 	struct qstr origname, pgname;
 	struct dentry *tmp;
@@ -1986,7 +1986,13 @@ int anoubis_pg_validate_name(const char *name, struct dentry *base, int len,
 				continue;
 			return PTR_ERR(tmp);
 		}
-		exists = (tmp->d_inode != NULL);
+		/*
+		 * This is subtle: If the playground version of the file
+		 * is in fact the same inode as the one that we are about
+		 * to report, this is probably due to a recursive call to
+		 * this filter function that already filtered the name.
+		 */
+		exists = (tmp->d_inode != NULL && tmp->d_inode->i_ino != ino);
 		dput(tmp);
 		if (exists)
 			return -ENOENT;

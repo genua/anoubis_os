@@ -37,30 +37,19 @@ static int pg_filler(void * __buf, const char * name, int namlen,
 	anoubis_cookie_t pgid = anoubis_get_playgroundid();
 	struct playground_callback *pgbuf = __buf;
 	int nameoff = 0;
-	filldir_t filler;
 
 	if (pgid == 0)
 		goto done;
 	nameoff = anoubis_pg_validate_name(name, pgbuf->base->f_path.dentry,
-					   namlen, pgid);
+					   namlen, pgid, ino);
 	if (nameoff == -ENOENT)
 		return 0;
 	if (nameoff < 0)
 		return nameoff;
 
 done:
-	/*
-	 * Make sure that recursive calls to vfs_readdir do to lead to
-	 * recursive calls to this filler. NOTE: After leaving this loop
-	 * pgbuf no longer points at a playground_callback structure,
-	 * but at the callback structure of the upper level filler function.
-	 */
-	do {
-		filler = pgbuf->orig_filler;
-		pgbuf = pgbuf->orig_buf;
-	} while (filler == pg_filler);
-	return filler(pgbuf, name+nameoff, namlen-nameoff, offset,
-	    ino, d_type);
+	return pgbuf->orig_filler(pgbuf->orig_buf, name+nameoff,
+	    namlen-nameoff, offset, ino, d_type);
 }
 
 #endif

@@ -39,6 +39,7 @@
 #include <linux/un.h>
 #include <linux/xattr.h>
 #include <linux/dazukofs_fs.h>
+#include "../../fs/ecryptfs/ecryptfs_kernel.h"
 
 #include <asm/system.h>
 
@@ -96,6 +97,7 @@ static const char *nopg_fs[] = {
  */
 static const char *broken_readdir_fs[] = {
 	"xfs",
+	"ecryptfs",
 	NULL,
 };
 
@@ -129,6 +131,7 @@ static void pg_getstats(struct anoubis_internal_stat_value **ptr, int * count)
  */
 #define INODE_STACKTYPE_NONE		0
 #define	INODE_STACKTYPE_DAZUKO		1
+#define	INODE_STACKTYPE_ECRYPTFS	2
 
 /**
  * The inode security label of the playground anoubis module.
@@ -245,6 +248,11 @@ static inline struct pg_inode_sec * ISEC(struct inode *inode)
 			if (inode == NULL)
 				return sec;
 			break;
+		case INODE_STACKTYPE_ECRYPTFS:
+			inode = ecryptfs_inode_to_lower(inode);
+			if (inode == NULL)
+				return sec;
+			break;
 		default:
 			BUG();
 		}
@@ -282,6 +290,8 @@ static int pg_inode_alloc_security(struct inode * inode)
 	ftype = inode->i_sb->s_type->name;
 	if (strcmp(ftype, "dazukofs") == 0)
 		sec->stacktype = INODE_STACKTYPE_DAZUKO;
+	else if (strcmp(ftype, "ecryptfs") == 0)
+		sec->stacktype = INODE_STACKTYPE_ECRYPTFS;
 	for (i=0; nopg_fs[i]; ++i) {
 		if (strcmp(ftype, nopg_fs[i]) == 0) {
 			sec->pgenabled = 0;
@@ -482,6 +492,9 @@ static inline void pg_notify_delete_all(struct inode *inode,
 		switch (sec->stacktype) {
 		case INODE_STACKTYPE_DAZUKO:
 			inode = get_lower_inode(inode);
+			break;
+		case INODE_STACKTYPE_ECRYPTFS:
+			inode = ecryptfs_inode_to_lower(inode);
 			break;
 		default:
 			BUG();
@@ -1081,6 +1094,8 @@ static int pg_inode_init_security(struct inode *inode, struct inode *dir,
 	ftype = inode->i_sb->s_type->name;
 	if (strcmp(ftype, "dazukofs") == 0)
 		sec->stacktype = INODE_STACKTYPE_DAZUKO;
+	else if (strcmp(ftype, "ecryptfs") == 0)
+		sec->stacktype = INODE_STACKTYPE_ECRYPTFS;
 	for (i=0; nopg_fs[i]; ++i) {
 		if (strcmp(ftype, nopg_fs[i]) == 0) {
 			sec->pgenabled = 0;

@@ -108,7 +108,7 @@ struct pg_file_message {
 extern int anoubis_playground_create(void);
 extern anoubis_cookie_t anoubis_get_playgroundid_tsk(struct task_struct *tsk);
 extern int anoubis_pg_validate_name(const char *name, struct dentry *base,
-					int len, anoubis_cookie_t pgid);
+					int len, anoubis_cookie_t pgid, ino_t);
 extern int anoubis_playground_enabled(struct dentry *dentry);
 extern int anoubis_playground_set_lowerfile(struct file *up, struct file *low);
 extern int anoubis_playground_clone_reg(int atfd, const char __user *oldname);
