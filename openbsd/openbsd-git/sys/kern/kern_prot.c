@@ -819,6 +819,7 @@ sys_setgroups(struct proc *p, void *v, register_t *retval)
 		free(kgidset, M_TEMP);
 		return (error);
 	}
+	pc->pc_ucred = crcopy(pc->pc_ucred);
 #ifdef MAC
 	error = mac_proc_check_setgroups(p, p->p_ucred, ngrp, kgidset);
 	if (error) {
