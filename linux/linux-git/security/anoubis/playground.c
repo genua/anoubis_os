@@ -63,7 +63,7 @@ static u_int64_t pg_stat_rename_override;
 /**
  * Statistic counters for the REQUEST_STATS ioctl on /dev/anoubis.
  */
-struct anoubis_internal_stat_value pg_stats[] = {
+static struct anoubis_internal_stat_value pg_stats[] = {
 	{ ANOUBIS_SOURCE_PLAYGROUND, PG_STAT_LOADTIME, &pg_stat_loadtime },
 	{ ANOUBIS_SOURCE_PLAYGROUND, PG_STAT_DEVICEWRITE_DELAY,
 	  &pg_stat_devicewrite_delay },

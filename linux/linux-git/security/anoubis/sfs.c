@@ -87,7 +87,7 @@ static u_int64_t sfs_stat_path_deny;
 #endif
 static u_int64_t sfs_stat_late_alloc;
 
-struct anoubis_internal_stat_value sfs_stats[] = {
+static struct anoubis_internal_stat_value sfs_stats[] = {
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_LOADTIME, &sfs_stat_loadtime },
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_CSUM_RECALC, &sfs_stat_csum_recalc },
 	{ ANOUBIS_SOURCE_SFS, SFS_STAT_CSUM_RECALC_FAIL,
@@ -779,7 +779,7 @@ out:
  * LSM hooks that have VFS information (available in 2.6.29+)
  * used for path-based permission checks
  */
-int sfs_path_write(struct path *path)
+static int sfs_path_write(struct path *path)
 {
 	struct sfs_open_message * msg;
 	int len, ret;

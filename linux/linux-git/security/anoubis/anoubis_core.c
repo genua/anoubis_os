@@ -616,18 +616,19 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 		}
 	case ANOUBIS_GETCSUM:
 		{
-			struct anoubis_ioctl_csum __user *cs = (void*)arg;
+			struct anoubis_ioctl_csum __user *cs;
 			int fd;
 			u8 csum[ANOUBIS_CS_LEN];
-			struct file * file;
+			struct file * csfile;
 
+ 			cs = (void __user *)arg;
 			if (copy_from_user(&fd, &cs->fd, sizeof(fd)))
 				return -EFAULT;
-			file = fget(fd);
-			if (!file)
+			csfile = fget(fd);
+			if (!csfile)
 				return -EBADF;
-			ret = ac_getcsum(file, csum);
-			fput(file);
+			ret = ac_getcsum(csfile, csum);
+			fput(csfile);
 			if (ret < 0)
 				return ret;
 			if (copy_to_user(&cs->csum, csum, ANOUBIS_CS_LEN))
@@ -640,11 +641,10 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 		{
 			struct anoubis_ioctl_lastpgid __user *uptr;
 			struct anoubis_ioctl_lastpgid lastpgid;
-			int ret;
 
 			if (!capable(CAP_SYS_ADMIN))
 				return -EPERM;
-			uptr = (void*)arg;
+			uptr = (void __user *)arg;
 			if (copy_from_user(&lastpgid, uptr, sizeof(lastpgid)))
 				return -EFAULT;
 			eventfile = fget(lastpgid.fd);
@@ -730,7 +730,7 @@ static spinlock_t late_alloc_lock = SPIN_LOCK_UNLOCKED;
  *     for task labels.
  * @return The initialized label of NULL if an error occured.
  */
-static void * __ac_alloc_label(int gfp, size_t len)
+static void * __ac_alloc_label(gfp_t gfp, size_t len)
 {
 	int i;
 	struct anoubis_label * sec;
@@ -752,7 +752,7 @@ static void * __ac_alloc_label(int gfp, size_t len)
  * @param gfp The memory allocation mode to use for the allocation.
  * @return The initialized label of NULL if an error occured.
  */
-static struct anoubis_label * ac_alloc_label(int gfp)
+static struct anoubis_label * ac_alloc_label(gfp_t gfp)
 {
 	return __ac_alloc_label(gfp, sizeof(struct anoubis_label));
 }
@@ -1546,12 +1546,12 @@ static int ac_bprm_set_creds(struct linux_binprm * bprm)
 	return HOOKS(bprm_set_creds, (bprm));
 }
 
-void ac_bprm_committed_creds(struct linux_binprm *bprm)
+static void ac_bprm_committed_creds(struct linux_binprm *bprm)
 {
 	VOIDHOOKS(bprm_committed_creds, (bprm));
 }
 
-int ac_bprm_secureexec(struct linux_binprm *bprm)
+static int ac_bprm_secureexec(struct linux_binprm *bprm)
 {
 	return HOOKS(bprm_secureexec, (bprm));
 }
@@ -1574,7 +1574,7 @@ int anoubis_need_secureexec(struct linux_binprm *bprm)
  * This function implements capable security hook. It allows a security
  * module to revoke certain capabilities that are given to a process.
  */
-int anoubis_capable(struct task_struct *tsk, const struct cred *cred,
+static int anoubis_capable(struct task_struct *tsk, const struct cred *cred,
 			int cap, int audit)
 {
 	if (tsk == current && anoubis_get_playgroundid())
@@ -1592,7 +1592,7 @@ int anoubis_capable(struct task_struct *tsk, const struct cred *cred,
  * @param mode The access mode.
  * @return Zero if access is granted, a negative error code if it isn't.
  */
-int ac_ptrace_access_check(struct task_struct *tsk, unsigned int mode)
+static int ac_ptrace_access_check(struct task_struct *tsk, unsigned int mode)
 {
 	int rc = 0;
 	anoubis_cookie_t pgid, tpgid;
@@ -1663,7 +1663,6 @@ static struct security_operations anoubis_core_ops = {
 	.path_symlink = ac_path_symlink,
 	.path_truncate = ac_path_truncate,
 	.path_mknod = ac_path_mknod,
-	.path_mkdir = ac_path_mkdir,
 #endif
 	.cred_prepare = ac_cred_prepare,
 	.cred_free = ac_cred_free,

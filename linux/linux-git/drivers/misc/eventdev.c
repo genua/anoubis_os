@@ -233,7 +233,7 @@ static struct eventdev_msg * eventdev_dequeue_one(struct eventdev_queue * q)
 
 static int eventdev_copy_one(struct eventdev_queue * q,
 			     struct eventdev_msg * m,
-			     char * __user buf, size_t len)
+			     char __user *buf, size_t len)
 {
 	size_t cnt = m->hdr.msg_size;
 	int err = -EINVAL;

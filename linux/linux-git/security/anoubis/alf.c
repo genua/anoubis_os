@@ -178,7 +178,7 @@ static int alf_check_policy(int op, struct socket *sock,
 	}
 
 	event_size = sizeof(struct alf_event);
-	if ((event = kmalloc(event_size, GFP_NOWAIT)) == 0)
+	if ((event = kmalloc(event_size, GFP_NOWAIT)) == NULL)
 		return -ENOMEM;
 
 	event->family = sock->sk->sk_family;
