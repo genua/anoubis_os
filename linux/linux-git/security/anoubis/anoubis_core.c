@@ -610,7 +610,8 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 			unsigned long version = ANOUBISCORE_VERSION;
 			if (unlikely(!arg))
 				return -EINVAL;
-			if (copy_to_user((void*)arg, &version, sizeof(version)))
+			if (copy_to_user((void __user *)arg, &version,
+			    sizeof(version)))
 				return -EFAULT;
 			break;
 		}
@@ -668,23 +669,20 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 	case ANOUBIS_SCAN_STARTED:
 	case ANOUBIS_SCAN_SUCCESS:
 		{
-			struct file *file;
+			struct file *scanfile;
 			if (!capable(CAP_SYS_ADMIN) || !anoubis_is_listener())
 				return -EPERM;
 			if (anoubis_get_playgroundid())
 				return -EPERM;
-			file = fget(arg);
-			if (!file)
+			scanfile = fget(arg);
+			if (!scanfile)
 				return -EBADF;
-			if (cmd == ANOUBIS_SCAN_STARTED) {
-				ret = anoubis_playground_scanstarted(file);
-				fput(file);
-				return ret;
-			} else {
-				ret = anoubis_playground_scansuccess(file);
-				fput(file);
-				return ret;
-			}
+			if (cmd == ANOUBIS_SCAN_STARTED)
+				ret = anoubis_playground_scanstarted(scanfile);
+			else
+				ret = anoubis_playground_scansuccess(scanfile);
+			fput(scanfile);
+			return ret;
 		}
 	default:
 		return -EINVAL;
