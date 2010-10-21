@@ -408,8 +408,6 @@ mac_anoubis_sfs_vnode_open(struct ucred * cred, struct vnode * vp,
 fileopen:
 	if (!sfs_enable)
 		return 0;
-	if (!CHECKSUM_OK(vp) && vp->v_type != VSOCK)
-		return 0;
 	pathhint = NULL;
 	if (dirvp) {
 		/*

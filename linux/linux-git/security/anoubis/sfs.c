@@ -652,9 +652,14 @@ static int sfs_dentry_open(struct file * file, const struct cred * cred)
 	sec = sfs_late_inode_alloc_security(inode);
 	if (!sec)
 		return -ENOMEM;
-	/* XXX: we skip open checks on special filesystems
-	   because it introduces hard to solve races in killall5 et al. */
-	if (!checksum_ok(inode))
+	/*
+	 * Do no perform any open checks on file systems that do not
+	 * support checksum calculation.
+	 */
+	spin_lock(&sec->lock);
+	ret = ((sec->sfsmask & SFS_CS_OK) == 0);
+	spin_unlock(&sec->lock);
+	if (ret)
 		return 0;
 	mask = 0;
 	if (file->f_mode & FMODE_READ)
