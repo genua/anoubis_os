@@ -1088,7 +1088,11 @@ static int pg_inode_init_security(struct inode *inode, struct inode *dir,
 	if (!sec)
 		return -EOPNOTSUPP;
 	sec->havexattr = 1;
-	sec->pgid = pgid;
+	/* Do not label sockets ... */
+	if (S_ISSOCK(inode->i_mode))
+		sec->pgid = 0;
+	else
+		sec->pgid = pgid;
 	sec->pgenabled = 1;
 	sec->readdirok = 1;
 	sec->stacktype = INODE_STACKTYPE_NONE;
@@ -1109,7 +1113,7 @@ static int pg_inode_init_security(struct inode *inode, struct inode *dir,
 			break;
 		}
 	}
-	if (pgid == 0)
+	if (sec->pgid == 0)
 		return -EOPNOTSUPP;
 	name = kstrdup(XATTR_ANOUBIS_PG_SUFFIX, GFP_KERNEL);
 	if (!name)

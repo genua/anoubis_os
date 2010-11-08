@@ -1676,6 +1676,8 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 				goto error;
 			if (nd->flags & LOOKUP_PLAYGROUND_DIRRENAME)
 				goto use_orig;
+			if (nd->flags & LOOKUP_PLAYGROUND_SOCKET)
+				goto use_orig;
 			goto use_pg;
 		}
 		/*

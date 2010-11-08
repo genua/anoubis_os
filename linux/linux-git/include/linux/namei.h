@@ -60,6 +60,7 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT, LAST_BIND};
 #define LOOKUP_PLAYGROUND_CREATE	0x10000
 #define LOOKUP_PLAYGROUND_UNLINK	0x20000
 #define LOOKUP_PLAYGROUND_DIRRENAME	0x40000
+#define LOOKUP_PLAYGROUND_SOCKET	0x80000
 
 extern int user_path_at(int, const char __user *, unsigned, struct path *);
 
