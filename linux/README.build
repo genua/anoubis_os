@@ -1,0 +1,161 @@
+
+
+	Building a custom Linux Kernel with Anoubis support
+
+
+This README file describes the required steps to merge the anoubis kernel
+source repository files with the sources from the linux git repository, so
+that a custom kernel with anoubis support can be built.
+
+
+This description is based on the expectation that you have some basic experience
+with compiling your own custom Linux kernel and focusses more on the git related
+part of the process.
+Following the steps listed here should result in a successful kernel build
+process, in case you have already installed the required dependencies to
+configure and build a kernel, of course. However, this does not guarantee this
+kernel to be bootable at once and without fine tuning. This will most likely be
+the case when you have already running a kernel you have compiled yourself,
+because the configuration process will have some working default options to
+import. This is also the audience which this document addresses.
+In any way there are plenty of tutorials and ressources which explain and teach
+the task of building a kernel with custom configuration, if you need help with
+that it should not take long to find the information you need on the net by
+yourself.
+
+
+First, you need to fetch the original linux kernel sources, in case you don't
+have them yet, for example by executing the following command in your shell:
+
+$ git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux-2.6
+
+This can take quite a while, depending on the speed of your internet
+connection. Please make also sure you have enough free space on your
+harddisk, as you can expect the decompressed source files to use up more
+than 850MB (after compiling the kernel the directory grows even up to 1GB).
+
+The clone command above, in case of success, will output something like this:
+
+Cloning into linux-2.6...
+remote: Counting objects: 1798826, done.
+remote: Compressing objects: 100% (276733/276733), done.
+remote: Total 1798826 (delta 1506575), reused 1798414 (delta 1506266)
+Receiving objects: 100% (1798826/1798826), 353.05 MiB | 2.98 MiB/s, done.
+Resolving deltas: 100% (1506575/1506575), done.
+
+You should see now the downloaded linux source directory:
+
+$ ls
+linux-2.6
+
+Next you need the modified kernel source files from the anoubis git repository.
+We assume you already have them, because this README is part of them, anyway
+the command to do this would be:
+
+$ git clone git://anoubis.git.sourceforge.net/gitroot/anoubis/kernel/
+Cloning into kernel...
+remote: Counting objects: 3976, done.
+remote: Compressing objects: 100% (1573/1573), done.
+remote: Total 3976 (delta 2103), reused 3951 (delta 2094)
+Receiving objects: 100% (3976/3976), 2.43 MiB | 782 KiB/s, done.
+Resolving deltas: 100% (2103/2103), done.
+
+You should see the downloaded 'kernel' directory aswell now:
+
+$ ls
+kernel  linux-2.6
+
+Now you will need to make sure that the Linux sources from kernel.org match
+the version which the modified sources from the anoubis repository expect /
+are referring to:
+
+$ grep REFERENCE kernel/linux/GITINFO
+REFERENCECOMMIT: 22763c5cf3690a681551162c15d34d935308c8d7
+
+The hash string in the GITINFO file can be used to 'rewind' the repository state
+of the kernel.org sources, by using the git reset command:
+
+$ cd linux-2.6/
+$ git reset --hard 22763c5cf3690a681551162c15d34d935308c8d7
+Checking out files: 100% (24028/24028), done.
+HEAD is now at 22763c5 Linux 2.6.32
+
+Now there should not be any conflicts possible anymore and you can copy the
+modified anoubis kernel source files into your kernel.org source tree:
+
+$ cd ..
+$ cp -Rv kernel/linux/linux-git/* linux-2.6/
+`kernel/linux/linux-git/drivers/ata/ata_piix.c' -> `linux-2.6/drivers/ata/ata...
+`kernel/linux/linux-git/drivers/misc/Makefile' -> `linux-2.6/drivers/misc/Mak...
+ [...]
+`kernel/linux/linux-git/security/anoubis/Kconfig' -> `linux-2.6/security/anou...
+`kernel/linux/linux-git/security/anoubis/anoubis_core.c' -> `linux-2.6/securi...
+
+After the files are copied into place, you'll need to adjust and eventually
+fine tune your kernel configuration. At least you should make sure that the
+required security options and their dependencies are activated in your setup:
+
+cd linux-2.6/
+$ make menuconfig
+
+(!)NOTE: activating (or deactivating) the following options is
+         important for the Anoubis framework to be functional:
+
+ -> Device Drivers
+    -> Misc devices
+
+    <*>   Event device for kernel notifications  <- ACTIVATE (required)
+
+ -> Security options
+
+    [*] Enable different security models                  .. (required)
+
+    [*] Socket and Networking Security Hooks              .. (required)
+
+    [*] Security hooks for pathname based access control  .. (required)
+
+    [ ] NSA SELinux Support                    <- DEACTIVATE (conflicting)
+
+    -> Anoubis framework
+       [*] Anoubis framework                     <- ACTIVATE
+       <*>   Application Level Firewall module      ..
+       <*>   Anoubis IPC Module                     ..
+       <*>   Secure Filesystem Module               ..
+       [*]   Anoubis Playground feature             ..
+
+Once you are satisfied with your kernel setup, you can exit menuconfig and
+save the new configuration, which should result in the following message:
+
+# configuration written to .config
+
+Now you can execute 'make' to start the kernel build process:
+
+$ make
+  HOSTLD  scripts/kconfig/conf
+  [...]
+
+This step can also take a lot of time depending on your CPU and disk speed.
+When it finishes without errors it should result in an executable kernel file:
+
+$ ls vmlinux
+vmlinux
+
+Once your kernel build completed successfully you can type 'make install' to
+install it to your boot partition. Then notify your boot loader about the
+new kernel, for example by typing 'update-grub' (in case you use Grub as
+bootloader). Also make sure that you have installed the Anoubis daemon and
+xanoubis before you reboot your system into the new kernel.
+
+Also note that depending on your system setup the process of installing the
+kernel might be more complex than just typing make install (initrd, modules..).
+The safest way would probably be to build a complete kernel package suitable
+for your distribution (i.e. .rpm or .deb packages), which when installed will
+take care of copying everything into place and registering the kernel in the
+system setup. 'make help' will give you more details on Kernel Packaging.
+
+At last, be warned that it is not recommended to install Anoubis on a remote
+machine, unless you know exactly what you are doing and have set up a working
+Anoubis configuration in advance, because you would almost certainly lock
+yourself out of the system when the Application Level Firewall starts up and,
+by default, denies all network access from the outside!
+
