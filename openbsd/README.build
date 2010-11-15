@@ -1,0 +1,94 @@
+
+
+        Building an OpenBSD Kernel with Anoubis Support
+
+
+This README lists in short the required steps to build an OpenBSD kernel
+with Anoubis support. It is assumed that you already have some experience
+with OpenBSD and know what you are doing. Compiling your own kernel is
+neither nessecary, nor is it recommended for beginners. In case you wish to
+continue nevertheless, you might also want to have a look at the manpage
+release(8), as it explains the necessary steps to build a kernel in more
+detail.
+
+The following sequence of commands describes the process for the case in
+which the machine you build the kernel on is the same which is intended to
+boot it. However, should this not be the case, only the first and the last
+command would differ, which means that you wouldn't have to backup the
+kernel of your build machine, of course, but the one on the target system.
+also 'make install' would not make any sense but copying the resulting
+kernel (./bsd) into the root directory of the target host instead.
+
+First, create a backup of your current kernel:
+
+# cp /bsd /bsd.old
+
+Then you'll need a fresh copy of the corresponding OpenBSD sources, in case
+you don't have obtained that source tree version already.  You can checkthem
+out using cvs:
+
+# export CVSROOT=anoncvs@anoncvs.example.org:/cvs
+
+ ( Replace anoncvs.example.org with your preferred CVS mirror.
+   You will find a list of servers at http://www.openbsd.org/anoncvs.html )
+
+Fetching the sources:
+
+# cd /usr/
+# cvs -q -d $CVSROOT  get -rOPENBSD_4_6 -P src
+
+You will need next the modified BSD source files from the Anoubis Project's
+git repository:
+
+# git clone git://anoubis.git.sourceforge.net/gitroot/anoubis/kernel
+
+This download process should not take too long, as the ammount of data to be
+transferred is just about 11MB, despite containing the files for the linux
+kernel aswell.
+
+Now you need to overwrite the original source files with their modified
+versions:
+
+# cp -R kernel/openbsd/openbsd-git/* src/
+
+The next step would be to configure your new kernel. Therefore you'll first
+have to copy the anoubis kernel config file into your kernel source tree:
+
+# cp kernel/openbsd/CONFIG.anoubis src/sys/arch/i386/conf/
+
+Having done this, the kernel directory becomes obsolete and can be purged
+from your system:
+
+# rm -rf kernel
+
+Now you can execute the configuration procedure by typing:
+
+# cd src/sys/arch/i386/conf/
+# config CONFIG.anoubis
+
+The kernel should be ready to be compiled now:
+
+# cd ../compile/CONFIG.anoubis/
+# make clean && make depend && make
+
+If the compilation was successful you should have the kernel file 'bsd' in
+your current directory. It can be installed now by typing:
+
+# make install
+
+( Or by copying it manually into the root directory of the target host. )
+
+This should be it. You can now test the kernel by [re]booting the system.
+Please make also sure that you have also installed the anoubis daemon and
+xanoubis before booting the new setup.  In case the kernel refuses to boot,
+you can boot your old (backup) kernel by typing its name into the boot
+prompt:
+
+boot> bsd.old
+
+As a last obligatory warning, you should know that installing anoubis on a
+remote box is a very bad idea.  You will lock yourself out of the system
+once the Application Level Firewall starts up and blocks all connections
+with external origin, unless you know exactly what you are doing and have a
+(working) configuration and the proper firewall rules installed in advance.
+
