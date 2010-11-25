@@ -32,8 +32,9 @@
 /*
  * Changes between diffenrt versions:
  * 0x00010005: Add playground messages.
+ * 0x00010006: Change pg_file messages for dir rename
  */
-#define ANOUBISCORE_VERSION		0x00010005UL
+#define ANOUBISCORE_VERSION		0x00010006UL
 
 typedef u_int64_t anoubis_cookie_t;
 

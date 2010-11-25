@@ -428,11 +428,11 @@ static inline void pg_notify_pgid_change(void)
  * @return None.
  */
 static inline void pg_notify_file(struct dentry *dentry, struct inode * inode,
-    int op, anoubis_cookie_t pgid)
+    int op, anoubis_cookie_t pgid, struct dentry *old_dentry)
 {
-	char *buf = NULL, *path = NULL;
+	char *buf = NULL, *old_buf = NULL, *path = NULL, *old_path = NULL;
 	struct pg_file_message *fmsg;
-	int pathlen = 1, alloclen;
+	int pathlen = 1, old_pathlen = 1, alloclen;
 
 	if (!inode)
 		inode = dentry->d_inode;
@@ -449,12 +449,25 @@ static inline void pg_notify_file(struct dentry *dentry, struct inode * inode,
 			path = NULL;
 		}
 	}
-	alloclen = sizeof(struct pg_file_message) + pathlen;
+	if (old_dentry)
+		old_buf = (char *)__get_free_page(GFP_KERNEL);
+	if (old_buf) {
+		old_path = local_dpath(old_dentry, old_buf, PAGE_SIZE);
+		if (old_path && !IS_ERR(old_path)) {
+			old_pathlen = 1 + strlen(old_path);
+		} else {
+			old_pathlen = 1;
+			old_path = NULL;
+		}
+	}
+	alloclen = sizeof(struct pg_file_message) + pathlen + old_pathlen;
 	fmsg = kmalloc(alloclen, GFP_KERNEL);
 	if (fmsg == NULL) {
 		printk(KERN_CRIT "pg_notify_file: Out of memory\n");
 		if (buf)
 			free_page((unsigned long)buf);
+		if (old_buf)
+			free_page((unsigned long)old_buf);
 		return;
 	}
 	fmsg->pgid = pgid;
@@ -468,6 +481,13 @@ static inline void pg_notify_file(struct dentry *dentry, struct inode * inode,
 	}
 	if (buf)
 		free_page((unsigned long)buf);
+	if (old_path) {
+		memcpy(fmsg->path + pathlen, old_path, old_pathlen);
+	} else {
+		fmsg->path[pathlen] = 0;
+	}
+	if (old_buf)
+		free_page((unsigned long)old_buf);
 	anoubis_notify(fmsg, alloclen, ANOUBIS_SOURCE_PLAYGROUNDFILE);
 }
 
@@ -486,7 +506,7 @@ static inline void pg_notify_delete_all(struct inode *inode,
 	struct		pg_inode_sec *sec;
 
 	while (inode) {
-		pg_notify_file(NULL, inode, ANOUBIS_PGFILE_DELETE, pgid);
+		pg_notify_file(NULL, inode, ANOUBIS_PGFILE_DELETE, pgid, NULL);
 		sec = _ISEC(inode);
 		if (sec == NULL || sec->stacktype == INODE_STACKTYPE_NONE)
 			break;
@@ -814,7 +834,8 @@ static int pg_inode_rename(struct inode *old_dir, struct dentry *old_dentry,
 	}
 	if (filepgid)
 		pg_notify_file(new_dentry, old_dentry->d_inode,
-		    ANOUBIS_PGFILE_INSTANTIATE, filepgid);
+		    ANOUBIS_PGFILE_INSTANTIATE, filepgid,
+		    S_ISDIR(old_dentry->d_inode->i_mode) ? old_dentry : NULL);
 	return 0;
 }
 
@@ -963,7 +984,7 @@ static int pg_inode_removexattr(struct dentry *dentry, const char *name)
 		 * progress already. This can happen if a previous scan
 		 * failed.
 		 */
-		pg_notify_file(dentry, NULL, ANOUBIS_PGFILE_SCAN, sec->pgid);
+		pg_notify_file(dentry, NULL, ANOUBIS_PGFILE_SCAN, sec->pgid, NULL);
 		ret = -EINPROGRESS;
 		break;
 	case PG_SCANSTATUS_SUCCESS:
@@ -1048,7 +1069,7 @@ static void pg_d_instantiate(struct dentry *dentry, struct inode *inode)
 	isec->havexattr = 1;
 	if (fspgid)
 		pg_notify_file(dentry, NULL, ANOUBIS_PGFILE_INSTANTIATE,
-		    fspgid);
+		    fspgid, NULL);
 	return;
 noxattr:
 	isec->havexattr = 0;
@@ -1151,7 +1172,7 @@ static void pg_inode_delete(struct inode *inode)
 	struct pg_inode_sec *sec = ISEC(inode);
 
 	if (sec && sec->pgid)
-		pg_notify_file(NULL, inode, ANOUBIS_PGFILE_DELETE, sec->pgid);
+		pg_notify_file(NULL, inode, ANOUBIS_PGFILE_DELETE, sec->pgid, NULL);
 }
 
 /**
