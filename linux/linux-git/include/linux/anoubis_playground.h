@@ -82,7 +82,10 @@ struct pg_proc_message {
  * dev: The device of the file.
  * ino: The inode number of the file.
  * op: The operation that is performed with the file (ANOUBIS_PGFILE_*).
- * path: The path name of the file relative to the device given by dev.
+ * path: The path name of the file relative to the device given by dev
+ *       (0-terminated) and the old path name if the operation was a directory
+ *       rename (0-terminated). The old path name may be empty but the
+ *       0-byte is always added.
  */
 struct pg_file_message {
 	struct anoubis_event_common common;
