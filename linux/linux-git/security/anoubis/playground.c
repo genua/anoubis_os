@@ -758,6 +758,7 @@ static int pg_inode_symlink(struct inode *dir, struct dentry *dentry,
  * This implements the inode_unlink and inode_rmdir security hooks. A
  * playground process can only unlink files that are in the same playground.
  * Processes that are not in a playground can unlink all files.
+ * Exception: Sockets can be unlinked from within a playground, too.
  *
  * @param dir The directory of the file.
  * @param dentry The file itself.
@@ -771,6 +772,8 @@ static int pg_inode_unlink(struct inode *dir, struct dentry *dentry)
 	if (!pgid)
 		return 0;
 	if (!anoubis_playground_enabled(dentry))
+		return 0;
+	if (S_ISSOCK(dentry->d_inode->i_mode))
 		return 0;
 	sec = ISEC(dentry->d_inode);
 	if (sec->pgid != pgid)

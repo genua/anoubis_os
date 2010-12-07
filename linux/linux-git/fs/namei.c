@@ -1639,6 +1639,17 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 		goto use_pg;
 	}
 
+	/* lookup_hash cannot be used for parent lookup. */
+	BUG_ON(nd->flags & (LOOKUP_PARENT | LOOKUP_CONTINUE));
+	origdentry = lookup_hash_pg(nd, &nd->last);
+	/*
+	 * Allow removal of sockets from within a playground but delay
+	 * other error handling until after the whiteout check.
+	 */
+	if (!IS_ERR(origdentry) && origdentry->d_inode &&
+				S_ISSOCK(origdentry->d_inode->i_mode))
+		goto use_orig;
+
 	/*
 	 * The playground dentry is negative, check for whiteouts and
 	 * return the negative playground dentry if a whiteout is present.
@@ -1652,14 +1663,13 @@ static struct dentry *lookup_hash(struct nameidata *nd)
 	if (!IS_ERR(whiteout)) {
 		if (whiteout->d_inode) {
 			dput(whiteout);
+			if (!IS_ERR(origdentry))
+				dput(origdentry);
 			return pgdentry;
 		}
 		dput(whiteout);
 	}
-
-	/* lookup_hash cannot be used for parent lookup. */
-	BUG_ON(nd->flags & (LOOKUP_PARENT | LOOKUP_CONTINUE));
-	origdentry = lookup_hash_pg(nd, &nd->last);
+	/* Delayed error handling for origdentry. */
 	if (IS_ERR(origdentry))
 		goto use_orig;
 	originode = origdentry->d_inode;

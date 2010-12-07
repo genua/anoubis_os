@@ -55,12 +55,12 @@ static int ipc_unix_stream_connect(struct socket *sock, struct socket *other,
     struct sock *newsk)
 {
 	struct anoubis_sock_label *newl, *old;
-	struct anoubis_sock_label *sockl, *otherl;
+	struct anoubis_sock_label *sockl = NULL, *otherl = NULL;
 	struct ac_ipc_message	*msg;
 	anoubis_cookie_t	 cookie;
 	unsigned long		 flags;
 
-	if (!sock->sk && !other->sk)
+	if (!sock || !sock->sk || !other || !other->sk)
 		return 0;
 
 	sockl = SKSEC(sock->sk);
