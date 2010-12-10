@@ -1147,7 +1147,7 @@ static int sfs_bprm_set_creds(struct linux_binprm * bprm)
 	if (flags & ANOUBIS_RET_NEED_SECUREEXEC)
 		sec->need_secureexec = 1;
 	if (ret == 0 && (flags & ANOUBIS_RET_NEED_PLAYGROUND)) {
-		ret = anoubis_playground_create();
+		ret = anoubis_playground_create(0);
 		/* Process is already in a playground. This is ok. */
 		if (ret == -EBUSY)
 			ret = 0;

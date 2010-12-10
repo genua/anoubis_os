@@ -622,7 +622,7 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 			u8 csum[ANOUBIS_CS_LEN];
 			struct file * csfile;
 
- 			cs = (void __user *)arg;
+			cs = (void __user *)arg;
 			if (copy_from_user(&fd, &cs->fd, sizeof(fd)))
 				return -EFAULT;
 			csfile = fget(fd);
@@ -637,7 +637,10 @@ static long anoubis_ioctl(struct file * file, unsigned int cmd,
 			return 0;
 		}
 	case ANOUBIS_CREATE_PLAYGROUND:
-		return anoubis_playground_create();
+		/* arg == 1 means rename an existing playground only. */
+		if (arg != 0 && arg != 1)
+			return -EINVAL;
+		return anoubis_playground_create(arg);
 	case ANOUBIS_SET_LASTPGID:
 		{
 			struct anoubis_ioctl_lastpgid __user *uptr;

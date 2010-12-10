@@ -988,7 +988,8 @@ static int pg_inode_removexattr(struct dentry *dentry, const char *name)
 		 * progress already. This can happen if a previous scan
 		 * failed.
 		 */
-		pg_notify_file(dentry, NULL, ANOUBIS_PGFILE_SCAN, sec->pgid, NULL);
+		pg_notify_file(dentry, NULL, ANOUBIS_PGFILE_SCAN,
+		    sec->pgid, NULL);
 		ret = -EINPROGRESS;
 		break;
 	case PG_SCANSTATUS_SUCCESS:
@@ -1176,7 +1177,8 @@ static void pg_inode_delete(struct inode *inode)
 	struct pg_inode_sec *sec = ISEC(inode);
 
 	if (sec && sec->pgid)
-		pg_notify_file(NULL, inode, ANOUBIS_PGFILE_DELETE, sec->pgid, NULL);
+		pg_notify_file(NULL, inode, ANOUBIS_PGFILE_DELETE,
+		    sec->pgid, NULL);
 }
 
 /**
@@ -1503,12 +1505,12 @@ int anoubis_playground_get_pgcreate(void)
  * by assigning a playground-ID to the current process if it does not
  * have one.
  *
- * @param None. Always affects the current process.
+ * @param rename True if the playground should just be renamed.
  * @return Zero if a new playground was created, -EBUSY if the current
  *     process is already in a playground, a negative error code if something
  *     else went wrong.
  */
-int anoubis_playground_create(void)
+int anoubis_playground_create(int rename)
 {
 	const struct cred *cred = __task_cred(current);
 	struct pg_task_sec *sec;
@@ -1518,6 +1520,12 @@ int anoubis_playground_create(void)
 	sec = CSEC(cred);
 	if (unlikely(!sec))
 		return -ESRCH;
+	if (rename) {
+		if (sec->pgid == 0)
+			return -ESRCH;
+		pg_notify_pgid_change();
+		return 0;
+	}
 	if (sec->pgid)
 		return -EBUSY;
 	/*

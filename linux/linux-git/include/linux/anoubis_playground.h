@@ -108,7 +108,7 @@ struct pg_file_message {
 
 #ifdef CONFIG_SECURITY_ANOUBIS_PLAYGROUND
 
-extern int anoubis_playground_create(void);
+extern int anoubis_playground_create(int rename);
 extern anoubis_cookie_t anoubis_get_playgroundid_tsk(struct task_struct *tsk);
 extern int anoubis_pg_validate_name(const char *name, struct dentry *base,
 					int len, anoubis_cookie_t pgid, ino_t);
