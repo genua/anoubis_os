@@ -84,6 +84,7 @@ static struct anoubis_internal_stat_value pg_stats[] = {
  */
 static const char *nopg_fs[] = {
 	"proc",
+	"tmpfs",
 	"usbfs",
 	"sysfs",
 	"fuse",
